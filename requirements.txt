@@ -1,0 +1,1 @@
+# Zero external pip packages required — 100% Python 3.10+ standard library.

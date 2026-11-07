@@ -1,0 +1,12 @@
+# Never commit secrets, session files, or local runtime state
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.DS_Store
+STOP
+data/*.json
+journal/*.csv
+journal/*.json
+journal/*.log

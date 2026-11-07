@@ -1,0 +1,1504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Renko ATR Pro Cloud Cockpit — XAUUSD / Capital.com</title>
+  <style>
+    :root {
+      --bg-0: #0b0e14;
+      --bg-1: #111621;
+      --bg-2: #171e2c;
+      --bg-3: #1f293d;
+      --border: #263248;
+      --text-0: #f0f4f8;
+      --text-1: #a0aec0;
+      --text-2: #64748b;
+      --green: #26a69a;
+      --green-bright: #10b981;
+      --red: #ef5350;
+      --amber: #f59e0b;
+      --blue: #3b82f6;
+      --purple: #8b5cf6;
+      --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg-0);
+      color: var(--text-0);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.45;
+      overflow-x: hidden;
+    }
+
+    /* Login Modal Gate */
+    .login-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(11, 14, 20, 0.94);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      padding: 16px;
+    }
+    .login-overlay.active { display: flex; }
+    .login-box {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 26px;
+      width: 100%;
+      max-width: 390px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+    }
+    .login-box h2 { font-size: 17px; margin-bottom: 6px; }
+    .login-box p { font-size: 12px; color: var(--text-1); margin-bottom: 16px; }
+    .login-box input {
+      width: 100%;
+      background: var(--bg-0);
+      border: 1px solid var(--border);
+      color: var(--text-0);
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+
+    /* Top Header Bar */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 18px;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: 0.3px;
+    }
+    .brand-badge {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #0b0e14;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-family: var(--font-mono);
+    }
+    .ticker-strip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+    }
+    .pill .lbl { color: var(--text-2); font-size: 11px; }
+    .pill .val { font-weight: 600; color: var(--text-0); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .dot.green { background: var(--green-bright); box-shadow: 0 0 8px var(--green-bright); }
+    .dot.amber { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+    .dot.red { background: var(--red); box-shadow: 0 0 8px var(--red); }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    button {
+      cursor: pointer;
+      font-family: var(--font-sans);
+      font-weight: 600;
+      font-size: 12px;
+      border: 1px solid var(--border);
+      background: var(--bg-2);
+      color: var(--text-0);
+      padding: 6px 12px;
+      border-radius: 6px;
+      transition: all 0.15s ease;
+    }
+    button:hover { background: var(--bg-3); border-color: #3b4d6e; }
+    button.primary { background: var(--blue); border-color: #2563eb; color: #fff; }
+    button.primary:hover { background: #2563eb; }
+    button.success { background: var(--green); border-color: #1e877d; color: #fff; }
+    button.success:hover { background: #1e877d; }
+    button.danger { background: #dc2626; border-color: #b91c1c; color: #fff; }
+    button.danger:hover { background: #b91c1c; }
+    button.warning { background: #d97706; border-color: #b45309; color: #fff; }
+
+    /* Main Grid Layout */
+    .layout {
+      display: grid;
+      grid-template-columns: 335px 1fr;
+      min-height: calc(100vh - 53px);
+    }
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    /* Left Sidebar Controls */
+    .sidebar {
+      background: var(--bg-1);
+      border-right: 1px solid var(--border);
+      padding: 14px;
+      overflow-y: auto;
+      max-height: calc(100vh - 53px);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    @media (max-width: 1100px) {
+      .sidebar { max-height: none; border-right: none; border-bottom: 1px solid var(--border); }
+    }
+    .panel {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .panel-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      color: var(--text-1);
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .field.full { grid-column: 1 / -1; }
+    .field label {
+      font-size: 11px;
+      color: var(--text-1);
+    }
+    .field input, .field select {
+      background: var(--bg-0);
+      border: 1px solid var(--border);
+      color: var(--text-0);
+      padding: 5px 8px;
+      border-radius: 5px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .check-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 12px;
+      color: var(--text-0);
+    }
+    .check-row span { color: var(--text-1); }
+    .check-row input[type="checkbox"] {
+      accent-color: var(--blue);
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+    }
+
+    /* Main Content Area */
+    .main {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+      max-height: calc(100vh - 53px);
+    }
+    @media (max-width: 1100px) {
+      .main { max-height: none; }
+    }
+
+    /* Alert / Ticket Banner */
+    .ticket-card {
+      background: linear-gradient(135deg, rgba(38, 166, 154, 0.16), rgba(17, 22, 33, 0.95));
+      border: 1px solid var(--green);
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .ticket-card.sell {
+      background: linear-gradient(135deg, rgba(239, 83, 80, 0.16), rgba(17, 22, 33, 0.95));
+      border-color: var(--red);
+    }
+    .ticket-card.active { display: flex; }
+
+    /* KPI Strip */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+      gap: 10px;
+    }
+    .kpi {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 13px;
+    }
+    .kpi .k-label {
+      font-size: 11px;
+      color: var(--text-2);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .kpi .k-val {
+      font-family: var(--font-mono);
+      font-size: 20px;
+      font-weight: 700;
+      margin-top: 3px;
+    }
+    .kpi .k-sub {
+      font-size: 11px;
+      color: var(--text-1);
+      margin-top: 2px;
+      font-family: var(--font-mono);
+    }
+    .pos { color: var(--green-bright); }
+    .neg { color: var(--red); }
+
+    /* Chart Card */
+    .chart-card {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      position: relative;
+    }
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .chart-title {
+      font-weight: 700;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .legend {
+      display: flex;
+      gap: 14px;
+      font-size: 11px;
+      color: var(--text-1);
+      font-family: var(--font-mono);
+      flex-wrap: wrap;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 5px; }
+    .swatch { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+    canvas {
+      width: 100%;
+      display: block;
+      background: #090c12;
+      border-radius: 6px;
+      border: 1px solid #1a2232;
+    }
+
+    /* Two-column lower section */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 1200px) {
+      .two-col { grid-template-columns: 1fr; }
+    }
+
+    /* Tables */
+    .table-wrap {
+      overflow-x: auto;
+      max-height: 340px;
+      overflow-y: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+    th, td {
+      padding: 7px 9px;
+      text-align: right;
+      border-bottom: 1px solid #1d2638;
+      white-space: nowrap;
+    }
+    th:first-child, td:first-child,
+    th:nth-child(2), td:nth-child(2),
+    th:nth-child(3), td:nth-child(3) { text-align: left; }
+    th {
+      background: var(--bg-2);
+      color: var(--text-1);
+      position: sticky;
+      top: 0;
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 10.5px;
+    }
+    tr:hover td { background: rgba(59, 130, 246, 0.06); }
+    .badge {
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .badge.buy { background: rgba(38, 166, 154, 0.2); color: #26a69a; border: 1px solid #26a69a; }
+    .badge.sell { background: rgba(239, 83, 80, 0.2); color: #ef5350; border: 1px solid #ef5350; }
+    .badge.stop { background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid #f59e0b; }
+
+    .toast {
+      position: fixed;
+      bottom: 18px;
+      right: 18px;
+      background: var(--bg-3);
+      border: 1px solid var(--blue);
+      color: var(--text-0);
+      padding: 10px 15px;
+      border-radius: 8px;
+      font-size: 12px;
+      display: none;
+      z-index: 100;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- PASSWORD AUTHENTICATION GATE (IF DASHBOARD_PASSWORD IS SET ON CLOUD HOST) -->
+  <div id="login-modal" class="login-overlay">
+    <div class="login-box">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <span class="brand-badge">LOCKED</span>
+        <h2>Renko ATR Cloud Cockpit</h2>
+      </div>
+      <p>Enter your <code>DASHBOARD_PASSWORD</code> to unlock strategy controls and live broker actions.</p>
+      <input type="password" id="login-pw" placeholder="Dashboard password..." onkeydown="if(event.key==='Enter')submitLogin()" />
+      <button class="primary" style="width:100%;padding:10px;" onclick="submitLogin()">Unlock Cockpit</button>
+    </div>
+  </div>
+
+  <!-- TOP STATUS BAR -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-badge">CLOUD v2</span>
+      <span>Renko ATR Strategy &amp; Capital.com Cockpit</span>
+    </div>
+
+    <div class="ticker-strip">
+      <div class="pill">
+        <span class="lbl">EPIC</span>
+        <span class="val" id="hdr-epic">GOLD</span>
+      </div>
+      <div class="pill">
+        <span class="lbl">LAST PX</span>
+        <span class="val" id="hdr-px">--</span>
+      </div>
+      <div class="pill">
+        <span class="lbl">BRICK SZ</span>
+        <span class="val" id="hdr-bs">--</span>
+      </div>
+      <div class="pill">
+        <span class="lbl">RUNS</span>
+        <span class="val" id="hdr-runs">G:0 / R:0</span>
+      </div>
+      <div class="pill">
+        <span class="lbl">SUPERTREND</span>
+        <span class="val" id="hdr-st">--</span>
+      </div>
+      <div class="pill">
+        <span class="dot amber" id="hdr-watch-dot"></span>
+        <span class="lbl">24/7 BOT</span>
+        <span class="val" id="hdr-watch">PAUSED</span>
+      </div>
+      <div class="pill">
+        <span class="dot amber" id="hdr-conn-dot"></span>
+        <span class="lbl">BROKER</span>
+        <span class="val" id="hdr-conn">DEMO</span>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button id="btn-watcher" class="success" onclick="toggleWatcher()">▶ Start 24/7 Watcher</button>
+      <button onclick="simulateTicket('BUY')" title="Test Semi-Auto BUY Ticket">+ Sim BUY</button>
+      <button onclick="simulateTicket('SELL')" title="Test Semi-Auto SELL Ticket">+ Sim SELL</button>
+      <button id="btn-kill" class="danger" onclick="toggleKillSwitch()">FLATTEN / KILL SWITCH</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- LEFT SIDEBAR: STRATEGY & RISK CONTROLS -->
+    <aside class="sidebar">
+
+      <!-- 24/7 Cloud Bot Status Panel -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>24/7 Cloud Bot Worker</span>
+          <span id="watcher-sub-badge" style="color:var(--amber);font-size:10px;">Paused</span>
+        </div>
+        <div id="watcher-status-text" style="font-family:var(--font-mono); font-size:11px; color:var(--text-1); margin-bottom:8px;">
+          Last check: never
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button style="flex:1" onclick="stepWatcherOnce()">Step 1 Bar Now</button>
+          <button style="flex:1" onclick="loadState()">Refresh UI</button>
+        </div>
+      </div>
+
+      <!-- Preset Mode Selector -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>Quick Mode Preset</span>
+          <span style="color:var(--amber);font-size:10px;">Instant Compare</span>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button style="flex:1" class="primary" onclick="applyPreset('pro')">Pro Filtered (Rec)</button>
+          <button style="flex:1" onclick="applyPreset('raw')">Raw Pine v6</button>
+        </div>
+      </div>
+
+      <!-- Pine Strategy Inputs -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>1. Pine v6 Renko &amp; ST Inputs</span>
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label>ATR Length (23h)</label>
+            <input type="number" id="in-atr_len" value="5" min="1" max="50">
+          </div>
+          <div class="field">
+            <label>ATR Divisor</label>
+            <input type="number" id="in-atr_div" value="5.0" step="0.5" min="0.5">
+          </div>
+          <div class="field">
+            <label>Green Bricks → BUY</label>
+            <input type="number" id="in-green_buy" value="2" min="1" max="10">
+          </div>
+          <div class="field">
+            <label>Red Bricks → EXIT</label>
+            <input type="number" id="in-red_exit" value="1" min="1" max="10">
+          </div>
+          <div class="field">
+            <label>Red Bricks → SELL</label>
+            <input type="number" id="in-red_sell" value="2" min="1" max="10">
+          </div>
+          <div class="field">
+            <label>Green Bricks → COVER</label>
+            <input type="number" id="in-green_cover" value="1" min="1" max="10">
+          </div>
+          <div class="field">
+            <label>ST ATR Length</label>
+            <input type="number" id="in-st_len" value="1" min="1" max="20">
+          </div>
+          <div class="field">
+            <label>ST Factor</label>
+            <input type="number" id="in-st_factor" value="2.1" step="0.1" min="0.1">
+          </div>
+          <div class="field full">
+            <label>Entry Mode</label>
+            <select id="in-entry_mode">
+              <option value="hold">While condition holds (Pine default)</option>
+              <option value="close">On brick close only</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:8px;">
+          <div class="check-row">
+            <span>Use High/Low for Bricks</span>
+            <input type="checkbox" id="in-use_hl" checked>
+          </div>
+          <div class="check-row">
+            <span>Use Supertrend Filter</span>
+            <input type="checkbox" id="in-use_st" checked>
+          </div>
+          <div class="check-row">
+            <span>Also Exit on Supertrend Flip</span>
+            <input type="checkbox" id="in-exit_on_st">
+          </div>
+        </div>
+      </div>
+
+      <!-- Expert Gold Upgrades -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>2. Expert Gold Protections</span>
+          <span style="color:var(--green-bright);font-size:10px;">Audit Fixes</span>
+        </div>
+        <div class="check-row" title="Prevents re-entering the exact same brick run after a safety stop or manual close">
+          <span>Lock 1 Trade Per Brick Run</span>
+          <input type="checkbox" id="in-one_trade_per_run" checked>
+        </div>
+        <div class="check-row" title="Snaps initial brick origin to a deterministic grid multiple of brick_size">
+          <span>Grid-Anchor Brick Origin</span>
+          <input type="checkbox" id="in-grid_anchor" checked>
+        </div>
+        <div class="check-row" title="Blocks new entries during 20:45-22:15 UTC daily rollover spread spike">
+          <span>Gold Rollover Blackout (21:00 UTC)</span>
+          <input type="checkbox" id="in-rollover_blackout" checked>
+        </div>
+        <div class="check-row" title="Include the 3-brick broker safety stop in the backtest simulation">
+          <span>Broker Safety Stop in Backtest</span>
+          <input type="checkbox" id="in-safety_stop_in_backtest" checked>
+        </div>
+        <div class="form-grid" style="margin-top:8px;">
+          <div class="field" title="Skip news spike candles that print more than N bricks in 1 bar (0=off)">
+            <label>Max Bricks / Bar</label>
+            <input type="number" id="in-max_bricks_on_entry_bar" value="3" min="0" max="20">
+          </div>
+          <div class="field" title="Skip if bar close overshoots trigger brick by > k bricks (0=off)">
+            <label>Max Overshoot (Brk)</label>
+            <input type="number" id="in-max_overshoot_bricks" value="1.5" step="0.25" min="0">
+          </div>
+          <div class="field" title="Broker-side trailing catastrophe stop distance in bricks">
+            <label>Safety Stop (Brk)</label>
+            <input type="number" id="in-safety_stop_bricks" value="3.0" step="0.5" min="1">
+          </div>
+          <div class="field" title="Move safety stop to entry price after +N bricks MFE (0=off)">
+            <label>Breakeven Lock (Brk)</label>
+            <input type="number" id="in-breakeven_after_bricks" value="0.0" step="0.5" min="0">
+          </div>
+        </div>
+      </div>
+
+      <!-- Sizing & Sessions -->
+      <div class="panel">
+        <div class="panel-title"><span>3. Position Sizing &amp; Sessions</span></div>
+        <div class="form-grid">
+          <div class="field">
+            <label>Sizing Mode</label>
+            <select id="in-sizing_mode">
+              <option value="fixed">Fixed Units (oz)</option>
+              <option value="risk_usd">Fixed $ Risk / Trade</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Fixed Size (oz)</label>
+            <input type="number" id="in-size" value="1.0" step="0.1" min="0.1">
+          </div>
+          <div class="field">
+            <label>Risk / Trade ($)</label>
+            <input type="number" id="in-risk_per_trade_usd" value="50" step="10" min="5">
+          </div>
+          <div class="field">
+            <label>Bot Mode</label>
+            <select id="in-mode">
+              <option value="semi-auto">Semi-Auto (Confirm)</option>
+              <option value="auto">Full Auto (Demo)</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:8px;">
+          <div class="check-row">
+            <span>Asian Session (00:00–07:00 UTC)</span>
+            <input type="checkbox" id="in-sess_asian" checked>
+          </div>
+          <div class="check-row">
+            <span>London Session (07:00–13:00 UTC)</span>
+            <input type="checkbox" id="in-sess_london" checked>
+          </div>
+          <div class="check-row">
+            <span>New York Session (13:00–21:00 UTC)</span>
+            <input type="checkbox" id="in-sess_ny" checked>
+          </div>
+        </div>
+        <button class="primary" style="width:100%; margin-top:10px; padding:9px;" onclick="saveAndRun()">
+          Apply Settings &amp; Run Backtest
+        </button>
+      </div>
+
+      <!-- Data Source Panel -->
+      <div class="panel">
+        <div class="panel-title"><span>4. Market Data Source</span></div>
+        <div style="display:flex; flex-direction:column; gap:7px;">
+          <button onclick="fetchCapitalData()">Fetch Live GOLD from Capital.com</button>
+          <div style="display:flex; gap:6px;">
+            <button style="flex:1" onclick="regenSample(42)">Sample Regime #1</button>
+            <button style="flex:1" onclick="regenSample(99)">Sample Regime #2</button>
+          </div>
+          <label style="font-size:11px; color:var(--text-1); margin-top:4px;">Import TradingView / MT5 CSV:</label>
+          <input type="file" id="csv-file" accept=".csv" onchange="uploadCsv(this)" style="font-size:11px; color:var(--text-1);">
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- MAIN COCKPIT -->
+    <main class="main">
+
+      <!-- PENDING SEMI-AUTO TICKET BANNER -->
+      <div id="ticket-banner" class="ticket-card">
+        <div>
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; color:var(--amber);">
+            SEMI-AUTO ORDER TICKET AWAITING YOUR CONFIRMATION
+          </div>
+          <div id="ticket-title" style="font-size:17px; font-weight:800; font-family:var(--font-mono); margin-top:3px;">
+            BUY 1.0 GOLD @ ~2684.50
+          </div>
+          <div id="ticket-sub" style="font-size:12px; color:var(--text-1); font-family:var(--font-mono); margin-top:2px;">
+            Safety Stop: 2675.20 (3 bricks) | Expires in 165s
+          </div>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button class="success" style="padding:9px 18px; font-size:13px;" onclick="decideTicket('approve')">
+            ✓ APPROVE ORDER (YES)
+          </button>
+          <button class="danger" style="padding:9px 14px;" onclick="decideTicket('reject')">
+            ✕ REJECT
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI METRIC STRIP -->
+      <section class="kpi-grid">
+        <div class="kpi">
+          <div class="k-label">Net P&amp;L (After Spread)</div>
+          <div class="k-val" id="kpi-net">--</div>
+          <div class="k-sub" id="kpi-gross">Gross (TV): --</div>
+        </div>
+        <div class="kpi">
+          <div class="k-label">Pro Filter Edge vs Raw Pine</div>
+          <div class="k-val" id="kpi-edge">--</div>
+          <div class="k-sub" id="kpi-filtered">Skipped entries: 0</div>
+        </div>
+        <div class="kpi">
+          <div class="k-label">Win Rate &amp; Trades</div>
+          <div class="k-val" id="kpi-win">--</div>
+          <div class="k-sub" id="kpi-trades">-- trades</div>
+        </div>
+        <div class="kpi">
+          <div class="k-label">Profit Factor</div>
+          <div class="k-val" id="kpi-pf">--</div>
+          <div class="k-sub" id="kpi-avg">Avg Win/Loss: --</div>
+        </div>
+        <div class="kpi">
+          <div class="k-label">Max Drawdown (Net)</div>
+          <div class="k-val neg" id="kpi-dd">--</div>
+          <div class="k-sub" id="kpi-streak">Worst Streak: --</div>
+        </div>
+        <div class="kpi">
+          <div class="k-label">Excursion &amp; Slippage</div>
+          <div class="k-val" id="kpi-mfe">--</div>
+          <div class="k-sub" id="kpi-over">Avg Overshoot: --</div>
+        </div>
+      </section>
+
+      <!-- RENKO BRICKS + SUPERTREND CHART -->
+      <section class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title">
+            <span>Renko Bricks + Supertrend-on-Bricks</span>
+            <span id="chart-sub" style="font-size:11px; color:var(--text-2); font-family:var(--font-mono);">Last 150 Bricks</span>
+          </div>
+          <div class="legend">
+            <span><i class="swatch" style="background:#26a69a"></i>Up Brick</span>
+            <span><i class="swatch" style="background:#ef5350"></i>Down Brick</span>
+            <span><i class="swatch" style="background:#10b981; height:3px;"></i>ST Bull</span>
+            <span><i class="swatch" style="background:#f43f5e; height:3px;"></i>ST Bear</span>
+            <span><i class="swatch" style="background:#f59e0b; border-radius:50%;"></i>Filtered Veto</span>
+          </div>
+        </div>
+        <canvas id="renko-canvas" height="340"></canvas>
+      </section>
+
+      <!-- EQUITY CURVE + MONTE CARLO FAN CHART -->
+      <section class="two-col">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-title">Equity Curve: Pro Strategy vs. Raw Pine v6</div>
+            <div class="legend">
+              <span><i class="swatch" style="background:#10b981"></i>Pro Net P&amp;L</span>
+              <span><i class="swatch" style="background:#3b82f6"></i>Pro Gross (TV)</span>
+              <span><i class="swatch" style="background:#64748b"></i>Raw Pine Net</span>
+            </div>
+          </div>
+          <canvas id="equity-canvas" height="230"></canvas>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-title">Time Machine: 2,500-Run Monte Carlo Cone</div>
+            <div class="legend" id="mc-summary">
+              <span>95% DD: --</span>
+              <span>Loss Odds: --</span>
+            </div>
+          </div>
+          <canvas id="mc-canvas" height="230"></canvas>
+        </div>
+      </section>
+
+      <!-- SESSION BREAKDOWN + TRADE LIST -->
+      <section class="two-col">
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-title">Gold Session Performance Breakdown (Net P&amp;L)</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Session (UTC)</th>
+                <th>Trades</th>
+                <th>Win Rate</th>
+                <th>Profit Factor</th>
+                <th>Avg Overshoot</th>
+                <th>Net P&amp;L</th>
+              </tr>
+            </thead>
+            <tbody id="session-tbody"></tbody>
+          </table>
+
+          <div class="chart-header" style="margin-top:16px;">
+            <div class="chart-title">Cloud &amp; Broker Environment Status</div>
+          </div>
+          <div style="font-size:12px; color:var(--text-1); background:var(--bg-0); padding:10px; border-radius:6px; border:1px solid var(--border); font-family:var(--font-mono);">
+            <div id="cred-status-line" style="margin-bottom:6px; color:var(--amber);">Checking environment variables...</div>
+            <div style="font-size:11px; color:var(--text-2);">
+              Set <code>CAPITAL_API_KEY</code>, <code>CAPITAL_IDENTIFIER</code>, <code>CAPITAL_PASSWORD</code>, and <code>DASHBOARD_PASSWORD</code> in your cloud host's Environment Variables tab (Railway / Render / Fly.io).
+            </div>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-title">Trade Journal (Backtest &amp; Excursion Log)</div>
+            <span style="font-size:11px; color:var(--text-2); font-family:var(--font-mono);">Saved to journal/backtest_trades.csv</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Side</th>
+                  <th>Session</th>
+                  <th>Entry Time</th>
+                  <th>Trig Px</th>
+                  <th>Fill Px</th>
+                  <th>Exit Px</th>
+                  <th>Reason</th>
+                  <th>MFE / MAE</th>
+                  <th>Gross</th>
+                  <th>Net P&amp;L</th>
+                </tr>
+              </thead>
+              <tbody id="trades-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let STATE = null;
+
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.style.display = 'block';
+      setTimeout(() => { el.style.display = 'none'; }, 3800);
+    }
+
+    function fmtUsd(v) {
+      if (v === null || v === undefined || isNaN(v)) return '--';
+      const sign = v > 0 ? '+' : '';
+      return sign + '$' + Number(v).toFixed(2);
+    }
+
+    async function apiFetch(url, options = {}) {
+      const res = await fetch(url, options);
+      if (res.status === 401) {
+        document.getElementById('login-modal').classList.add('active');
+        throw new Error('Authentication required');
+      }
+      return res;
+    }
+
+    async function submitLogin() {
+      const pw = document.getElementById('login-pw').value;
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({password: pw})
+      });
+      if (res.ok) {
+        document.getElementById('login-modal').classList.remove('active');
+        document.getElementById('login-pw').value = '';
+        await loadState();
+        showToast('Cockpit unlocked');
+      } else {
+        showToast('Invalid password');
+      }
+    }
+
+    async function loadState() {
+      try {
+        const res = await apiFetch('/api/state');
+        STATE = await res.json();
+        syncInputsFromConfig(STATE.config);
+        renderAll();
+      } catch (e) {
+        // handled by login modal if 401
+      }
+    }
+
+    async function toggleWatcher() {
+      const running = STATE?.bot?.watcher?.running;
+      const res = await apiFetch('/api/watcher', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: running ? 'stop' : 'start'})
+      });
+      const data = await res.json();
+      STATE.bot = data.bot;
+      renderAll();
+      showToast(data.message);
+    }
+
+    async function stepWatcherOnce() {
+      const res = await apiFetch('/api/watcher', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'step'})
+      });
+      const data = await res.json();
+      STATE.bot = data.bot;
+      renderAll();
+      showToast(data.message);
+    }
+
+    function syncInputsFromConfig(cfg) {
+      const s = cfg.strategy || {};
+      const r = cfg.risk || {};
+      const sess = r.sessions || {};
+      document.getElementById('in-atr_len').value = s.atr_len ?? 5;
+      document.getElementById('in-atr_div').value = s.atr_div ?? 5.0;
+      document.getElementById('in-green_buy').value = s.green_buy ?? 2;
+      document.getElementById('in-red_exit').value = s.red_exit ?? 1;
+      document.getElementById('in-red_sell').value = s.red_sell ?? 2;
+      document.getElementById('in-green_cover').value = s.green_cover ?? 1;
+      document.getElementById('in-st_len').value = s.st_len ?? 1;
+      document.getElementById('in-st_factor').value = s.st_factor ?? 2.1;
+      document.getElementById('in-entry_mode').value = s.entry_mode ?? 'hold';
+      document.getElementById('in-use_hl').checked = !!s.use_hl;
+      document.getElementById('in-use_st').checked = !!s.use_st;
+      document.getElementById('in-exit_on_st').checked = !!s.exit_on_st;
+
+      document.getElementById('in-one_trade_per_run').checked = !!s.one_trade_per_run;
+      document.getElementById('in-grid_anchor').checked = !!s.grid_anchor;
+      document.getElementById('in-max_bricks_on_entry_bar').value = s.max_bricks_on_entry_bar ?? 0;
+      document.getElementById('in-max_overshoot_bricks').value = s.max_overshoot_bricks ?? 0;
+
+      document.getElementById('in-rollover_blackout').checked = !!r.rollover_blackout;
+      document.getElementById('in-safety_stop_in_backtest').checked = !!r.safety_stop_in_backtest;
+      document.getElementById('in-safety_stop_bricks').value = r.safety_stop_bricks ?? 3.0;
+      document.getElementById('in-breakeven_after_bricks').value = r.breakeven_after_bricks ?? 0.0;
+
+      document.getElementById('in-sizing_mode').value = cfg.sizing_mode ?? 'fixed';
+      document.getElementById('in-size').value = cfg.size ?? 1.0;
+      document.getElementById('in-risk_per_trade_usd').value = cfg.risk_per_trade_usd ?? 50.0;
+      document.getElementById('in-mode').value = cfg.mode ?? 'semi-auto';
+
+      document.getElementById('in-sess_asian').checked = sess.asian !== false;
+      document.getElementById('in-sess_london').checked = sess.london !== false;
+      document.getElementById('in-sess_ny').checked = sess.new_york !== false;
+    }
+
+    function readConfigFromInputs() {
+      return {
+        sizing_mode: document.getElementById('in-sizing_mode').value,
+        size: parseFloat(document.getElementById('in-size').value),
+        risk_per_trade_usd: parseFloat(document.getElementById('in-risk_per_trade_usd').value),
+        mode: document.getElementById('in-mode').value,
+        strategy: {
+          atr_len: parseInt(document.getElementById('in-atr_len').value, 10),
+          atr_div: parseFloat(document.getElementById('in-atr_div').value),
+          green_buy: parseInt(document.getElementById('in-green_buy').value, 10),
+          red_exit: parseInt(document.getElementById('in-red_exit').value, 10),
+          red_sell: parseInt(document.getElementById('in-red_sell').value, 10),
+          green_cover: parseInt(document.getElementById('in-green_cover').value, 10),
+          st_len: parseInt(document.getElementById('in-st_len').value, 10),
+          st_factor: parseFloat(document.getElementById('in-st_factor').value),
+          entry_mode: document.getElementById('in-entry_mode').value,
+          use_hl: document.getElementById('in-use_hl').checked,
+          use_st: document.getElementById('in-use_st').checked,
+          exit_on_st: document.getElementById('in-exit_on_st').checked,
+          one_trade_per_run: document.getElementById('in-one_trade_per_run').checked,
+          grid_anchor: document.getElementById('in-grid_anchor').checked,
+          max_bricks_on_entry_bar: parseInt(document.getElementById('in-max_bricks_on_entry_bar').value, 10),
+          max_overshoot_bricks: parseFloat(document.getElementById('in-max_overshoot_bricks').value),
+        },
+        risk: {
+          rollover_blackout: document.getElementById('in-rollover_blackout').checked,
+          safety_stop_in_backtest: document.getElementById('in-safety_stop_in_backtest').checked,
+          safety_stop_bricks: parseFloat(document.getElementById('in-safety_stop_bricks').value),
+          breakeven_after_bricks: parseFloat(document.getElementById('in-breakeven_after_bricks').value),
+          sessions: {
+            asian: document.getElementById('in-sess_asian').checked,
+            london: document.getElementById('in-sess_london').checked,
+            new_york: document.getElementById('in-sess_ny').checked,
+          }
+        }
+      };
+    }
+
+    async function applyPreset(which) {
+      if (which === 'raw') {
+        document.getElementById('in-one_trade_per_run').checked = false;
+        document.getElementById('in-grid_anchor').checked = false;
+        document.getElementById('in-rollover_blackout').checked = false;
+        document.getElementById('in-safety_stop_in_backtest').checked = false;
+        document.getElementById('in-max_bricks_on_entry_bar').value = 0;
+        document.getElementById('in-max_overshoot_bricks').value = 0;
+        document.getElementById('in-breakeven_after_bricks').value = 0;
+        document.getElementById('in-sess_asian').checked = true;
+        document.getElementById('in-sess_london').checked = true;
+        document.getElementById('in-sess_ny').checked = true;
+      } else {
+        document.getElementById('in-one_trade_per_run').checked = true;
+        document.getElementById('in-grid_anchor').checked = true;
+        document.getElementById('in-rollover_blackout').checked = true;
+        document.getElementById('in-safety_stop_in_backtest').checked = true;
+        document.getElementById('in-max_bricks_on_entry_bar').value = 3;
+        document.getElementById('in-max_overshoot_bricks').value = 1.5;
+        document.getElementById('in-safety_stop_bricks').value = 3.0;
+      }
+      await saveAndRun();
+      showToast(which === 'pro' ? 'Applied Pro Gold Protections' : 'Applied Raw Pine v6 Mode');
+    }
+
+    async function saveAndRun() {
+      const payload = readConfigFromInputs();
+      const res = await apiFetch('/api/config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      STATE = await res.json();
+      renderAll();
+      showToast('Backtest & Monte Carlo updated');
+    }
+
+    async function regenSample(seed) {
+      const res = await apiFetch('/api/sample-data', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({days: 12, seed})
+      });
+      STATE = await res.json();
+      renderAll();
+      showToast('Loaded Sample Gold Regime (seed ' + seed + ')');
+    }
+
+    async function fetchCapitalData() {
+      showToast('Connecting to Capital.com API...');
+      const res = await apiFetch('/api/fetch-capital', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({days: 15})
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast('Capital.com API: ' + (data.error || 'Missing credentials'));
+        return;
+      }
+      STATE = data;
+      renderAll();
+      showToast('Fetched ' + data.fetched_bars + ' GOLD candles from Capital.com!');
+    }
+
+    async function uploadCsv(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const text = await file.text();
+      const res = await apiFetch('/api/upload-csv', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({csv: text})
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast('CSV Error: ' + (data.error || 'Invalid format'));
+        return;
+      }
+      STATE = data;
+      renderAll();
+      showToast('Imported ' + data.imported_bars + ' bars from CSV!');
+    }
+
+    async function simulateTicket(action) {
+      const res = await apiFetch('/api/simulate-ticket', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action})
+      });
+      const data = await res.json();
+      STATE.bot = data.bot;
+      renderAll();
+      showToast('Simulated ' + action + ' ticket ready for review');
+    }
+
+    async function decideTicket(decision) {
+      const res = await apiFetch('/api/ticket-action', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({decision})
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast('Ticket error: ' + (data.error || 'Failed'));
+        loadState();
+        return;
+      }
+      STATE.bot = data.bot;
+      renderAll();
+      showToast(data.message || 'Done');
+    }
+
+    async function toggleKillSwitch() {
+      const currentlyActive = STATE?.bot?.kill_switch;
+      const res = await apiFetch('/api/kill-switch', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({active: !currentlyActive})
+      });
+      const data = await res.json();
+      STATE.bot = data.bot;
+      renderAll();
+      showToast(data.message);
+    }
+
+    function renderAll() {
+      if (!STATE) return;
+      const bt = STATE.backtest;
+      const ds = bt.data_summary;
+      const sn = bt.stats_net;
+      const sg = bt.stats_gross;
+      const rawNet = bt.raw_pine_stats_net;
+      const bot = STATE.bot;
+
+      // Header pills
+      document.getElementById('hdr-epic').textContent = ds.epic + ' (' + ds.resolution + ')';
+      document.getElementById('hdr-px').textContent = ds.last_price ? '$' + ds.last_price.toFixed(2) : '--';
+      document.getElementById('hdr-bs').textContent = '$' + (ds.last_brick_size || 0).toFixed(2);
+      document.getElementById('hdr-runs').innerHTML = `<span class="pos">G:${ds.green_run}</span> / <span class="neg">R:${ds.red_run}</span>`;
+      document.getElementById('hdr-st').innerHTML = ds.st_dir === 1
+        ? `<span class="pos">BULL (${ds.st_now})</span>`
+        : `<span class="neg">BEAR (${ds.st_now})</span>`;
+
+      // Watcher status
+      const w = bot.watcher || {};
+      const wDot = document.getElementById('hdr-watch-dot');
+      const wVal = document.getElementById('hdr-watch');
+      const wBtn = document.getElementById('btn-watcher');
+      const wSub = document.getElementById('watcher-sub-badge');
+      const wTxt = document.getElementById('watcher-status-text');
+      if (w.running) {
+        wDot.className = 'dot green';
+        wVal.textContent = 'RUNNING';
+        wBtn.textContent = '⏸ Pause 24/7 Watcher';
+        wBtn.className = 'warning';
+        wSub.textContent = 'ACTIVE';
+        wSub.style.color = 'var(--green-bright)';
+      } else {
+        wDot.className = 'dot amber';
+        wVal.textContent = 'PAUSED';
+        wBtn.textContent = '▶ Start 24/7 Watcher';
+        wBtn.className = 'success';
+        wSub.textContent = 'PAUSED';
+        wSub.style.color = 'var(--amber)';
+      }
+      wTxt.textContent = `${w.last_status || 'Idle'} | Last: ${w.last_check ? w.last_check.slice(11, 19) + ' UTC' : 'never'}`;
+
+      const creds = bot.credentials || {};
+      const allCreds = creds.api_key && creds.identifier && creds.password;
+      const dot = document.getElementById('hdr-conn-dot');
+      const connTxt = document.getElementById('hdr-conn');
+      const credLine = document.getElementById('cred-status-line');
+      if (bot.kill_switch) {
+        dot.className = 'dot red';
+        connTxt.textContent = 'KILL SWITCH ACTIVE';
+      } else if (allCreds) {
+        dot.className = 'dot green';
+        connTxt.textContent = (creds.env || 'demo').toUpperCase() + ' READY';
+        credLine.innerHTML = `<span class="pos">✓ Capital.com keys configured (${creds.env.toUpperCase()})</span> | Auth Gate: ${creds.password_protected ? '<span class="pos">ON</span>' : '<span style="color:var(--amber)">OFF</span>'}`;
+      } else {
+        dot.className = 'dot amber';
+        connTxt.textContent = 'SAMPLE DATA';
+        credLine.innerHTML = `⚠ Capital.com keys not set yet (running sample data) | Auth Gate: ${creds.password_protected ? '<span class="pos">ON</span>' : '<span style="color:var(--amber)">OFF</span>'}`;
+      }
+
+      const killBtn = document.getElementById('btn-kill');
+      if (bot.kill_switch) {
+        killBtn.textContent = 'RESUME BOT (CLEAR STOP)';
+        killBtn.className = 'warning';
+      } else {
+        killBtn.textContent = 'FLATTEN / KILL SWITCH';
+        killBtn.className = 'danger';
+      }
+
+      // Pending Ticket Banner
+      const banner = document.getElementById('ticket-banner');
+      if (bot.pending_ticket) {
+        const t = bot.pending_ticket;
+        banner.className = 'ticket-card active ' + (t.action === 'SELL' ? 'sell' : '');
+        const px = t.action === 'BUY' ? t.ask : t.bid;
+        document.getElementById('ticket-title').textContent =
+          `${t.action} ${t.size} ${t.epic} @ ~${px} (Brick Close: ${t.last_brick_close})`;
+        document.getElementById('ticket-sub').textContent =
+          `Broker 3-Brick Safety Stop: ${t.safety_stop} | Brick Size: $${t.brick_size} | Expires: ${t.expires_at.slice(11, 19)} UTC`;
+      } else {
+        banner.className = 'ticket-card';
+      }
+
+      // KPIs
+      const kNet = document.getElementById('kpi-net');
+      kNet.textContent = fmtUsd(sn.net);
+      kNet.className = 'k-val ' + (sn.net >= 0 ? 'pos' : 'neg');
+      document.getElementById('kpi-gross').textContent = 'Gross (TV): ' + fmtUsd(sg.net);
+
+      const diff = (sn.net - rawNet.net);
+      const kEdge = document.getElementById('kpi-edge');
+      kEdge.textContent = fmtUsd(diff) + ' vs Raw';
+      kEdge.className = 'k-val ' + (diff >= 0 ? 'pos' : 'neg');
+      document.getElementById('kpi-filtered').textContent =
+        `Raw Pine Net: ${fmtUsd(rawNet.net)} (${ds.filtered_count} spikes/chop skipped)`;
+
+      document.getElementById('kpi-win').textContent = (sn['win_rate_%'] || 0).toFixed(1) + '%';
+      document.getElementById('kpi-trades').textContent = `${sn.trades} trades (${rawNet.trades} in Raw Pine)`;
+
+      document.getElementById('kpi-pf').textContent = sn.profit_factor ?? '--';
+      document.getElementById('kpi-avg').textContent = `Win ${fmtUsd(sn.avg_win)} / Loss ${fmtUsd(sn.avg_loss)}`;
+
+      document.getElementById('kpi-dd').textContent = '-$' + (sn.max_drawdown || 0).toFixed(2);
+      document.getElementById('kpi-streak').textContent = `Worst Losing Streak: ${sn.longest_losing_streak} trades`;
+
+      document.getElementById('kpi-mfe').textContent = `+${sn.avg_mfe_bricks} / -${sn.avg_mae_bricks} brk`;
+      document.getElementById('kpi-over').textContent = `Avg Candle Overshoot: $${(sn.avg_overshoot || 0).toFixed(2)}`;
+
+      // Render canvases
+      drawRenkoChart(bt.bricks, bt.trades, bt.filtered_events);
+      drawEquityChart(bt.equity_curve, bt.raw_curve);
+      drawMonteCarloChart(bt.montecarlo);
+
+      // Session Table
+      const sbody = document.getElementById('session-tbody');
+      sbody.innerHTML = '';
+      const labels = {
+        asian: 'Asian (00:00–07:00)',
+        london: 'London (07:00–13:00)',
+        new_york: 'New York (13:00–21:00)'
+      };
+      for (const [k, st] of Object.entries(bt.sessions_net || {})) {
+        const tr = document.createElement('tr');
+        const cls = st.net >= 0 ? 'pos' : 'neg';
+        tr.innerHTML = `
+          <td>${labels[k] || k}</td>
+          <td>${st.trades}</td>
+          <td>${st['win_rate_%']}%</td>
+          <td>${st.profit_factor}</td>
+          <td>$${(st.avg_overshoot || 0).toFixed(2)}</td>
+          <td class="${cls}" style="font-weight:700">${fmtUsd(st.net)}</td>
+        `;
+        sbody.appendChild(tr);
+      }
+
+      // Trade List Table
+      const tbody = document.getElementById('trades-tbody');
+      tbody.innerHTML = '';
+      const revTrades = [...(bt.trades || [])].reverse();
+      for (const t of revTrades) {
+        const tr = document.createElement('tr');
+        const sideBadge = t.side === 'LONG' ? '<span class="badge buy">LONG</span>' : '<span class="badge sell">SHORT</span>';
+        const outBadge = t.why_out === 'SAFETY_STOP'
+          ? '<span class="badge stop">SAFETY_STOP</span>'
+          : t.why_out;
+        tr.innerHTML = `
+          <td>${t.num}</td>
+          <td>${sideBadge}</td>
+          <td>${t.session}</td>
+          <td>${t.entry_time.slice(5, 16).replace('T', ' ')}</td>
+          <td>${t.trigger_px.toFixed(2)}</td>
+          <td>${t.entry_exec.toFixed(2)}</td>
+          <td>${t.exit_exec.toFixed(2)}</td>
+          <td>${outBadge}</td>
+          <td>+${t.mfe_bricks} / -${t.mae_bricks}</td>
+          <td class="${t.gross >= 0 ? 'pos' : 'neg'}">${fmtUsd(t.gross)}</td>
+          <td class="${t.net >= 0 ? 'pos' : 'neg'}" style="font-weight:700">${fmtUsd(t.net)}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function setupCanvas(canvas) {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      return { ctx, w: rect.width, h: rect.height };
+    }
+
+    function drawRenkoChart(bricks, trades, filtered) {
+      const canvas = document.getElementById('renko-canvas');
+      const { ctx, w, h } = setupCanvas(canvas);
+      ctx.clearRect(0, 0, w, h);
+      if (!bricks || !bricks.length) return;
+
+      const view = bricks.slice(-140);
+      document.getElementById('chart-sub').textContent =
+        `Showing bricks #${view[0].index} – #${view[view.length - 1].index} (of ${bricks[bricks.length - 1].index + 1})`;
+
+      let minP = Infinity, maxP = -Infinity;
+      for (const b of view) {
+        minP = Math.min(minP, b.open, b.close, b.st_value ?? b.open);
+        maxP = Math.max(maxP, b.open, b.close, b.st_value ?? b.open);
+      }
+      const padP = (maxP - minP) * 0.10 || 5;
+      minP -= padP;
+      maxP += padP;
+
+      const padL = 12, padR = 64, padT = 16, padB = 24;
+      const plotW = w - padL - padR;
+      const plotH = h - padT - padB;
+      const py = p => padT + plotH - ((p - minP) / (maxP - minP)) * plotH;
+
+      ctx.strokeStyle = '#151d2b';
+      ctx.fillStyle = '#64748b';
+      ctx.font = '10.5px JetBrains Mono, monospace';
+      for (let i = 0; i <= 5; i++) {
+        const p = minP + (maxP - minP) * (i / 5);
+        const y = py(p);
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(w - padR, y);
+        ctx.stroke();
+        ctx.fillText(p.toFixed(1), w - padR + 6, y + 3);
+      }
+
+      const stepX = plotW / view.length;
+      const bw = Math.max(2, stepX * 0.76);
+
+      const entryByBrick = {};
+      for (const t of trades || []) {
+        if (t.entry_brick_idx !== undefined) entryByBrick[t.entry_brick_idx] = t;
+      }
+      const vetoByBrick = {};
+      for (const f of filtered || []) {
+        if (f.brick_idx !== undefined) vetoByBrick[f.brick_idx] = f;
+      }
+
+      for (let i = 0; i < view.length; i++) {
+        const b = view[i];
+        const x = padL + i * stepX;
+        const yTop = py(Math.max(b.open, b.close));
+        const yBot = py(Math.min(b.open, b.close));
+        const bh = Math.max(2, yBot - yTop);
+
+        ctx.fillStyle = b.direction === 1 ? '#26a69a' : '#ef5350';
+        ctx.fillRect(x, yTop, bw, bh);
+
+        if (b.st_value !== null && b.st_value !== undefined) {
+          const sy = py(b.st_value);
+          ctx.strokeStyle = b.st_dir === 1 ? '#10b981' : '#f43f5e';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(x, sy);
+          ctx.lineTo(x + stepX, sy);
+          ctx.stroke();
+        }
+
+        const tr = entryByBrick[b.index];
+        if (tr) {
+          const isBuy = tr.side === 'LONG';
+          const my = isBuy ? yBot + 11 : yTop - 11;
+          ctx.fillStyle = isBuy ? '#10b981' : '#ef5350';
+          ctx.beginPath();
+          if (isBuy) {
+            ctx.moveTo(x + bw / 2, yBot + 2);
+            ctx.lineTo(x + bw / 2 - 5, my);
+            ctx.lineTo(x + bw / 2 + 5, my);
+          } else {
+            ctx.moveTo(x + bw / 2, yTop - 2);
+            ctx.lineTo(x + bw / 2 - 5, my);
+            ctx.lineTo(x + bw / 2 + 5, my);
+          }
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        if (vetoByBrick[b.index]) {
+          ctx.fillStyle = '#f59e0b';
+          ctx.beginPath();
+          ctx.arc(x + bw / 2, yTop - 5, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    function drawEquityChart(curve, rawCurve) {
+      const canvas = document.getElementById('equity-canvas');
+      const { ctx, w, h } = setupCanvas(canvas);
+      ctx.clearRect(0, 0, w, h);
+      if (!curve || curve.length < 2) return;
+
+      const netVals = curve.map(p => p.net);
+      const grossVals = curve.map(p => p.gross);
+      const all = [...netVals, ...grossVals, ...(rawCurve || [0]), 0];
+      let minV = Math.min(...all), maxV = Math.max(...all);
+      const pad = (maxV - minV) * 0.12 || 10;
+      minV -= pad; maxV += pad;
+
+      const padL = 48, padR = 14, padT = 14, padB = 22;
+      const plotW = w - padL - padR, plotH = h - padT - padB;
+      const py = v => padT + plotH - ((v - minV) / (maxV - minV)) * plotH;
+
+      const y0 = py(0);
+      ctx.strokeStyle = '#263248';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(padL, y0); ctx.lineTo(w - padR, y0); ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = '10px JetBrains Mono, monospace';
+      for (let i = 0; i <= 4; i++) {
+        const v = minV + (maxV - minV) * (i / 4);
+        ctx.fillText('$' + v.toFixed(0), 4, py(v) + 3);
+      }
+
+      function strokeSeries(vals, color, width) {
+        if (!vals || vals.length < 2) return;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        for (let i = 0; i < vals.length; i++) {
+          const x = padL + (i / (vals.length - 1)) * plotW;
+          const y = py(vals[i]);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+
+      strokeSeries(rawCurve, '#64748b', 1.4);
+      strokeSeries(grossVals, '#3b82f6', 1.6);
+      strokeSeries(netVals, '#10b981', 2.4);
+    }
+
+    function drawMonteCarloChart(mc) {
+      const canvas = document.getElementById('mc-canvas');
+      const { ctx, w, h } = setupCanvas(canvas);
+      ctx.clearRect(0, 0, w, h);
+      if (!mc || !mc.fan_p50 || mc.fan_p50.length < 2) return;
+
+      document.getElementById('mc-summary').innerHTML =
+        `<span>95% Max DD: <b class="neg">-$${mc.p95_dd}</b></span>` +
+        `<span>95% Streak: <b>${mc.p95_streak}</b></span>` +
+        `<span>Loss Prob: <b>${mc['loss_prob_%']}%</b></span>`;
+
+      const all = [...mc.fan_p10, ...mc.fan_p90, 0];
+      for (const p of mc.sample_paths || []) all.push(...p);
+      let minV = Math.min(...all), maxV = Math.max(...all);
+      const pad = (maxV - minV) * 0.1 || 10;
+      minV -= pad; maxV += pad;
+
+      const padL = 48, padR = 14, padT = 14, padB = 22;
+      const plotW = w - padL - padR, plotH = h - padT - padB;
+      const py = v => padT + plotH - ((v - minV) / (maxV - minV)) * plotH;
+      const n = mc.fan_p50.length;
+      const px = i => padL + (i / (n - 1)) * plotW;
+
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.14)';
+      ctx.lineWidth = 1;
+      for (const path of mc.sample_paths || []) {
+        ctx.beginPath();
+        for (let i = 0; i < path.length; i++) {
+          if (i === 0) ctx.moveTo(px(i), py(path[i]));
+          else ctx.lineTo(px(i), py(path[i]));
+        }
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.18)';
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        if (i === 0) ctx.moveTo(px(i), py(mc.fan_p90[i]));
+        else ctx.lineTo(px(i), py(mc.fan_p90[i]));
+      }
+      for (let i = n - 1; i >= 0; i--) {
+        ctx.lineTo(px(i), py(mc.fan_p10[i]));
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) {
+        if (i === 0) ctx.moveTo(px(i), py(mc.fan_p50[i]));
+        else ctx.lineTo(px(i), py(mc.fan_p50[i]));
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = '10px JetBrains Mono, monospace';
+      for (let i = 0; i <= 4; i++) {
+        const v = minV + (maxV - minV) * (i / 4);
+        ctx.fillText('$' + v.toFixed(0), 4, py(v) + 3);
+      }
+    }
+
+    window.addEventListener('resize', () => renderAll());
+    // Auto-poll bot status every 12 seconds when unlocked
+    setInterval(() => {
+      if (!document.getElementById('login-modal').classList.contains('active')) {
+        loadState();
+      }
+    }, 12000);
+    loadState();
+  </script>
+</body>
+</html>

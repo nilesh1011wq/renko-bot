@@ -1,0 +1,49 @@
+{
+  "_comment": "Strategy inputs mirror the Pine script + optional Pro Trader filters and risk controls.",
+  "epic": "GOLD",
+  "resolution": "MINUTE",
+  "price": "mid",
+  "tick": 0.01,
+  "size": 1,
+  "sizing_mode": "risk_usd",
+  "risk_per_trade_usd": 50,
+  "strategy": {
+    "atr_len": 5,
+    "atr_div": 5,
+    "round_tick": true,
+    "fallback_size": 10.0,
+    "use_hl": true,
+    "enable_long": true,
+    "green_buy": 2,
+    "red_exit": 1,
+    "enable_short": true,
+    "red_sell": 2,
+    "green_cover": 1,
+    "entry_mode": "hold",
+    "use_st": true,
+    "st_len": 1,
+    "st_factor": 2.1,
+    "exit_on_st": false,
+    "one_trade_per_run": true,
+    "max_bricks_on_entry_bar": 3,
+    "max_overshoot_bricks": 1.5,
+    "grid_anchor": true
+  },
+  "risk": {
+    "safety_stop_bricks": 3,
+    "safety_stop_in_backtest": true,
+    "breakeven_after_bricks": 0,
+    "max_daily_loss": 250.0,
+    "max_trades_per_day": 20,
+    "max_spread_frac_of_brick": 0.25,
+    "rollover_blackout": true,
+    "ticket_ttl_seconds": 180,
+    "sessions": {
+      "asian": true,
+      "london": true,
+      "new_york": true
+    }
+  },
+  "mode": "auto",
+  "live": false
+}
