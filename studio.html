@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Renko ATR Pro Studio — XAUUSD & Capital.com Interactive Cockpit</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased p-4 md:p-6">
+
+  <!-- TOP HEADER BAR -->
+  <header class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 mb-5 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+    <div class="flex items-center gap-3">
+      <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-amber-500 text-black tracking-wide">STUDIO APP</span>
+      <div>
+        <h1 class="font-bold text-base md:text-lg leading-tight">Renko ATR Pro Cockpit — XAUUSD (Gold)</h1>
+        <p class="text-xs text-[var(--muted-foreground)]">Pine v6 Exact Engine + 7 Institutional Gold Filters + Semi-Auto Bot Simulator</p>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
+      <div class="px-3 py-1.5 rounded-lg bg-[var(--secondary)] border border-[var(--border)]">
+        <span class="text-[var(--muted-foreground)]">PRICE:</span>
+        <span id="hdr-px" class="font-bold ml-1">$2,684.20</span>
+      </div>
+      <div class="px-3 py-1.5 rounded-lg bg-[var(--secondary)] border border-[var(--border)]">
+        <span class="text-[var(--muted-foreground)]">BRICK SZ:</span>
+        <span id="hdr-bs" class="font-bold ml-1">$3.20</span>
+      </div>
+      <div class="px-3 py-1.5 rounded-lg bg-[var(--secondary)] border border-[var(--border)]">
+        <span class="text-[var(--muted-foreground)]">RUNS:</span>
+        <span id="hdr-runs" class="font-bold ml-1">G:2 / R:0</span>
+      </div>
+      <div class="px-3 py-1.5 rounded-lg bg-[var(--secondary)] border border-[var(--border)]">
+        <span class="text-[var(--muted-foreground)]">ST:</span>
+        <span id="hdr-st" class="font-bold ml-1 text-emerald-500">BULL</span>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <button id="btn-live-sim" onclick="toggleLiveSim()" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-500 transition">
+        ▶ Start Live Bot Playback
+      </button>
+      <button onclick="triggerDemoTicket('BUY')" class="px-3 py-2 rounded-lg text-xs font-semibold bg-[var(--secondary)] border border-[var(--border)] hover:opacity-80 transition">
+        + Sim BUY Ticket
+      </button>
+      <button onclick="triggerDemoTicket('SELL')" class="px-3 py-2 rounded-lg text-xs font-semibold bg-[var(--secondary)] border border-[var(--border)] hover:opacity-80 transition">
+        + Sim SELL Ticket
+      </button>
+      <button id="btn-kill" onclick="toggleKillSwitch()" class="px-3.5 py-2 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-500 transition">
+        FLATTEN / KILL
+      </button>
+    </div>
+  </header>
+
+  <!-- SEMI-AUTO TICKET CONFIRMATION BANNER -->
+  <div id="ticket-banner" class="hidden mb-5 rounded-xl p-4 border-2 border-emerald-500 bg-[var(--card)] shadow-md flex-wrap items-center justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2">
+        <span class="px-2 py-0.5 rounded text-xs font-bold bg-amber-500 text-black">SEMI-AUTO TICKET READY</span>
+        <span id="tkt-timer" class="text-xs font-mono text-[var(--muted-foreground)]">TTL: 180s</span>
+      </div>
+      <div id="tkt-main" class="text-base md:text-lg font-bold font-mono mt-1">
+        BUY 1.0 oz GOLD @ $2,684.50 (Brick Close: $2,684.20)
+      </div>
+      <div id="tkt-sub" class="text-xs font-mono text-[var(--muted-foreground)] mt-0.5">
+        Broker 3-Brick Trailing Stop: $2,674.60 | Risk: $9.90 | Spread Check: PASS ($0.28 &le; 25% brick)
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="resolveTicket('APPROVE')" class="px-4 py-2.5 rounded-lg text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500 transition">
+        ✓ APPROVE ORDER (YES)
+      </button>
+      <button onclick="resolveTicket('REJECT')" class="px-3.5 py-2.5 rounded-lg text-xs font-bold bg-red-600 text-white hover:bg-red-500 transition">
+        ✕ REJECT
+      </button>
+    </div>
+  </div>
+
+  <!-- MAIN GRID: LEFT CONTROLS + RIGHT VISUALS -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+    <!-- LEFT SIDEBAR: PARAMETERS & PRO FILTERS (4 COLS) -->
+    <aside class="lg:col-span-4 xl:col-span-3 flex flex-col gap-4">
+
+      <!-- Mode Presets -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+        <div class="flex items-center justify-between mb-2.5">
+          <span class="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">Strategy Preset</span>
+          <span id="preset-badge" class="text-xs font-semibold text-emerald-500">Pro Filtered Active</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="btn-preset-pro" onclick="setPreset('pro')" class="py-2 px-3 rounded-lg text-xs font-bold bg-blue-600 text-white">
+            Pro Gold Filtered
+          </button>
+          <button id="btn-preset-raw" onclick="setPreset('raw')" class="py-2 px-3 rounded-lg text-xs font-semibold bg-[var(--secondary)] border border-[var(--border)]">
+            Raw Pine v6
+          </button>
+        </div>
+        <p class="text-xs text-[var(--muted-foreground)] mt-2">
+          Switch between your raw Pine v6 code and the 7 Gold audit protections to see the instant P&amp;L and drawdown difference.
+        </p>
+      </div>
+
+      <!-- Pine v6 Inputs -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+        <div class="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">
+          1. Pine v6 Renko &amp; Supertrend Inputs
+        </div>
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div>
+            <label class="block text-[var(--muted-foreground)] mb-1">ATR Length (23h)</label>
+            <input id="p-atrLen" type="number" value="5" min="1" max="30" onchange="recompute()" class="w-full px-2.5 py-1.5 rounded-md bg-[var(--background)] border border-[var(--border)] font-mono text-xs" />
+          </div>
+          <div>
+            <label class="block text-[var(--muted-foreground)] mb-1">ATR Divisor</label>
+            <input id="p-atrDiv" type="number" value="5.0" step="0.5" min="1" max="20" onchange="recompute()" class="w-full px-2.5 py-1.5 rounded-md bg-[var(--background)] border border-[var(--border)] font-mono text-xs" />
+          </div>
+          <div>
+            <label class="block text-[var(--muted-foreground)] mb-1">Green Bricks → BUY</label>
+            <input id="p-greenBuy" type="number" value="2" min="1" max="8" onchange="recompute()" class="w-full px-2.5 py-1.5 rounded-md bg-[var(--background)] border border-[var(--border)] font-mono text-xs" />
+          </div>
+          <div>
+            <label class="block text-[var(--muted-foreground)] mb-1">Red Bricks → EXIT</label>
+            <input id="p-redExit" type="number" value="1" min="1" max="8" onchange="recompute()" class="w-full px-2.5 py-1.5 rounded-md bg-[var(--background)] border border-[var(--border)] font-mono text-xs" />
+          </div>
+          <div>
+            <label class="block text-[var(--muted-foreground)] mb-1">Red Bricks → SELL</label>
+            <input id="p-redSell" type="number" value="2" min="1" max="8" onchange="recompute()" class="w-full px-2.5 py-1.5 rounded-md bg-[var(--background)] border border-[var(--border)] font-mono text-xs" />
+          </div>
+          <div>
+            <label class="block text-[var(--muted-foreground)] mb-1">Green → COVER</label>
+            <input id="p-greenCover" type="number" value="1" min="1" max="8" onchange="recompute()" class="w-full px-2.5 py-1.5 rounded-md bg-[var(--background)] border border-[var(--border)] font-mono text-xs" />
+          </div>
+          <div>
+            <label class="block text-[var(--muted-foreground)] mb-1">ST ATR Length</label>
+            <input id="p-stLen" type="number" value="1" min="1" max="15" onchange="recompute()" class="w-full px-2.5 py-1.5 rounded-md bg-[var(--background)] border border-[var(--border)] font-mono text-xs" />
+          </div>
+          <div>
+            <label class="block text-[var(--muted-foreground)] mb-1">ST Factor</label>
+            <input id="p-stFactor" type="number" value="2.1" step="0.1" min="0.2" max="10" onchange="recompute()" class="w-full px-2.5 py-1.5 rounded-md bg-[var(--background)] border border-[var(--border)] font-mono text-xs" />
+          </div>
+        </div>
+
+        <div class="mt-3 space-y-2 text-xs">
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-[var(--muted-foreground)]">Use High/Low for Bricks</span>
+            <input id="p-useHL" type="checkbox" checked onchange="recompute()" class="w-4 h-4 accent-blue-600" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-[var(--muted-foreground)]">Use Supertrend Entry Filter</span>
+            <input id="p-useST" type="checkbox" checked onchange="recompute()" class="w-4 h-4 accent-blue-600" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-[var(--muted-foreground)]">Also Exit on Supertrend Flip</span>
+            <input id="p-exitOnST" type="checkbox" onchange="recompute()" class="w-4 h-4 accent-blue-600" />
+          </label>
+        </div>
+      </div>
+
+      <!-- Expert Gold Audit Filters -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">2. Expert Gold Protections</span>
+          <span class="text-xs text-emerald-500 font-semibold">7 Upgrades</span>
+        </div>
+
+        <div class="space-y-2 text-xs">
+          <label class="flex items-center justify-between cursor-pointer" title="Prevents re-entering the same brick run after a safety stop">
+            <span class="text-[var(--muted-foreground)]">Lock 1 Trade Per Brick Run</span>
+            <input id="p-onePerRun" type="checkbox" checked onchange="recompute()" class="w-4 h-4 accent-blue-600" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer" title="Snaps initial brick origin to a multiple of brickSize">
+            <span class="text-[var(--muted-foreground)]">Grid-Anchor Brick Origin</span>
+            <input id="p-gridAnchor" type="checkbox" checked onchange="recompute()" class="w-4 h-4 accent-blue-600" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer" title="Blocks entries during 20:45-22:15 UTC daily rollover">
+            <span class="text-[var(--muted-foreground)]">Rollover Blackout (21:00 UTC)</span>
+            <input id="p-rollover" type="checkbox" checked onchange="recompute()" class="w-4 h-4 accent-blue-600" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer" title="Resting 3-brick catastrophe stop on Capital.com">
+            <span class="text-[var(--muted-foreground)]">3-Brick Broker Safety Stop</span>
+            <input id="p-useSafetyStop" type="checkbox" checked onchange="recompute()" class="w-4 h-4 accent-blue-600" />
+          </label>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 text-xs mt-3">
+          <div>
+            <label class="block text-[var(--muted-foreground)] mb-1">Max Bricks / Bar</label>
+            <input id="p-maxBricksBar" type="number" value="3" min="0" max="15" onchange="recompute()" class="w-full px-2.5 py-1.5 rounded-md bg-[var(--background)] border border-[var(--border)] font-mono text-xs" />
+          </div>
+          <div>
+            <label class="block text-[var(--muted-foreground)] mb-1">Max Overshoot (Brk)</label>
+            <input id="p-maxOvershoot" type="number" value="1.5" step="0.25" min="0" max="5" onchange="recompute()" class="w-full px-2.5 py-1.5 rounded-md bg-[var(--background)] border border-[var(--border)] font-mono text-xs" />
+          </div>
+          <div>
+            <label class="block text-[var(--muted-foreground)] mb-1">Safety Stop (Brk)</label>
+            <input id="p-stopBricks" type="number" value="3.0" step="0.5" min="1" max="10" onchange="recompute()" class="w-full px-2.5 py-1.5 rounded-md bg-[var(--background)] border border-[var(--border)] font-mono text-xs" />
+          </div>
+          <div>
+            <label class="block text-[var(--muted-foreground)] mb-1">Breakeven Lock (Brk)</label>
+            <input id="p-beBricks" type="number" value="0.0" step="0.5" min="0" max="10" onchange="recompute()" class="w-full px-2.5 py-1.5 rounded-md bg-[var(--background)] border border-[var(--border)] font-mono text-xs" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Sessions & Market Regimes -->
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+        <div class="text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">
+          3. Gold Sessions &amp; Market Dataset
+        </div>
+        <div class="space-y-2 text-xs mb-3">
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-[var(--muted-foreground)]">Asian Session (00:00–07:00 UTC)</span>
+            <input id="p-sessAsian" type="checkbox" checked onchange="recompute()" class="w-4 h-4 accent-blue-600" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-[var(--muted-foreground)]">London Session (07:00–13:00 UTC)</span>
+            <input id="p-sessLondon" type="checkbox" checked onchange="recompute()" class="w-4 h-4 accent-blue-600" />
+          </label>
+          <label class="flex items-center justify-between cursor-pointer">
+            <span class="text-[var(--muted-foreground)]">New York Session (13:00–21:00 UTC)</span>
+            <input id="p-sessNY" type="checkbox" checked onchange="recompute()" class="w-4 h-4 accent-blue-600" />
+          </label>
+        </div>
+
+        <div class="grid grid-cols-3 gap-1.5 text-xs mb-3">
+          <button onclick="loadRegime(42)" class="py-1.5 px-2 rounded bg-[var(--secondary)] border border-[var(--border)] font-semibold hover:opacity-80">Regime #1</button>
+          <button onclick="loadRegime(99)" class="py-1.5 px-2 rounded bg-[var(--secondary)] border border-[var(--border)] font-semibold hover:opacity-80">Regime #2</button>
+          <button onclick="loadRegime(777)" class="py-1.5 px-2 rounded bg-[var(--secondary)] border border-[var(--border)] font-semibold hover:opacity-80">Volatile #3</button>
+        </div>
+
+        <label class="block text-xs text-[var(--muted-foreground)] mb-1">Or Upload TradingView / MT5 CSV:</label>
+        <input type="file" accept=".csv" onchange="handleCsvUpload(this)" class="w-full text-xs text-[var(--muted-foreground)]" />
+      </div>
+
+    </aside>
+
+    <!-- RIGHT MAIN CONTENT (8 COLS) -->
+    <main class="lg:col-span-8 xl:col-span-9 flex flex-col gap-5">
+
+      <!-- 6 KPI CARDS -->
+      <section class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3.5 shadow-sm">
+          <div class="text-xs text-[var(--muted-foreground)] uppercase">Net P&amp;L (Spread)</div>
+          <div id="kpi-net" class="text-xl font-bold font-mono mt-1 text-emerald-500">+$213.04</div>
+          <div id="kpi-gross" class="text-xs font-mono text-[var(--muted-foreground)] mt-0.5">Gross: +$217.52</div>
+        </div>
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3.5 shadow-sm">
+          <div class="text-xs text-[var(--muted-foreground)] uppercase">Pro Filter Edge</div>
+          <div id="kpi-edge" class="text-xl font-bold font-mono mt-1 text-emerald-500">+$84.20</div>
+          <div id="kpi-skipped" class="text-xs font-mono text-[var(--muted-foreground)] mt-0.5">15 whipsaws skipped</div>
+        </div>
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3.5 shadow-sm">
+          <div class="text-xs text-[var(--muted-foreground)] uppercase">Win Rate</div>
+          <div id="kpi-win" class="text-xl font-bold font-mono mt-1">64.3%</div>
+          <div id="kpi-trades" class="text-xs font-mono text-[var(--muted-foreground)] mt-0.5">14 trades</div>
+        </div>
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3.5 shadow-sm">
+          <div class="text-xs text-[var(--muted-foreground)] uppercase">Profit Factor</div>
+          <div id="kpi-pf" class="text-xl font-bold font-mono mt-1">4.33</div>
+          <div id="kpi-avg" class="text-xs font-mono text-[var(--muted-foreground)] mt-0.5">W:$30.8 / L:-$12.8</div>
+        </div>
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3.5 shadow-sm">
+          <div class="text-xs text-[var(--muted-foreground)] uppercase">Max Drawdown</div>
+          <div id="kpi-dd" class="text-xl font-bold font-mono mt-1 text-red-500">-$30.88</div>
+          <div id="kpi-streak" class="text-xs font-mono text-[var(--muted-foreground)] mt-0.5">Worst streak: 2</div>
+        </div>
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3.5 shadow-sm">
+          <div class="text-xs text-[var(--muted-foreground)] uppercase">MFE / Overshoot</div>
+          <div id="kpi-mfe" class="text-xl font-bold font-mono mt-1">+4.3 / -0.9b</div>
+          <div id="kpi-over" class="text-xs font-mono text-[var(--muted-foreground)] mt-0.5">Overshoot: $0.49</div>
+        </div>
+      </section>
+
+      <!-- RENKO BRICKS + SUPERTREND CHART -->
+      <section class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div>
+            <h2 class="font-bold text-sm md:text-base">Interactive Renko Bricks + Supertrend-on-Bricks</h2>
+            <p id="renko-subtitle" class="text-xs font-mono text-[var(--muted-foreground)]">Showing last 120 bricks</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-4 text-xs font-mono text-[var(--muted-foreground)]">
+            <span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-[#26a69a] inline-block"></i>Up Brick</span>
+            <span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-[#ef5350] inline-block"></i>Down Brick</span>
+            <span class="flex items-center gap-1.5"><i class="w-3 h-0.5 bg-emerald-400 inline-block"></i>ST Bull</span>
+            <span class="flex items-center gap-1.5"><i class="w-3 h-0.5 bg-rose-500 inline-block"></i>ST Bear</span>
+            <span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></i>Pro Filter Veto</span>
+          </div>
+        </div>
+        <canvas id="renko-canvas" height="310" class="w-full rounded-lg border border-[var(--border)] bg-[#090d14]"></canvas>
+      </section>
+
+      <!-- EQUITY CURVE + MONTE CARLO CONE -->
+      <section class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+            <h3 class="font-bold text-sm">Equity Curve: Pro Strategy vs. Raw Pine v6</h3>
+            <div class="flex items-center gap-3 text-xs font-mono text-[var(--muted-foreground)]">
+              <span class="flex items-center gap-1"><i class="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block"></i>Active Net</span>
+              <span class="flex items-center gap-1"><i class="w-2.5 h-2.5 rounded-sm bg-blue-500 inline-block"></i>Gross (TV)</span>
+              <span class="flex items-center gap-1"><i class="w-2.5 h-2.5 rounded-sm bg-slate-500 inline-block"></i>Raw Pine Net</span>
+            </div>
+          </div>
+          <canvas id="eq-canvas" height="215" class="w-full rounded-lg border border-[var(--border)] bg-[#090d14]"></canvas>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+            <h3 class="font-bold text-sm">Time Machine: 2,500-Run Monte Carlo Cone</h3>
+            <div id="mc-stats" class="flex items-center gap-3 text-xs font-mono text-[var(--muted-foreground)]">
+              <span>95% DD: <b class="text-red-400">-$45.20</b></span>
+              <span>Loss Odds: <b>1.2%</b></span>
+            </div>
+          </div>
+          <canvas id="mc-canvas" height="215" class="w-full rounded-lg border border-[var(--border)] bg-[#090d14]"></canvas>
+        </div>
+      </section>
+
+      <!-- SESSION BREAKDOWN + TRADE JOURNAL -->
+      <section class="grid grid-cols-1 xl:grid-cols-12 gap-5">
+        <div class="xl:col-span-5 bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+          <h3 class="font-bold text-sm mb-3">Gold Session Breakdown (Net of Spread)</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs font-mono border-collapse">
+              <thead>
+                <tr class="border-b border-[var(--border)] text-[var(--muted-foreground)]">
+                  <th class="py-2 text-left">Session (UTC)</th>
+                  <th class="py-2 text-right">Trades</th>
+                  <th class="py-2 text-right">Win%</th>
+                  <th class="py-2 text-right">PF</th>
+                  <th class="py-2 text-right">Net P&amp;L</th>
+                </tr>
+              </thead>
+              <tbody id="sess-tbody"></tbody>
+            </table>
+          </div>
+
+          <h3 class="font-bold text-sm mt-5 mb-2">Live Bot Execution Log</h3>
+          <div id="bot-log" class="text-xs font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg p-3 h-36 overflow-y-auto space-y-1 text-[var(--muted-foreground)]">
+            <div>[READY] Studio simulator initialized on 1-minute XAUUSD feed.</div>
+          </div>
+        </div>
+
+        <div class="xl:col-span-7 bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-bold text-sm">Trade-by-Trade Excursion &amp; Fill Log</h3>
+            <span class="text-xs font-mono text-[var(--muted-foreground)]">Trigger Px vs. Candle-Close Fill</span>
+          </div>
+          <div class="overflow-x-auto max-h-72 overflow-y-auto">
+            <table class="w-full text-xs font-mono border-collapse">
+              <thead class="sticky top-0 bg-[var(--card)]">
+                <tr class="border-b border-[var(--border)] text-[var(--muted-foreground)]">
+                  <th class="py-2 text-left">#</th>
+                  <th class="py-2 text-left">Side</th>
+                  <th class="py-2 text-left">Sess</th>
+                  <th class="py-2 text-right">Trig Px</th>
+                  <th class="py-2 text-right">Fill Px</th>
+                  <th class="py-2 text-right">Exit Px</th>
+                  <th class="py-2 text-right">Reason</th>
+                  <th class="py-2 text-right">MFE/MAE</th>
+                  <th class="py-2 text-right">Net P&amp;L</th>
+                </tr>
+              </thead>
+              <tbody id="trades-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. DETERMINISTIC GOLD (XAUUSD) 1-MINUTE & DAILY GENERATOR
+    // =========================================================================
+    function mulberry32(a) {
+      return function() {
+        let t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ t >>> 15, t | 1);
+        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+      };
+    }
+
+    function gauss(rng) {
+      let u = 0, v = 0;
+      while (u === 0) u = rng();
+      while (v === 0) v = rng();
+      return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    }
+
+    function sessionOfHour(h) {
+      if (h >= 0 && h < 7) return 'asian';
+      if (h >= 7 && h < 13) return 'london';
+      return 'new_york';
+    }
+
+    function inRollover(h, m) {
+      const hm = h * 60 + m;
+      return hm >= (20 * 60 + 45) && hm <= (22 * 60 + 15);
+    }
+
+    let BARS = [];
+    let DAYS = [];
+    let LAST_RESULT = null;
+    let LIVE_TIMER = null;
+    let LIVE_CURSOR = 0;
+    let KILL_SWITCH = false;
+    let PENDING_TICKET = null;
+
+    function buildGoldDataset(seed = 42) {
+      const rng = mulberry32(seed);
+      DAYS = [];
+      BARS = [];
+      let px = 2640.0;
+      const baseTime = Date.UTC(2026, 9, 1, 0, 0, 0);
+
+      // 25 warmup days for ATR(5)
+      for (let d = 0; d < 25; d++) {
+        const drift = gauss(rng) * 12 + 1.0;
+        const hi = px + Math.abs(gauss(rng) * 11) + Math.max(0, drift);
+        const lo = px - Math.abs(gauss(rng) * 11) + Math.min(0, drift);
+        const cl = Math.max(lo + 1, Math.min(hi - 1, px + drift));
+        DAYS.push({ t: baseTime + d * 86400000, o: px, h: hi, l: lo, c: cl });
+        px = cl;
+      }
+
+      // 8 days of intraday bars (5-minute resolution for ultra-responsive browser simulation)
+      let curT = baseTime + 25 * 86400000;
+      let regimeDrift = 0;
+      let regimeLeft = 0;
+
+      for (let d = 0; d < 8; d++) {
+        let dayO = px, dayH = px, dayL = px, dayC = px;
+        const dayStart = curT;
+        for (let step = 0; step < 288; step++) {
+          const dt = new Date(curT);
+          const h = dt.getUTCHours(), m = dt.getUTCMinutes();
+          if (h === 21) { curT += 300000; continue; } // 21:00 UTC maintenance hour
+
+          const sess = sessionOfHour(h);
+          if (regimeLeft <= 0) {
+            if (sess === 'asian') {
+              regimeDrift = (rng() - 0.5) * 0.18;
+              regimeLeft = 18 + Math.floor(rng() * 25);
+            } else {
+              const picks = [-0.65, -0.42, 0.0, 0.48, 0.72];
+              regimeDrift = picks[Math.floor(rng() * picks.length)];
+              regimeLeft = 14 + Math.floor(rng() * 28);
+            }
+          }
+          regimeLeft--;
+
+          const vol = sess === 'asian' ? 0.95 : (sess === 'london' ? 1.65 : 2.05);
+          const isNews = (h === 12 && m === 30 && rng() < 0.45);
+          const move = isNews ? ((rng() < 0.5 ? -1 : 1) * (15 + rng() * 14)) : (regimeDrift + gauss(rng) * vol);
+
+          const o = px;
+          const c = +(px + move).toFixed(2);
+          const hPx = +(Math.max(o, c) + Math.abs(gauss(rng) * vol * 0.55)).toFixed(2);
+          const lPx = +(Math.min(o, c) - Math.abs(gauss(rng) * vol * 0.55)).toFixed(2);
+          const halfSp = (inRollover(h, m) || isNews) ? 0.75 : 0.14;
+
+          BARS.push({
+            t: curT, h_utc: h, m_utc: m, sess,
+            o, h: hPx, l: lPx, c,
+            c_bid: +(c - halfSp).toFixed(2),
+            c_ask: +(c + halfSp).toFixed(2),
+            spread: +(halfSp * 2).toFixed(2)
+          });
+          dayH = Math.max(dayH, hPx);
+          dayL = Math.min(dayL, lPx);
+          dayC = c;
+          px = c;
+          curT += 300000;
+        }
+        DAYS.push({ t: dayStart, o: dayO, h: dayH, l: dayL, c: dayC });
+      }
+    }
+
+    // =========================================================================
+    // 2. EXACT PINE v6 RENKO + SUPERTREND ENGINE + PRO GOLD FILTERS
+    // =========================================================================
+    function wilderAtr(days, len) {
+      const out = [];
+      let prevC = null, rma = null;
+      const trs = [];
+      for (const d of days) {
+        const tr = prevC === null ? (d.h - d.l) : Math.max(d.h - d.l, Math.abs(d.h - prevC), Math.abs(d.l - prevC));
+        trs.push(tr);
+        if (rma === null) {
+          if (trs.length >= len) {
+            rma = trs.slice(-len).reduce((a, b) => a + b, 0) / len;
+          }
+        } else {
+          rma = (rma * (len - 1) + tr) / len;
+        }
+        out.push(rma);
+        prevC = d.c;
+      }
+      return out;
+    }
+
+    function renkoStep(lc, tr, hh, ll, bs) {
+      const upMove = hh - lc;
+      const dnMove = lc - ll;
+      if (tr === 0) {
+        if (upMove >= bs && upMove >= dnMove) return [1, Math.floor(upMove / bs), lc];
+        if (dnMove >= bs) return [-1, Math.floor(dnMove / bs), lc];
+      } else if (tr === 1) {
+        if (upMove >= bs) return [1, Math.floor(upMove / bs), lc];
+        if (dnMove >= 2 * bs) return [-1, Math.floor(dnMove / bs) - 1, lc - bs];
+      } else {
+        if (dnMove >= bs) return [-1, Math.floor(dnMove / bs), lc];
+        if (upMove >= 2 * bs) return [1, Math.floor(upMove / bs) - 1, lc + bs];
+      }
+      return [0, 0, null];
+    }
+
+    function runSimulation(params, barLimit = null) {
+      const dayAtrs = wilderAtr(DAYS, params.atrLen);
+      const activeBars = barLimit ? BARS.slice(0, barLimit) : BARS;
+
+      let lastClose = null, trend = 0, greenRun = 0, redRun = 0, brickCnt = 0;
+      let runId = 0, lastTradedRunId = -1;
+      let stAtr = null, stUpper = null, stLower = null, pClose = null, stSum = 0, stCnt = 0, stDir = 0, stNow = null;
+
+      const bricks = [];
+      const trades = [];
+      const vetoes = [];
+      let pos = 0, stop = null, openTrade = null;
+      let dayIdx = 0;
+
+      function getBrickSize(t) {
+        while (dayIdx + 1 < DAYS.length && DAYS[dayIdx + 1].t <= t) dayIdx++;
+        const atr = dayIdx > 0 ? dayAtrs[dayIdx - 1] : null;
+        const raw = atr ? (atr / params.atrDiv) : 10.0;
+        return Math.max(0.01, Math.round(raw * 100) / 100);
+      }
+
+      function closeTrade(r, px, why, execPx = null) {
+        const side = openTrade.side === 'LONG' ? 1 : -1;
+        const fill = execPx !== null ? execPx : (side > 0 ? r.c_bid : r.c_ask);
+        const bs = openTrade.bs || 1;
+        openTrade.exit_t = r.t;
+        openTrade.exit_brick = brickCnt - 1;
+        openTrade.exit = px;
+        openTrade.exit_exec = fill;
+        openTrade.why_out = why;
+        openTrade.mfe_b = +(openTrade.mfe / bs).toFixed(2);
+        openTrade.mae_b = +(openTrade.mae / bs).toFixed(2);
+        openTrade.gross = +((px - openTrade.entry) * side).toFixed(2);
+        openTrade.net = +((fill - openTrade.entry_exec) * side).toFixed(2);
+        trades.push(openTrade);
+        openTrade = null;
+      }
+
+      function startTrade(side, r, bs, trigPx) {
+        const fill = side > 0 ? r.c_ask : r.c_bid;
+        openTrade = {
+          num: trades.length + 1,
+          side: side > 0 ? 'LONG' : 'SHORT',
+          sess: r.sess,
+          entry_t: r.t,
+          entry_brick: brickCnt - 1,
+          trig_px: +(trigPx ?? r.c).toFixed(2),
+          entry: r.c,
+          entry_exec: fill,
+          overshoot: +((r.c - (trigPx ?? r.c)) * side).toFixed(2),
+          bs,
+          mfe: 0,
+          mae: 0
+        };
+        lastTradedRunId = runId;
+      }
+
+      for (const r of activeBars) {
+        const bs = getBrickSize(r.t);
+        const hi = params.useHL ? r.h : r.c;
+        const lo = params.useHL ? r.l : r.c;
+
+        if (openTrade && pos !== 0) {
+          if (pos > 0) {
+            openTrade.mfe = Math.max(openTrade.mfe, r.h - openTrade.entry);
+            openTrade.mae = Math.max(openTrade.mae, openTrade.entry - r.l);
+          } else {
+            openTrade.mfe = Math.max(openTrade.mfe, openTrade.entry - r.l);
+            openTrade.mae = Math.max(openTrade.mae, r.h - openTrade.entry);
+          }
+        }
+
+        // Broker-side 3-brick safety stop check
+        if (params.useSafetyStop && pos !== 0 && stop !== null) {
+          if (pos > 0 && r.l <= stop) {
+            const fill = Math.min(stop, r.o);
+            closeTrade(r, fill, 'SAFETY_STOP', fill);
+            pos = 0; stop = null;
+          } else if (pos < 0 && r.h >= stop) {
+            const fill = Math.max(stop, r.o);
+            closeTrade(r, fill, 'SAFETY_STOP', fill);
+            pos = 0; stop = null;
+          }
+        }
+
+        // Build Renko bricks
+        let n0 = 0;
+        if (lastClose === null) {
+          lastClose = params.gridAnchor ? Math.round(r.c / bs) * bs : r.c;
+        } else {
+          const [d0, count, s0] = renkoStep(lastClose, trend, hi, lo, bs);
+          if (count > 0) {
+            n0 = count;
+            if (d0 !== trend) runId++;
+            let o = s0;
+            for (let k = 0; k < count; k++) {
+              const c2 = +(o + d0 * bs).toFixed(2);
+              const bh = Math.max(o, c2), bl = Math.min(o, c2);
+              const trv = pClose === null ? (bh - bl) : Math.max(bh - bl, Math.abs(bh - pClose), Math.abs(bl - pClose));
+              stCnt++;
+              let atrV;
+              if (stCnt <= params.stLen) { stSum += trv; atrV = stSum / stCnt; }
+              else { atrV = (stAtr * (params.stLen - 1) + trv) / params.stLen; }
+              stAtr = atrV;
+              const mid = (o + c2) / 2;
+              const ub = mid + params.stFactor * atrV;
+              const lb = mid - params.stFactor * atrV;
+              if (stLower === null) {
+                stLower = lb; stUpper = ub; stDir = d0;
+              } else {
+                const nl = (lb > stLower || pClose < stLower) ? lb : stLower;
+                const nu = (ub < stUpper || pClose > stUpper) ? ub : stUpper;
+                stDir = stDir === 1 ? (c2 < nl ? -1 : 1) : (c2 > nu ? 1 : -1);
+                stLower = nl; stUpper = nu;
+              }
+              stNow = stDir === 1 ? stLower : stUpper;
+              pClose = c2;
+              bricks.push({ index: brickCnt, open: o, close: c2, direction: d0, t: r.t, st_value: stNow, st_dir: stDir, bs });
+              brickCnt++;
+              o = c2;
+            }
+            lastClose = o;
+            trend = d0;
+            if (d0 === 1) { greenRun += count; redRun = 0; }
+            else { redRun += count; greenRun = 0; }
+          }
+        }
+
+        // Strategy decision
+        const stBull = stDir === 1, stBear = stDir === -1;
+        const longEntry = greenRun >= params.greenBuy && (!params.useST || stBull);
+        const shortEntry = redRun >= params.redSell && (!params.useST || stBear);
+        const longExit = redRun >= params.redExit || (params.exitOnST && stBear);
+        const shortExit = greenRun >= params.greenCover || (params.exitOnST && stBull);
+
+        let goLong = pos <= 0 && longEntry;
+        let goShort = !goLong && pos >= 0 && shortEntry;
+        let action = '';
+        let trigPx = lastClose;
+
+        if (goLong || goShort) {
+          const side = goLong ? 1 : -1;
+          const extra = side > 0 ? (greenRun - params.greenBuy) : (redRun - params.redSell);
+          trigPx = lastClose - side * extra * bs;
+          const overshootBrk = ((r.c - trigPx) * side) / bs;
+
+          let veto = '';
+          if (params.onePerRun && lastTradedRunId === runId) veto = '1_per_run';
+          else if (params.maxBricksBar > 0 && n0 > params.maxBricksBar) veto = 'news_spike';
+          else if (params.maxOvershoot > 0 && overshootBrk > params.maxOvershoot) veto = 'overshoot';
+          else if (params.rollover && inRollover(r.h_utc, r.m_utc)) veto = 'rollover';
+          else if (!params.sessions[r.sess]) veto = 'session_off';
+
+          if (veto) {
+            vetoes.push({ brick_idx: brickCnt - 1, reason: veto });
+            if (pos > 0 && longExit) action = 'EXIT';
+            else if (pos < 0 && shortExit) action = 'COVER';
+          } else {
+            action = goLong ? 'BUY' : 'SELL';
+          }
+        } else if (pos > 0 && longExit) {
+          action = 'EXIT';
+        } else if (pos < 0 && shortExit) {
+          action = 'COVER';
+        }
+
+        if (action === 'BUY') {
+          if (pos < 0) closeTrade(r, r.c, 'REVERSE');
+          startTrade(1, r, bs, trigPx);
+          pos = 1; stop = lastClose - params.stopBricks * bs;
+        } else if (action === 'SELL') {
+          if (pos > 0) closeTrade(r, r.c, 'REVERSE');
+          startTrade(-1, r, bs, trigPx);
+          pos = -1; stop = lastClose + params.stopBricks * bs;
+        } else if (action === 'EXIT' && pos > 0) {
+          closeTrade(r, r.c, 'EXIT');
+          pos = 0; stop = null;
+        } else if (action === 'COVER' && pos < 0) {
+          closeTrade(r, r.c, 'COVER');
+          pos = 0; stop = null;
+        }
+
+        if (pos > 0 && stop !== null && openTrade) {
+          stop = Math.max(stop, lastClose - params.stopBricks * bs);
+          if (params.beBricks > 0 && openTrade.mfe >= params.beBricks * bs) stop = Math.max(stop, openTrade.entry_exec);
+        } else if (pos < 0 && stop !== null && openTrade) {
+          stop = Math.min(stop, lastClose + params.stopBricks * bs);
+          if (params.beBricks > 0 && openTrade.mfe >= params.beBricks * bs) stop = Math.min(stop, openTrade.entry_exec);
+        }
+      }
+
+      if (openTrade && activeBars.length) {
+        const lastB = activeBars[activeBars.length - 1];
+        closeTrade(lastB, lastB.c, 'OPEN_END');
+      }
+
+      const lastBar = activeBars[activeBars.length - 1] || { c: 2680 };
+      const lastBrick = bricks[bricks.length - 1] || { bs: 3.2, close: lastBar.c, st_dir: 1, st_value: lastBar.c - 6 };
+
+      return {
+        bricks, trades, vetoes,
+        summary: {
+          lastPx: lastBar.c,
+          bs: lastBrick.bs,
+          lastBrickClose: lastClose || lastBar.c,
+          greenRun, redRun,
+          stDir, stNow: stNow || lastBar.c
+        }
+      };
+    }
+
+    function computeStats(trades, key = 'net') {
+      if (!trades.length) {
+        return { count: 0, winRate: 0, net: 0, pf: 0, avgWin: 0, avgLoss: 0, maxDD: 0, streak: 0, mfe: 0, mae: 0, over: 0 };
+      }
+      const pnls = trades.map(t => t[key]);
+      const wins = pnls.filter(x => x > 0);
+      const losses = pnls.filter(x => x <= 0);
+      let eq = 0, peak = 0, maxDD = 0, s = 0, worst = 0;
+      for (const x of pnls) {
+        eq += x;
+        peak = Math.max(peak, eq);
+        maxDD = Math.max(maxDD, peak - eq);
+        s = x <= 0 ? s + 1 : 0;
+        worst = Math.max(worst, s);
+      }
+      const sumW = wins.reduce((a, b) => a + b, 0);
+      const sumL = -losses.reduce((a, b) => a + b, 0);
+      return {
+        count: pnls.length,
+        winRate: +(100 * wins.length / pnls.length).toFixed(1),
+        net: +pnls.reduce((a, b) => a + b, 0).toFixed(2),
+        pf: sumL > 0 ? +(sumW / sumL).toFixed(2) : 99.0,
+        avgWin: wins.length ? +(sumW / wins.length).toFixed(2) : 0,
+        avgLoss: losses.length ? +(-sumL / losses.length).toFixed(2) : 0,
+        maxDD: +maxDD.toFixed(2),
+        streak: worst,
+        mfe: +(trades.reduce((a, t) => a + t.mfe_b, 0) / trades.length).toFixed(1),
+        mae: +(trades.reduce((a, t) => a + t.mae_b, 0) / trades.length).toFixed(1),
+        over: +(trades.reduce((a, t) => a + t.overshoot, 0) / trades.length).toFixed(2),
+      };
+    }
+
+    function readParams() {
+      return {
+        atrLen: +document.getElementById('p-atrLen').value || 5,
+        atrDiv: +document.getElementById('p-atrDiv').value || 5.0,
+        greenBuy: +document.getElementById('p-greenBuy').value || 2,
+        redExit: +document.getElementById('p-redExit').value || 1,
+        redSell: +document.getElementById('p-redSell').value || 2,
+        greenCover: +document.getElementById('p-greenCover').value || 1,
+        stLen: +document.getElementById('p-stLen').value || 1,
+        stFactor: +document.getElementById('p-stFactor').value || 2.1,
+        useHL: document.getElementById('p-useHL').checked,
+        useST: document.getElementById('p-useST').checked,
+        exitOnST: document.getElementById('p-exitOnST').checked,
+        onePerRun: document.getElementById('p-onePerRun').checked,
+        gridAnchor: document.getElementById('p-gridAnchor').checked,
+        rollover: document.getElementById('p-rollover').checked,
+        useSafetyStop: document.getElementById('p-useSafetyStop').checked,
+        maxBricksBar: +document.getElementById('p-maxBricksBar').value || 0,
+        maxOvershoot: +document.getElementById('p-maxOvershoot').value || 0,
+        stopBricks: +document.getElementById('p-stopBricks').value || 3.0,
+        beBricks: +document.getElementById('p-beBricks').value || 0.0,
+        sessions: {
+          asian: document.getElementById('p-sessAsian').checked,
+          london: document.getElementById('p-sessLondon').checked,
+          new_york: document.getElementById('p-sessNY').checked,
+        }
+      };
+    }
+
+    function setPreset(mode) {
+      const isPro = mode === 'pro';
+      document.getElementById('p-onePerRun').checked = isPro;
+      document.getElementById('p-gridAnchor').checked = isPro;
+      document.getElementById('p-rollover').checked = isPro;
+      document.getElementById('p-useSafetyStop').checked = isPro;
+      document.getElementById('p-maxBricksBar').value = isPro ? 3 : 0;
+      document.getElementById('p-maxOvershoot').value = isPro ? 1.5 : 0;
+      document.getElementById('p-sessAsian').checked = !isPro; // Asian chop disabled in Pro preset
+      document.getElementById('p-sessLondon').checked = true;
+      document.getElementById('p-sessNY').checked = true;
+
+      document.getElementById('preset-badge').textContent = isPro ? 'Pro Filtered Active' : 'Raw Pine v6 Active';
+      document.getElementById('btn-preset-pro').className = isPro
+        ? 'py-2 px-3 rounded-lg text-xs font-bold bg-blue-600 text-white'
+        : 'py-2 px-3 rounded-lg text-xs font-semibold bg-[var(--secondary)] border border-[var(--border)]';
+      document.getElementById('btn-preset-raw').className = !isPro
+        ? 'py-2 px-3 rounded-lg text-xs font-bold bg-blue-600 text-white'
+        : 'py-2 px-3 rounded-lg text-xs font-semibold bg-[var(--secondary)] border border-[var(--border)]';
+      recompute();
+    }
+
+    // =========================================================================
+    // 3. RENDER ALL CHARTS & TABLES
+    // =========================================================================
+    function fmtUsd(v) {
+      const s = v >= 0 ? '+' : '-';
+      return s + '$' + Math.abs(v).toFixed(2);
+    }
+
+    function recompute(barLimit = null) {
+      const p = readParams();
+      const res = runSimulation(p, barLimit);
+      LAST_RESULT = res;
+
+      // Also run Raw Pine baseline
+      const rawP = {
+        ...p,
+        onePerRun: false, gridAnchor: false, rollover: false, useSafetyStop: false,
+        maxBricksBar: 0, maxOvershoot: 0, beBricks: 0,
+        sessions: { asian: true, london: true, new_york: true }
+      };
+      const rawRes = runSimulation(rawP, barLimit);
+
+      const stNet = computeStats(res.trades, 'net');
+      const stGross = computeStats(res.trades, 'gross');
+      const stRaw = computeStats(rawRes.trades, 'net');
+
+      // Header
+      document.getElementById('hdr-px').textContent = '$' + res.summary.lastPx.toFixed(2);
+      document.getElementById('hdr-bs').textContent = '$' + res.summary.bs.toFixed(2);
+      document.getElementById('hdr-runs').textContent = `G:${res.summary.greenRun} / R:${res.summary.redRun}`;
+      const stEl = document.getElementById('hdr-st');
+      stEl.textContent = res.summary.stDir === 1 ? `BULL ($${res.summary.stNow.toFixed(1)})` : `BEAR ($${res.summary.stNow.toFixed(1)})`;
+      stEl.className = 'font-bold ml-1 ' + (res.summary.stDir === 1 ? 'text-emerald-500' : 'text-red-500');
+
+      // KPIs
+      const netEl = document.getElementById('kpi-net');
+      netEl.textContent = fmtUsd(stNet.net);
+      netEl.className = 'text-xl font-bold font-mono mt-1 ' + (stNet.net >= 0 ? 'text-emerald-500' : 'text-red-500');
+      document.getElementById('kpi-gross').textContent = 'Gross (TV): ' + fmtUsd(stGross.net);
+
+      const edge = +(stNet.net - stRaw.net).toFixed(2);
+      const edgeEl = document.getElementById('kpi-edge');
+      edgeEl.textContent = fmtUsd(edge);
+      edgeEl.className = 'text-xl font-bold font-mono mt-1 ' + (edge >= 0 ? 'text-emerald-500' : 'text-red-500');
+      document.getElementById('kpi-skipped').textContent = `${res.vetoes.length} spikes/chop filtered`;
+
+      document.getElementById('kpi-win').textContent = stNet.winRate + '%';
+      document.getElementById('kpi-trades').textContent = `${stNet.count} trades (Raw: ${stRaw.count})`;
+      document.getElementById('kpi-pf').textContent = stNet.pf;
+      document.getElementById('kpi-avg').textContent = `W:$${stNet.avgWin} / L:$${stNet.avgLoss}`;
+      document.getElementById('kpi-dd').textContent = '-$' + stNet.maxDD.toFixed(2);
+      document.getElementById('kpi-streak').textContent = `Worst streak: ${stNet.streak}`;
+      document.getElementById('kpi-mfe').textContent = `+${stNet.mfe} / -${stNet.mae}b`;
+      document.getElementById('kpi-over').textContent = `Overshoot: $${stNet.over.toFixed(2)}`;
+
+      drawRenko(res.bricks, res.trades, res.vetoes);
+      drawEquity(res.trades, rawRes.trades);
+      drawMonteCarlo(res.trades);
+      renderTables(res.trades);
+    }
+
+    function setupHiDPI(canvas) {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      return { ctx, w: rect.width, h: rect.height };
+    }
+
+    function drawRenko(bricks, trades, vetoes) {
+      const canvas = document.getElementById('renko-canvas');
+      const { ctx, w, h } = setupHiDPI(canvas);
+      ctx.clearRect(0, 0, w, h);
+      if (!bricks.length) return;
+
+      const view = bricks.slice(-115);
+      document.getElementById('renko-subtitle').textContent =
+        `Showing bricks #${view[0].index + 1} – #${view[view.length - 1].index + 1} (Brick Size: $${view[view.length - 1].bs.toFixed(2)})`;
+
+      let minP = Infinity, maxP = -Infinity;
+      for (const b of view) {
+        minP = Math.min(minP, b.open, b.close, b.st_value ?? b.open);
+        maxP = Math.max(maxP, b.open, b.close, b.st_value ?? b.open);
+      }
+      const pad = (maxP - minP) * 0.12 || 5;
+      minP -= pad; maxP += pad;
+
+      const padL = 10, padR = 58, padT = 14, padB = 20;
+      const pw = w - padL - padR, ph = h - padT - padB;
+      const py = p => padT + ph - ((p - minP) / (maxP - minP)) * ph;
+
+      ctx.strokeStyle = '#182234';
+      ctx.fillStyle = '#64748b';
+      ctx.font = '11px monospace';
+      for (let i = 0; i <= 5; i++) {
+        const p = minP + (maxP - minP) * (i / 5);
+        const y = py(p);
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+        ctx.fillText(p.toFixed(1), w - padR + 5, y + 3);
+      }
+
+      const byBrick = {};
+      for (const t of trades) byBrick[t.entry_brick] = t;
+      const vetoMap = {};
+      for (const v of vetoes) vetoMap[v.brick_idx] = v;
+
+      const stepX = pw / view.length;
+      const bw = Math.max(2.5, stepX * 0.76);
+
+      for (let i = 0; i < view.length; i++) {
+        const b = view[i];
+        const x = padL + i * stepX;
+        const yTop = py(Math.max(b.open, b.close));
+        const yBot = py(Math.min(b.open, b.close));
+        ctx.fillStyle = b.direction === 1 ? '#26a69a' : '#ef5350';
+        ctx.fillRect(x, yTop, bw, Math.max(2, yBot - yTop));
+
+        if (b.st_value !== null) {
+          ctx.strokeStyle = b.st_dir === 1 ? '#10b981' : '#f43f5e';
+          ctx.lineWidth = 2;
+          const sy = py(b.st_value);
+          ctx.beginPath(); ctx.moveTo(x, sy); ctx.lineTo(x + stepX, sy); ctx.stroke();
+        }
+
+        const tr = byBrick[b.index];
+        if (tr) {
+          const isLong = tr.side === 'LONG';
+          ctx.fillStyle = isLong ? '#10b981' : '#ef5350';
+          ctx.beginPath();
+          if (isLong) {
+            ctx.moveTo(x + bw / 2, yBot + 2);
+            ctx.lineTo(x + bw / 2 - 4.5, yBot + 10);
+            ctx.lineTo(x + bw / 2 + 4.5, yBot + 10);
+          } else {
+            ctx.moveTo(x + bw / 2, yTop - 2);
+            ctx.lineTo(x + bw / 2 - 4.5, yTop - 10);
+            ctx.lineTo(x + bw / 2 + 4.5, yTop - 10);
+          }
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        if (vetoMap[b.index]) {
+          ctx.fillStyle = '#f59e0b';
+          ctx.beginPath();
+          ctx.arc(x + bw / 2, yTop - 5, 2.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+
+    function drawEquity(trades, rawTrades) {
+      const canvas = document.getElementById('eq-canvas');
+      const { ctx, w, h } = setupHiDPI(canvas);
+      ctx.clearRect(0, 0, w, h);
+
+      const netC = [0], grossC = [0], rawC = [0];
+      for (const t of trades) {
+        netC.push(+(netC[netC.length - 1] + t.net).toFixed(2));
+        grossC.push(+(grossC[grossC.length - 1] + t.gross).toFixed(2));
+      }
+      for (const t of rawTrades) {
+        rawC.push(+(rawC[rawC.length - 1] + t.net).toFixed(2));
+      }
+
+      const all = [...netC, ...grossC, ...rawC, 0];
+      let minV = Math.min(...all), maxV = Math.max(...all);
+      const pad = (maxV - minV) * 0.12 || 10;
+      minV -= pad; maxV += pad;
+
+      const padL = 46, padR = 12, padT = 12, padB = 18;
+      const pw = w - padL - padR, ph = h - padT - padB;
+      const py = v => padT + ph - ((v - minV) / (maxV - minV)) * ph;
+
+      ctx.strokeStyle = '#1e293b';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(padL, py(0)); ctx.lineTo(w - padR, py(0)); ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = '10px monospace';
+      for (let i = 0; i <= 4; i++) {
+        const v = minV + (maxV - minV) * (i / 4);
+        ctx.fillText('$' + v.toFixed(0), 4, py(v) + 3);
+      }
+
+      function plotLine(arr, color, width) {
+        if (arr.length < 2) return;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        ctx.beginPath();
+        for (let i = 0; i < arr.length; i++) {
+          const x = padL + (i / (arr.length - 1)) * pw;
+          const y = py(arr[i]);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      plotLine(rawC, '#64748b', 1.5);
+      plotLine(grossC, '#3b82f6', 1.6);
+      plotLine(netC, '#10b981', 2.4);
+    }
+
+    function drawMonteCarlo(trades) {
+      const canvas = document.getElementById('mc-canvas');
+      const { ctx, w, h } = setupHiDPI(canvas);
+      ctx.clearRect(0, 0, w, h);
+      const pnls = trades.map(t => t.net);
+      if (pnls.length < 3) return;
+
+      const rng = mulberry32(19);
+      const runs = 1500, n = pnls.length;
+      const steps = Array.from({ length: n + 1 }, () => []);
+      const dds = [], finals = [], samplePaths = [];
+
+      for (let r = 0; r < runs; r++) {
+        let eq = 0, peak = 0, dd = 0;
+        const path = [0];
+        steps[0].push(0);
+        for (let i = 1; i <= n; i++) {
+          const x = pnls[Math.floor(rng() * n)];
+          eq += x;
+          peak = Math.max(peak, eq);
+          dd = Math.max(dd, peak - eq);
+          steps[i].push(eq);
+          if (r < 20) path.push(eq);
+        }
+        if (r < 20) samplePaths.push(path);
+        dds.push(dd);
+        finals.push(eq);
+      }
+
+      const pct = (arr, q) => {
+        const s = [...arr].sort((a, b) => a - b);
+        return s[Math.min(s.length - 1, Math.floor((q / 100) * s.length))];
+      };
+      const p10 = steps.map(s => pct(s, 10));
+      const p50 = steps.map(s => pct(s, 50));
+      const p90 = steps.map(s => pct(s, 90));
+      const dd95 = pct(dds, 95).toFixed(2);
+      const lossProb = (100 * finals.filter(f => f < 0).length / runs).toFixed(1);
+
+      document.getElementById('mc-stats').innerHTML =
+        `<span>95% DD: <b class="text-red-400">-$${dd95}</b></span><span>Loss Odds: <b>${lossProb}%</b></span>`;
+
+      const all = [...p10, ...p90, 0, ...samplePaths.flat()];
+      let minV = Math.min(...all), maxV = Math.max(...all);
+      const pad = (maxV - minV) * 0.1 || 10;
+      minV -= pad; maxV += pad;
+
+      const padL = 46, padR = 12, padT = 12, padB = 18;
+      const pw = w - padL - padR, ph = h - padT - padB;
+      const py = v => padT + ph - ((v - minV) / (maxV - minV)) * ph;
+      const px = i => padL + (i / n) * pw;
+
+      ctx.strokeStyle = 'rgba(139, 92, 246, 0.16)';
+      ctx.lineWidth = 1;
+      for (const path of samplePaths) {
+        ctx.beginPath();
+        path.forEach((v, i) => i === 0 ? ctx.moveTo(px(i), py(v)) : ctx.lineTo(px(i), py(v)));
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.18)';
+      ctx.beginPath();
+      p90.forEach((v, i) => i === 0 ? ctx.moveTo(px(i), py(v)) : ctx.lineTo(px(i), py(v)));
+      for (let i = n; i >= 0; i--) ctx.lineTo(px(i), py(p10[i]));
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      p50.forEach((v, i) => i === 0 ? ctx.moveTo(px(i), py(v)) : ctx.lineTo(px(i), py(v)));
+      ctx.stroke();
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = '10px monospace';
+      for (let i = 0; i <= 4; i++) {
+        const v = minV + (maxV - minV) * (i / 4);
+        ctx.fillText('$' + v.toFixed(0), 4, py(v) + 3);
+      }
+    }
+
+    function renderTables(trades) {
+      const sbody = document.getElementById('sess-tbody');
+      sbody.innerHTML = '';
+      const names = { asian: 'Asian (00–07)', london: 'London (07–13)', new_york: 'New York (13–21)' };
+      for (const k of ['asian', 'london', 'new_york']) {
+        const sub = trades.filter(t => t.sess === k);
+        const st = computeStats(sub, 'net');
+        const tr = document.createElement('tr');
+        tr.className = 'border-b border-[var(--border)]';
+        tr.innerHTML = `
+          <td class="py-2">${names[k]}</td>
+          <td class="py-2 text-right">${st.count}</td>
+          <td class="py-2 text-right">${st.winRate}%</td>
+          <td class="py-2 text-right">${st.pf}</td>
+          <td class="py-2 text-right font-bold ${st.net >= 0 ? 'text-emerald-500' : 'text-red-500'}">${fmtUsd(st.net)}</td>
+        `;
+        sbody.appendChild(tr);
+      }
+
+      const tbody = document.getElementById('trades-tbody');
+      tbody.innerHTML = '';
+      for (const t of [...trades].reverse()) {
+        const tr = document.createElement('tr');
+        tr.className = 'border-b border-[var(--border)]';
+        const sideCls = t.side === 'LONG' ? 'text-emerald-500 font-bold' : 'text-red-500 font-bold';
+        tr.innerHTML = `
+          <td class="py-1.5">${t.num}</td>
+          <td class="py-1.5 ${sideCls}">${t.side}</td>
+          <td class="py-1.5">${t.sess}</td>
+          <td class="py-1.5 text-right">${t.trig_px.toFixed(2)}</td>
+          <td class="py-1.5 text-right">${t.entry_exec.toFixed(2)}</td>
+          <td class="py-1.5 text-right">${t.exit_exec.toFixed(2)}</td>
+          <td class="py-1.5 text-right">${t.why_out}</td>
+          <td class="py-1.5 text-right">+${t.mfe_b}/-${t.mae_b}b</td>
+          <td class="py-1.5 text-right font-bold ${t.net >= 0 ? 'text-emerald-500' : 'text-red-500'}">${fmtUsd(t.net)}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    // =========================================================================
+    // 4. INTERACTIVE BOT PLAYBACK, SEMI-AUTO TICKETS & CSV UPLOAD
+    // =========================================================================
+    function logBot(msg) {
+      const box = document.getElementById('bot-log');
+      const d = document.createElement('div');
+      const ts = new Date().toISOString().slice(11, 19);
+      d.textContent = `[${ts}] ${msg}`;
+      box.prepend(d);
+    }
+
+    function toggleLiveSim() {
+      const btn = document.getElementById('btn-live-sim');
+      if (LIVE_TIMER) {
+        clearInterval(LIVE_TIMER);
+        LIVE_TIMER = null;
+        btn.textContent = '▶ Start Live Bot Playback';
+        btn.className = 'px-3.5 py-2 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-500 transition';
+        recompute();
+        logBot('Live playback paused — showing full dataset.');
+        return;
+      }
+      LIVE_CURSOR = Math.max(120, BARS.length - 180);
+      btn.textContent = '⏸ Stop Live Playback';
+      btn.className = 'px-3.5 py-2 rounded-lg text-xs font-semibold bg-amber-500 text-black transition';
+      logBot('Started bar-by-bar live bot playback...');
+
+      let prevTrades = 0;
+      LIVE_TIMER = setInterval(() => {
+        if (KILL_SWITCH) return;
+        LIVE_CURSOR += 2;
+        if (LIVE_CURSOR >= BARS.length) LIVE_CURSOR = 120;
+        recompute(LIVE_CURSOR);
+        const curTrades = LAST_RESULT.trades.length;
+        if (curTrades > prevTrades && prevTrades > 0) {
+          const latest = LAST_RESULT.trades[curTrades - 1];
+          triggerDemoTicket(latest.side === 'LONG' ? 'BUY' : 'SELL');
+        }
+        prevTrades = curTrades;
+      }, 280);
+    }
+
+    function triggerDemoTicket(action) {
+      if (KILL_SWITCH) {
+        logBot('BLOCKED: Kill switch is active. Clear kill switch first.');
+        return;
+      }
+      const s = LAST_RESULT.summary;
+      const side = action === 'BUY' ? 1 : -1;
+      const stopPx = +(s.lastBrickClose - side * 3 * s.bs).toFixed(2);
+      PENDING_TICKET = { action, px: s.lastPx, brickClose: s.lastBrickClose, bs: s.bs, stop: stopPx };
+      const banner = document.getElementById('ticket-banner');
+      banner.classList.remove('hidden');
+      banner.classList.add('flex');
+      document.getElementById('tkt-main').textContent =
+        `${action} 1.0 oz GOLD @ $${s.lastPx.toFixed(2)} (Brick Close: $${s.lastBrickClose.toFixed(2)})`;
+      document.getElementById('tkt-sub').textContent =
+        `Broker 3-Brick Safety Stop: $${stopPx.toFixed(2)} | Brick Size: $${s.bs.toFixed(2)} | Spread Filter: PASS`;
+      logBot(`SEMI-AUTO TICKET CREATED: ${action} 1.0 GOLD @ $${s.lastPx.toFixed(2)} (Stop $${stopPx.toFixed(2)})`);
+    }
+
+    function resolveTicket(choice) {
+      const banner = document.getElementById('ticket-banner');
+      banner.classList.add('hidden');
+      banner.classList.remove('flex');
+      if (!PENDING_TICKET) return;
+      if (choice === 'APPROVE') {
+        logBot(`✓ APPROVED & SENT TO BROKER: ${PENDING_TICKET.action} 1.0 GOLD @ $${PENDING_TICKET.px.toFixed(2)} (Stop $${PENDING_TICKET.stop.toFixed(2)})`);
+      } else {
+        logBot(`✕ REJECTED ticket (${PENDING_TICKET.action} @ $${PENDING_TICKET.px.toFixed(2)})`);
+      }
+      PENDING_TICKET = null;
+    }
+
+    function toggleKillSwitch() {
+      KILL_SWITCH = !KILL_SWITCH;
+      const btn = document.getElementById('btn-kill');
+      if (KILL_SWITCH) {
+        btn.textContent = 'RESUME BOT (CLEAR STOP)';
+        btn.className = 'px-3.5 py-2 rounded-lg text-xs font-semibold bg-amber-500 text-black transition';
+        resolveTicket('REJECT');
+        logBot('🚨 EMERGENCY KILL SWITCH ENGAGED — All open positions flattened, new entries blocked.');
+      } else {
+        btn.textContent = 'FLATTEN / KILL';
+        btn.className = 'px-3.5 py-2 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-500 transition';
+        logBot('Kill switch cleared. Bot resumed.');
+      }
+    }
+
+    function loadRegime(seed) {
+      buildGoldDataset(seed);
+      setPreset(document.getElementById('p-onePerRun').checked ? 'pro' : 'raw');
+      logBot(`Loaded Gold Market Regime (seed #${seed}) — ${BARS.length} intraday bars.`);
+    }
+
+    async function handleCsvUpload(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const text = await file.text();
+      const lines = text.trim().split(/\r?\n/);
+      if (lines.length < 10) return;
+      const hdr = lines[0].split(',').map(s => s.trim().toLowerCase());
+      const iT = hdr.findIndex(h => h.includes('time') || h.includes('date'));
+      const iO = hdr.findIndex(h => h === 'open' || h === 'o');
+      const iH = hdr.findIndex(h => h === 'high' || h === 'h');
+      const iL = hdr.findIndex(h => h === 'low' || h === 'l');
+      const iC = hdr.findIndex(h => h === 'close' || h === 'c');
+      if (iO < 0 || iH < 0 || iL < 0 || iC < 0) {
+        logBot('CSV Error: Expected columns open, high, low, close.');
+        return;
+      }
+      const parsed = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',');
+        const o = parseFloat(cols[iO]), h = parseFloat(cols[iH]), l = parseFloat(cols[iL]), c = parseFloat(cols[iC]);
+        if (isNaN(o) || isNaN(c)) continue;
+        const dt = iT >= 0 ? new Date(cols[iT]) : new Date(Date.now() + i * 60000);
+        const h_utc = isNaN(dt.getTime()) ? 14 : dt.getUTCHours();
+        const m_utc = isNaN(dt.getTime()) ? 0 : dt.getUTCMinutes();
+        parsed.push({
+          t: isNaN(dt.getTime()) ? i * 60000 : dt.getTime(),
+          h_utc, m_utc, sess: sessionOfHour(h_utc),
+          o, h, l, c, c_bid: +(c - 0.14).toFixed(2), c_ask: +(c + 0.14).toFixed(2), spread: 0.28
+        });
+      }
+      if (parsed.length > 20) {
+        BARS = parsed;
+        recompute();
+        logBot(`Imported ${parsed.length} custom candles from ${file.name}!`);
+      }
+    }
+
+    window.addEventListener('resize', () => recompute(LIVE_TIMER ? LIVE_CURSOR : null));
+    buildGoldDataset(42);
+    setPreset('pro');
+  </script>
+</body>
+</html>
