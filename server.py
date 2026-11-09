@@ -37,7 +37,7 @@ from backtest import (DATA, JOURNAL, data_path, ensure_data, generate_sample_gol
                       load_config, save_bars, save_config, session_breakdown,
                       simulate, stats, write_trades)
 from bot import LIVE_TRADES, PENDING_FILE, step_once
-from capital_api import Capital, CapitalError, RES_MINUTES, load_env
+from capital_api import Capital, CapitalError, RES_MINUTES, SSL_CTX, load_env
 from montecarlo import run_montecarlo
 from risk import kill_switch_active, set_kill_switch, today_stats
 
@@ -59,7 +59,7 @@ def send_telegram(text: str):
         payload = json.dumps({"chat_id": chat, "text": text}).encode("utf-8")
         req = urllib.request.Request(url, data=payload, method="POST",
                                      headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=8):
+        with urllib.request.urlopen(req, timeout=8, context=SSL_CTX):
             pass
     except Exception:
         pass
@@ -369,6 +369,16 @@ class Handler(BaseHTTPRequestHandler):
 
         if u.path in ("/", "/index.html"):
             p = STATIC / "index.html"
+            raw = p.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+            return
+
+        if u.path in ("/studio", "/studio.html"):
+            p = ROOT / "studio.html"
             raw = p.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
