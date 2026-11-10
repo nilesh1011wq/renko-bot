@@ -413,6 +413,16 @@ class Handler(BaseHTTPRequestHandler):
             return {}
         return json.loads(self.rfile.read(n).decode("utf-8"))
 
+    def do_HEAD(self):
+        u = urlparse(self.path)
+        if u.path in ("/healthz", "/", "/index.html", "/studio", "/studio.html"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8" if not u.path.startswith("/healthz") else "application/json")
+            self.end_headers()
+        else:
+            self.send_response(404)
+            self.end_headers()
+
     def do_GET(self):
         u = urlparse(self.path)
 
