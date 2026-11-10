@@ -419,6 +419,82 @@
     </div>
   </div>
 
+  <!-- BROKER API SETTINGS MODAL (CAPITAL.COM) -->
+  <div id="broker-modal" class="login-overlay">
+    <div class="login-box" style="max-width: 480px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="brand-badge" id="broker-badge-env">DEMO</span>
+          <h2 style="font-size:16px;">Capital.com Broker API</h2>
+        </div>
+        <button type="button" onclick="closeBrokerModal()" style="padding:2px 8px; font-size:14px; background:transparent; border:none; color:var(--text-1); cursor:pointer;">✕</button>
+      </div>
+
+      <p style="font-size:12px; color:var(--text-1); margin-bottom:14px; line-height:1.4;">
+        Connect your Capital.com account to stream live XAUUSD prices, auto-build Renko bricks, and trigger semi-automatic orders directly from this web cockpit.
+      </p>
+
+      <div id="broker-alert" style="display:none; padding:8px 10px; border-radius:6px; font-size:11.5px; margin-bottom:12px; font-family:var(--font-mono);"></div>
+
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div class="field">
+          <label style="font-weight:600;">Account Environment</label>
+          <div style="display:flex; gap:8px;">
+            <label style="flex:1; display:flex; align-items:center; gap:6px; padding:8px; background:var(--bg-0); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:12px;">
+              <input type="radio" name="broker_env" id="broker-env-demo" value="demo" checked onchange="updateBrokerEnvBadge()" style="accent-color:var(--green);" />
+              <span>Demo / Sandbox (Safe)</span>
+            </label>
+            <label style="flex:1; display:flex; align-items:center; gap:6px; padding:8px; background:var(--bg-0); border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:12px;">
+              <input type="radio" name="broker_env" id="broker-env-live" value="live" onchange="updateBrokerEnvBadge()" style="accent-color:var(--red);" />
+              <span style="color:var(--amber);">Live (Real Money)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label style="font-weight:600;">Capital.com Login Email / Identifier</label>
+          <input type="email" id="broker-ident" placeholder="your_email@example.com" autocomplete="username" />
+          <span style="font-size:10.5px; color:var(--text-2);">The email address you use to sign in to Capital.com.</span>
+        </div>
+
+        <div class="field">
+          <label style="font-weight:600;">API Key</label>
+          <input type="text" id="broker-key" placeholder="e.g. 1a2b3c4d5e6f7g8h..." autocomplete="off" />
+          <span style="font-size:10.5px; color:var(--text-2);">Generated in Capital.com Settings &rarr; API Integrations.</span>
+        </div>
+
+        <div class="field">
+          <label style="font-weight:600;">API Key Custom Password</label>
+          <input type="password" id="broker-pw" placeholder="API key password" autocomplete="current-password" />
+          <span style="font-size:10.5px; color:var(--text-2);">The custom password you chose when creating this API key.</span>
+        </div>
+      </div>
+
+      <div style="display:flex; gap:8px; margin-top:16px;">
+        <button id="btn-save-broker" class="success" style="flex:2; padding:10px;" onclick="submitBrokerKeys()">
+          ✓ Test &amp; Connect Broker
+        </button>
+        <button id="btn-disconnect-broker" class="danger" style="flex:1; display:none; padding:10px;" onclick="disconnectBroker()">
+          Disconnect
+        </button>
+        <button type="button" style="padding:10px;" onclick="closeBrokerModal()">Cancel</button>
+      </div>
+
+      <div style="margin-top:14px; padding:10px; background:var(--bg-0); border:1px solid var(--border); border-radius:6px; font-size:11px; color:var(--text-2); line-height:1.45;">
+        <b style="color:var(--text-1);">Quick Setup Guide:</b>
+        <ol style="margin-left:16px; margin-top:4px;">
+          <li>Log in at <b>capital.com</b> (Demo or Live).</li>
+          <li>Go to <b>Settings</b> &rarr; <b>API Integrations</b>.</li>
+          <li>Click <b>Generate New Key</b> &rarr; name it <code>RenkoBot</code> &rarr; set an API password.</li>
+          <li>Paste the Email, Key, and API Password above and click <b>Test &amp; Connect</b>.</li>
+        </ol>
+        <div style="margin-top:6px; color:var(--text-2); font-size:10.5px;">
+          🔒 <i>Credentials are kept in secure process memory and tested directly via Capital.com's REST API.</i>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- TOP STATUS BAR -->
   <header class="topbar">
     <div class="brand">
@@ -452,15 +528,18 @@
         <span class="lbl">24/7 BOT</span>
         <span class="val" id="hdr-watch">PAUSED</span>
       </div>
-      <div class="pill">
+      <div class="pill" id="pill-broker" style="cursor:pointer;" onclick="openBrokerModal()" title="Click to view or connect Capital.com Broker API">
         <span class="dot amber" id="hdr-conn-dot"></span>
         <span class="lbl">BROKER</span>
-        <span class="val" id="hdr-conn">DEMO</span>
+        <span class="val" id="hdr-conn">SAMPLE / DEMO</span>
       </div>
     </div>
 
     <div class="top-actions">
       <a href="/studio" target="_blank" style="text-decoration:none;"><button type="button" class="primary">✦ Open Studio Lab</button></a>
+      <button id="btn-broker-settings" class="primary" onclick="openBrokerModal()" title="Connect Capital.com Broker API">
+        <span>🔑</span> <span id="btn-broker-text">Connect Broker</span>
+      </button>
       <button id="btn-watcher" class="success" onclick="toggleWatcher()">▶ Start 24/7 Watcher</button>
       <button onclick="simulateTicket('BUY')" title="Test Semi-Auto BUY Ticket">+ Sim BUY</button>
       <button onclick="simulateTicket('SELL')" title="Test Semi-Auto SELL Ticket">+ Sim SELL</button>
@@ -651,9 +730,14 @@
 
       <!-- Data Source Panel -->
       <div class="panel">
-        <div class="panel-title"><span>4. Market Data Source</span></div>
+        <div class="panel-title">
+          <span>4. Capital.com Broker &amp; Market Data</span>
+        </div>
         <div style="display:flex; flex-direction:column; gap:7px;">
-          <button onclick="fetchCapitalData()">Fetch Live GOLD from Capital.com</button>
+          <button class="primary" onclick="openBrokerModal()" style="display:flex; align-items:center; justify-content:center; gap:6px; padding:9px; background:linear-gradient(135deg,rgba(59,130,246,0.25),rgba(38,166,154,0.25)); border:1px solid var(--blue); color:var(--text-0);">
+            <span>🔑</span> <span id="side-broker-btn-text">Connect Capital.com API</span>
+          </button>
+          <button onclick="fetchCapitalData()" id="btn-fetch-capital">Fetch Live GOLD from Capital.com</button>
           <div style="display:flex; gap:6px;">
             <button style="flex:1" onclick="regenSample(42)">Sample Regime #1</button>
             <button style="flex:1" onclick="regenSample(99)">Sample Regime #2</button>
@@ -791,11 +875,15 @@
 
           <div class="chart-header" style="margin-top:16px;">
             <div class="chart-title">Cloud &amp; Broker Environment Status</div>
+            <div style="display:flex; gap:6px;">
+              <button onclick="testBrokerConnection()" style="font-size:11px; padding:3px 8px;">Verify Active Session</button>
+              <button onclick="openBrokerModal()" class="primary" style="font-size:11px; padding:3px 8px;">🔑 Manage Broker Keys</button>
+            </div>
           </div>
           <div style="font-size:12px; color:var(--text-1); background:var(--bg-0); padding:10px; border-radius:6px; border:1px solid var(--border); font-family:var(--font-mono);">
-            <div id="cred-status-line" style="margin-bottom:6px; color:var(--amber);">Checking environment variables...</div>
+            <div id="cred-status-line" style="margin-bottom:6px; color:var(--amber);">Checking broker connection...</div>
             <div style="font-size:11px; color:var(--text-2);">
-              Set <code>CAPITAL_API_KEY</code>, <code>CAPITAL_IDENTIFIER</code>, <code>CAPITAL_PASSWORD</code>, and <code>DASHBOARD_PASSWORD</code> in your cloud host's Environment Variables tab (Railway / Render / Fly.io).
+              Credentials can be connected directly via the in-app popup (no server restart required) or preset as cloud host environment variables.
             </div>
           </div>
         </div>
@@ -883,6 +971,191 @@
         renderAll();
       } catch (e) {
         // handled by login modal if 401
+      }
+    }
+
+    function openBrokerModal() {
+      const modal = document.getElementById('broker-modal');
+      modal.classList.add('active');
+      const alertBox = document.getElementById('broker-alert');
+      alertBox.style.display = 'none';
+      alertBox.className = '';
+      alertBox.textContent = '';
+
+      const creds = STATE?.bot?.credentials || {};
+      const env = (creds.env || 'demo').toLowerCase();
+      if (env === 'live') {
+        document.getElementById('broker-env-live').checked = true;
+      } else {
+        document.getElementById('broker-env-demo').checked = true;
+      }
+      updateBrokerEnvBadge();
+
+      const btnSave = document.getElementById('btn-save-broker');
+      const btnDisc = document.getElementById('btn-disconnect-broker');
+      const identInput = document.getElementById('broker-ident');
+      const keyInput = document.getElementById('broker-key');
+      const pwInput = document.getElementById('broker-pw');
+
+      if (creds.connected) {
+        btnDisc.style.display = 'inline-block';
+        btnSave.textContent = '✓ Update & Verify Connection';
+        if (creds.masked_identifier) {
+          identInput.placeholder = `Active: ${creds.masked_identifier}`;
+        }
+        if (creds.masked_key) {
+          keyInput.placeholder = `Active: ${creds.masked_key}`;
+        }
+        pwInput.placeholder = `•••••••• (leave blank to keep current)`;
+      } else {
+        btnDisc.style.display = 'none';
+        btnSave.textContent = '✓ Test & Connect Broker';
+        identInput.placeholder = 'your_email@example.com';
+        keyInput.placeholder = 'e.g. 1a2b3c4d5e6f7g8h...';
+        pwInput.placeholder = 'API key custom password';
+      }
+    }
+
+    function closeBrokerModal() {
+      document.getElementById('broker-modal').classList.remove('active');
+    }
+
+    function updateBrokerEnvBadge() {
+      const isLive = document.getElementById('broker-env-live').checked;
+      const badge = document.getElementById('broker-badge-env');
+      if (isLive) {
+        badge.textContent = 'LIVE';
+        badge.style.background = 'linear-gradient(135deg, #ef5350, #b91c1c)';
+        badge.style.color = '#fff';
+      } else {
+        badge.textContent = 'DEMO';
+        badge.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+        badge.style.color = '#fff';
+      }
+    }
+
+    async function submitBrokerKeys() {
+      const alertBox = document.getElementById('broker-alert');
+      const btnSave = document.getElementById('btn-save-broker');
+      const env = document.getElementById('broker-env-live').checked ? 'live' : 'demo';
+      const ident = document.getElementById('broker-ident').value.trim();
+      const apiKey = document.getElementById('broker-key').value.trim();
+      const pw = document.getElementById('broker-pw').value.trim();
+
+      const creds = STATE?.bot?.credentials || {};
+      if (!creds.connected && (!ident || !apiKey || !pw)) {
+        alertBox.style.display = 'block';
+        alertBox.style.background = 'rgba(239, 83, 80, 0.15)';
+        alertBox.style.border = '1px solid var(--red)';
+        alertBox.style.color = 'var(--red)';
+        alertBox.textContent = 'Please fill out all 3 fields: Login Email, API Key, and API Password.';
+        return;
+      }
+
+      const origText = btnSave.textContent;
+      btnSave.disabled = true;
+      btnSave.textContent = 'Connecting & verifying with Capital.com...';
+      alertBox.style.display = 'block';
+      alertBox.style.background = 'rgba(59, 130, 246, 0.15)';
+      alertBox.style.border = '1px solid var(--blue)';
+      alertBox.style.color = 'var(--blue)';
+      alertBox.textContent = `Connecting to Capital.com ${env.toUpperCase()} server...`;
+
+      try {
+        const payload = {
+          env: env,
+          test_connection: true
+        };
+        if (ident) payload.identifier = ident;
+        if (apiKey) payload.api_key = apiKey;
+        if (pw) payload.password = pw;
+
+        const res = await apiFetch('/api/save-broker-keys', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          alertBox.style.display = 'block';
+          alertBox.style.background = 'rgba(239, 83, 80, 0.15)';
+          alertBox.style.border = '1px solid var(--red)';
+          alertBox.style.color = 'var(--red)';
+          alertBox.textContent = data.error || 'Connection failed.';
+          btnSave.disabled = false;
+          btnSave.textContent = origText;
+          return;
+        }
+
+        alertBox.style.display = 'block';
+        alertBox.style.background = 'rgba(16, 185, 129, 0.15)';
+        alertBox.style.border = '1px solid var(--green-bright)';
+        alertBox.style.color = 'var(--green-bright)';
+        alertBox.textContent = `✓ ${data.message}`;
+
+        STATE.bot = data.bot;
+        renderAll();
+        showToast(data.message);
+
+        setTimeout(() => {
+          btnSave.disabled = false;
+          btnSave.textContent = origText;
+          closeBrokerModal();
+          document.getElementById('broker-pw').value = '';
+        }, 1200);
+
+      } catch (err) {
+        alertBox.style.display = 'block';
+        alertBox.style.background = 'rgba(239, 83, 80, 0.15)';
+        alertBox.style.border = '1px solid var(--red)';
+        alertBox.style.color = 'var(--red)';
+        alertBox.textContent = err.message || 'Network error.';
+        btnSave.disabled = false;
+        btnSave.textContent = origText;
+      }
+    }
+
+    async function testBrokerConnection() {
+      showToast('Verifying session with Capital.com...');
+      try {
+        const res = await apiFetch('/api/test-broker-connection', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast(`✓ ${data.message}`);
+          if (data.bot) {
+            STATE.bot = data.bot;
+            renderAll();
+          }
+        } else {
+          showToast(`✕ ${data.error || 'Check failed'}`);
+        }
+      } catch (err) {
+        showToast(`✕ Error: ${err.message}`);
+      }
+    }
+
+    async function disconnectBroker() {
+      if (!confirm('Are you sure you want to disconnect Capital.com? Live execution will pause and the bot will return to simulated/sample mode.')) {
+        return;
+      }
+      try {
+        const res = await apiFetch('/api/disconnect-broker', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        STATE.bot = data.bot;
+        renderAll();
+        closeBrokerModal();
+        showToast(data.message);
+      } catch (err) {
+        showToast(`✕ Error: ${err.message}`);
       }
     }
 
@@ -1155,21 +1428,40 @@
       wTxt.textContent = `${w.last_status || 'Idle'} | Last: ${w.last_check ? w.last_check.slice(11, 19) + ' UTC' : 'never'}`;
 
       const creds = bot.credentials || {};
-      const allCreds = creds.api_key && creds.identifier && creds.password;
+      const allCreds = creds.connected || (creds.api_key && creds.identifier && creds.password);
       const dot = document.getElementById('hdr-conn-dot');
       const connTxt = document.getElementById('hdr-conn');
       const credLine = document.getElementById('cred-status-line');
+      const btnBrokerTxt = document.getElementById('btn-broker-text');
+      const btnBroker = document.getElementById('btn-broker-settings');
+      const sideBrokerTxt = document.getElementById('side-broker-btn-text');
+
       if (bot.kill_switch) {
         dot.className = 'dot red';
         connTxt.textContent = 'KILL SWITCH ACTIVE';
       } else if (allCreds) {
+        const envLabel = (creds.env || 'demo').toUpperCase();
         dot.className = 'dot green';
-        connTxt.textContent = (creds.env || 'demo').toUpperCase() + ' READY';
-        credLine.innerHTML = `<span class="pos">✓ Capital.com keys configured (${creds.env.toUpperCase()})</span> | Auth Gate: ${creds.password_protected ? '<span class="pos">ON</span>' : '<span style="color:var(--amber)">OFF</span>'}`;
+        connTxt.textContent = `${envLabel} READY`;
+        if (btnBrokerTxt) btnBrokerTxt.textContent = `✓ Capital.com (${envLabel})`;
+        if (btnBroker) {
+          btnBroker.className = 'success';
+        }
+        if (sideBrokerTxt) {
+          sideBrokerTxt.textContent = `✓ Broker: ${creds.masked_identifier || envLabel}`;
+        }
+        credLine.innerHTML = `<span class="pos">✓ Capital.com Connected (${envLabel}): <b>${creds.masked_identifier || 'Active'}</b></span> | Auth Gate: ${creds.password_protected ? '<span class="pos">ON</span>' : '<span style="color:var(--amber)">OFF</span>'}`;
       } else {
         dot.className = 'dot amber';
-        connTxt.textContent = 'SAMPLE DATA';
-        credLine.innerHTML = `⚠ Capital.com keys not set yet (running sample data) | Auth Gate: ${creds.password_protected ? '<span class="pos">ON</span>' : '<span style="color:var(--amber)">OFF</span>'}`;
+        connTxt.textContent = 'SAMPLE / DEMO';
+        if (btnBrokerTxt) btnBrokerTxt.textContent = 'Connect Broker';
+        if (btnBroker) {
+          btnBroker.className = 'primary';
+        }
+        if (sideBrokerTxt) {
+          sideBrokerTxt.textContent = 'Connect Capital.com API';
+        }
+        credLine.innerHTML = `<span style="color:var(--amber)">⚠ Capital.com keys not connected yet (using sample feed)</span> | Auth Gate: ${creds.password_protected ? '<span class="pos">ON</span>' : '<span style="color:var(--amber)">OFF</span>'}`;
       }
 
       const killBtn = document.getElementById('btn-kill');
@@ -1493,6 +1785,11 @@
     }
 
     window.addEventListener('resize', () => renderAll());
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeBrokerModal();
+      }
+    });
     // Auto-poll bot status every 12 seconds when unlocked
     setInterval(() => {
       if (!document.getElementById('login-modal').classList.contains('active')) {

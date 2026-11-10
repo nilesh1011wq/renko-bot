@@ -41,24 +41,28 @@ class CapitalError(RuntimeError):
 
 def load_env():
     for p in (Path(__file__).with_name(".env"), Path.home() / ".env"):
-        if p.exists():
-            for line in p.read_text().splitlines():
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        try:
+            if p.exists():
+                for line in p.read_text().splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        except Exception:
+            pass
 
 
 class Capital:
-    def __init__(self, env: str | None = None):
+    def __init__(self, env: str | None = None, api_key: str | None = None,
+                 identifier: str | None = None, password: str | None = None):
         load_env()
         self.env = (env or os.environ.get("CAPITAL_ENV", "demo")).lower()
         if self.env not in URLS:
             raise CapitalError("CAPITAL_ENV must be demo or live")
         self.base = URLS[self.env]
-        self.key = os.environ.get("CAPITAL_API_KEY")
-        self.ident = os.environ.get("CAPITAL_IDENTIFIER")
-        self.pw = os.environ.get("CAPITAL_PASSWORD")
+        self.key = api_key if api_key is not None else os.environ.get("CAPITAL_API_KEY")
+        self.ident = identifier if identifier is not None else os.environ.get("CAPITAL_IDENTIFIER")
+        self.pw = password if password is not None else os.environ.get("CAPITAL_PASSWORD")
         missing = [n for n, v in (("CAPITAL_API_KEY", self.key), ("CAPITAL_IDENTIFIER", self.ident),
                                   ("CAPITAL_PASSWORD", self.pw)) if not v]
         if missing:
@@ -100,10 +104,11 @@ class Capital:
             raise CapitalError("%s %s -> HTTP %s: %s" % (method, path, e.code, msg)) from None
 
     def login(self):
-        self._req("POST", "/session", {"identifier": self.ident, "password": self.pw,
-                                       "encryptedPassword": False}, auth=False)
+        res = self._req("POST", "/session", {"identifier": self.ident, "password": self.pw,
+                                             "encryptedPassword": False}, auth=False)
         if not self.cst:
             raise CapitalError("login returned no session tokens")
+        return res
 
     def ping(self):
         return self._req("GET", "/ping")

@@ -187,13 +187,72 @@ class BackgroundWatcher:
 WATCHER = BackgroundWatcher()
 
 
+def mask_identifier(ident: str) -> str:
+    if not ident:
+        return ""
+    if "@" in ident:
+        parts = ident.split("@", 1)
+        u, domain = parts[0], parts[1]
+        masked_u = (u[:2] + "***" + u[-1:]) if len(u) > 3 else (u[:1] + "***")
+        return f"{masked_u}@{domain}"
+    if len(ident) > 6:
+        return ident[:2] + "***" + ident[-2:]
+    return ident[:1] + "***"
+
+
+def mask_key(k: str) -> str:
+    if not k:
+        return ""
+    return k[:4] + "••••••••" + k[-4:] if len(k) >= 10 else "••••••••"
+
+
+def update_dotenv(updates: dict[str, str | None]):
+    """Update or remove variables in local .env file and in os.environ."""
+    dotenv_path = ROOT / ".env"
+    lines = []
+    seen = set()
+    if dotenv_path.exists():
+        for line in dotenv_path.read_text().splitlines():
+            s = line.strip()
+            if s and not s.startswith("#") and "=" in s:
+                k, _ = s.split("=", 1)
+                k = k.strip()
+                seen.add(k)
+                if k in updates:
+                    val = updates[k]
+                    if val is not None:
+                        lines.append(f'{k}="{val}"')
+                else:
+                    lines.append(line)
+            else:
+                lines.append(line)
+    for k, val in updates.items():
+        if k not in seen and val is not None:
+            lines.append(f'{k}="{val}"')
+    dotenv_path.write_text("\n".join(lines).strip() + "\n")
+
+    for k, val in updates.items():
+        if val is not None:
+            os.environ[k] = str(val)
+        else:
+            os.environ.pop(k, None)
+
+
 def check_credentials_present() -> dict:
     load_env()
+    key = os.environ.get("CAPITAL_API_KEY", "").strip()
+    ident = os.environ.get("CAPITAL_IDENTIFIER", "").strip()
+    pw = os.environ.get("CAPITAL_PASSWORD", "").strip()
+    env = os.environ.get("CAPITAL_ENV", "demo").lower()
+    has_creds = bool(key and ident and pw)
     return {
-        "api_key": bool(os.environ.get("CAPITAL_API_KEY")),
-        "identifier": bool(os.environ.get("CAPITAL_IDENTIFIER")),
-        "password": bool(os.environ.get("CAPITAL_PASSWORD")),
-        "env": os.environ.get("CAPITAL_ENV", "demo"),
+        "connected": has_creds,
+        "api_key": bool(key),
+        "identifier": bool(ident),
+        "password": bool(pw),
+        "masked_identifier": mask_identifier(ident) if ident else None,
+        "masked_key": mask_key(key) if key else None,
+        "env": env,
         "telegram": bool(os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID")),
         "password_protected": bool(get_dashboard_password()),
     }
@@ -441,6 +500,78 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             cfg = load_config()
+
+            if u.path == "/api/save-broker-keys":
+                api_key = str(body.get("api_key", "")).strip()
+                ident = str(body.get("identifier", "")).strip()
+                pw = str(body.get("password", "")).strip()
+                env = str(body.get("env", "demo")).strip().lower()
+                test_conn = bool(body.get("test_connection", True))
+
+                if env not in ("demo", "live"):
+                    self._send_json({"error": "Broker environment must be 'demo' or 'live'"}, 400)
+                    return
+                if not (api_key and ident and pw):
+                    self._send_json({"error": "All fields are required: API Key, Login Email, and API Password."}, 400)
+                    return
+
+                # Test credentials against Capital.com before saving
+                if test_conn:
+                    try:
+                        cap_test = Capital(env=env, api_key=api_key, identifier=ident, password=pw)
+                        cap_test.login()
+                    except Exception as e:
+                        self._send_json({
+                            "error": f"Capital.com authentication failed ({env.upper()}): {e}. Please verify your API Key and API Password in Capital.com Settings."
+                        }, 400)
+                        return
+
+                # Save to runtime environment and .env file
+                update_dotenv({
+                    "CAPITAL_API_KEY": api_key,
+                    "CAPITAL_IDENTIFIER": ident,
+                    "CAPITAL_PASSWORD": pw,
+                    "CAPITAL_ENV": env,
+                })
+                cfg["live"] = (env == "live")
+                save_config(cfg)
+
+                self._send_json({
+                    "ok": True,
+                    "message": f"Successfully connected to Capital.com ({env.upper()})! Credentials verified.",
+                    "bot": get_bot_status(cfg),
+                })
+                return
+
+            if u.path == "/api/test-broker-connection":
+                creds = check_credentials_present()
+                if not creds["connected"]:
+                    self._send_json({"error": "No broker credentials configured yet."}, 400)
+                    return
+                try:
+                    cap = Capital()
+                    cap.login()
+                    self._send_json({
+                        "ok": True,
+                        "message": f"Connection active! Session verified with Capital.com ({cap.env.upper()}).",
+                        "bot": get_bot_status(cfg),
+                    })
+                except Exception as e:
+                    self._send_json({"error": f"Capital.com check failed: {e}"}, 400)
+                return
+
+            if u.path == "/api/disconnect-broker":
+                update_dotenv({
+                    "CAPITAL_API_KEY": None,
+                    "CAPITAL_IDENTIFIER": None,
+                    "CAPITAL_PASSWORD": None,
+                })
+                self._send_json({
+                    "ok": True,
+                    "message": "Broker disconnected. Keys cleared from memory.",
+                    "bot": get_bot_status(cfg),
+                })
+                return
 
             if u.path == "/api/watcher":
                 act = body.get("action")
