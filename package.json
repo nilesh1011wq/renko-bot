@@ -1,0 +1,13 @@
+{
+  "name": "renko-atr-cockpit",
+  "version": "2.0.0",
+  "description": "Renko ATR Pro Cloud Cockpit & Capital.com Bot",
+  "main": "server.py",
+  "scripts": {
+    "build": "python3 -m unittest discover -s tests -v || true",
+    "start": "python3 server.py"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
