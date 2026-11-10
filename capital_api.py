@@ -9,12 +9,23 @@ from __future__ import annotations
 
 import json
 import os
+import ssl
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+
+def _ssl_context() -> ssl.SSLContext:
+    for ca in ("/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt"):
+        if os.path.exists(ca):
+            return ssl.create_default_context(cafile=ca)
+    return ssl.create_default_context()
+
+
+SSL_CTX = _ssl_context()
 
 URLS = {
     "demo": "https://demo-api-capital.backend-capital.com/api/v1",
@@ -70,7 +81,7 @@ class Capital:
             h["CST"], h["X-SECURITY-TOKEN"] = self.cst, self.sec
         req = urllib.request.Request(url, data=data, method=method, headers=h)
         try:
-            with urllib.request.urlopen(req, timeout=30) as r:
+            with urllib.request.urlopen(req, timeout=30, context=SSL_CTX) as r:
                 self._last = time.time()
                 raw = r.read()
                 if not auth:
