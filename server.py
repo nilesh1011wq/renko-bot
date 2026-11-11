@@ -237,6 +237,27 @@ def update_dotenv(updates: dict[str, str | None]):
         else:
             os.environ.pop(k, None)
 
+    creds_json = ROOT / "data" / "credentials.json"
+    try:
+        creds_json.parent.mkdir(parents=True, exist_ok=True)
+        current_creds = {}
+        if creds_json.exists():
+            try:
+                current_creds = json.loads(creds_json.read_text())
+            except Exception:
+                current_creds = {}
+        for k, val in updates.items():
+            if val is not None:
+                current_creds[k] = str(val)
+            else:
+                current_creds.pop(k, None)
+        if current_creds:
+            creds_json.write_text(json.dumps(current_creds, indent=2) + "\n")
+        elif creds_json.exists():
+            creds_json.unlink()
+    except Exception:
+        pass
+
 
 def check_credentials_present() -> dict:
     load_env()

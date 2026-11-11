@@ -348,6 +348,54 @@
       background: #090c12;
       border-radius: 4px;
       border: 1px solid #1a2232;
+      cursor: crosshair;
+    }
+
+    .renko-hover-hud {
+      position: absolute;
+      pointer-events: none;
+      z-index: 100;
+      background: rgba(10, 14, 23, 0.94);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border-radius: 6px;
+      padding: 9px 12px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #f1f5f9;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 12px rgba(56, 189, 248, 0.18);
+      max-width: 270px;
+      min-width: 190px;
+      transition: opacity 0.08s ease, transform 0.08s ease;
+      line-height: 1.45;
+    }
+    .renko-hover-hud .hud-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 5px;
+      margin-bottom: 6px;
+    }
+    .renko-hover-hud .hud-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 3px;
+    }
+    .renko-hover-hud .hud-lbl {
+      color: #94a3b8;
+    }
+    .renko-hover-hud .hud-val {
+      font-weight: 600;
+      color: #ffffff;
+    }
+    .renko-hover-hud .hud-badge {
+      display: inline-block;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 700;
     }
 
     /* Density button group */
@@ -973,8 +1021,9 @@
             </div>
           </div>
         </div>
-        <div class="renko-canvas-wrap">
+        <div class="renko-canvas-wrap" id="renko-wrap">
           <canvas id="renko-canvas"></canvas>
+          <div id="renko-tooltip" class="renko-hover-hud" style="display:none;"></div>
         </div>
       </section>
 
@@ -1174,6 +1223,42 @@
       }
     }
 
+    let _autoRestoringCreds = false;
+    async function checkAndRestoreBrokerCredentials() {
+      if (_autoRestoringCreds) return;
+      const creds = STATE?.bot?.credentials || {};
+      if (creds.connected) return;
+      const raw = localStorage.getItem('renko_broker_creds');
+      if (!raw) return;
+      try {
+        const saved = JSON.parse(raw);
+        if (saved.apiKey && saved.ident && saved.pw) {
+          _autoRestoringCreds = true;
+          console.log('[Broker] Auto-restoring broker credentials from browser cache...');
+          const res = await apiFetch('/api/save-broker-keys', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+              env: saved.env || 'demo',
+              identifier: saved.ident,
+              api_key: saved.apiKey,
+              password: saved.pw,
+              test_connection: true
+            })
+          });
+          const data = await res.json();
+          _autoRestoringCreds = false;
+          if (res.ok && data.bot) {
+            STATE.bot = data.bot;
+            renderAll();
+            showToast('✓ Auto-connected to Capital.com (' + (saved.env ? saved.env.toUpperCase() : 'DEMO') + ')');
+          }
+        }
+      } catch (err) {
+        _autoRestoringCreds = false;
+      }
+    }
+
     async function loadState() {
       try {
         const res = await apiFetch('/api/state');
@@ -1181,6 +1266,7 @@
         if (STATE && STATE.config) {
           syncInputsFromConfig(STATE.config);
         }
+        await checkAndRestoreBrokerCredentials();
         renderAll();
       } catch (e) {
         console.error('Failed to load cockpit state:', e);
@@ -1210,6 +1296,11 @@
       const keyInput = document.getElementById('broker-key');
       const pwInput = document.getElementById('broker-pw');
 
+      let saved = {};
+      try {
+        saved = JSON.parse(localStorage.getItem('renko_broker_creds') || '{}');
+      } catch (e) {}
+
       if (creds.connected) {
         btnDisc.style.display = 'inline-block';
         btnSave.textContent = '✓ Update & Verify Connection';
@@ -1220,12 +1311,21 @@
           keyInput.placeholder = `Active: ${creds.masked_key}`;
         }
         pwInput.placeholder = `•••••••• (leave blank to keep current)`;
+        if (saved.ident && !identInput.value) identInput.value = saved.ident;
       } else {
         btnDisc.style.display = 'none';
         btnSave.textContent = '✓ Test & Connect Broker';
         identInput.placeholder = 'your_email@example.com';
         keyInput.placeholder = 'e.g. 1a2b3c4d5e6f7g8h...';
         pwInput.placeholder = 'API key custom password';
+        if (saved.ident && !identInput.value) identInput.value = saved.ident;
+        if (saved.apiKey && !keyInput.value) keyInput.value = saved.apiKey;
+        if (saved.pw && !pwInput.value) pwInput.value = saved.pw;
+        if (saved.env) {
+          if (saved.env === 'live') document.getElementById('broker-env-live').checked = true;
+          else document.getElementById('broker-env-demo').checked = true;
+          updateBrokerEnvBadge();
+        }
       }
     }
 
@@ -1308,6 +1408,15 @@
         alertBox.textContent = `✓ ${data.message}`;
 
         STATE.bot = data.bot;
+        try {
+          const oldSaved = JSON.parse(localStorage.getItem('renko_broker_creds') || '{}');
+          localStorage.setItem('renko_broker_creds', JSON.stringify({
+            env: env,
+            ident: ident || oldSaved.ident || '',
+            apiKey: apiKey || oldSaved.apiKey || '',
+            pw: pw || oldSaved.pw || ''
+          }));
+        } catch (e) {}
         renderAll();
         showToast(data.message);
 
@@ -1364,6 +1473,9 @@
         });
         const data = await res.json();
         STATE.bot = data.bot;
+        try {
+          localStorage.removeItem('renko_broker_creds');
+        } catch (e) {}
         renderAll();
         closeBrokerModal();
         showToast(data.message);
@@ -2015,7 +2127,11 @@
       return { ctx, w, h };
     }
 
+    let RENKO_HOVER = null;
+    let CURRENT_RENKO_DATA = null;
+
     function drawRenkoChart(bricks, trades, filtered) {
+      CURRENT_RENKO_DATA = { bricks, trades, filtered };
       const canvas = document.getElementById('renko-canvas');
       if (!canvas) return;
       const { ctx, w, h } = setupCanvas(canvas);
@@ -2216,6 +2332,191 @@
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 9.5px JetBrains Mono, monospace';
         ctx.fillText('$' + Number(activePx).toFixed(1), w - padR + 4, lpy + 3.5);
+      }
+
+      // 7. Interactive Hover: Crosshairs, Halo, Prices on Block, Floating Tooltip
+      const tooltip = document.getElementById('renko-tooltip');
+      if (RENKO_HOVER && view.length) {
+        const hoverIdx = Math.floor((RENKO_HOVER.x - padL) / stepX);
+        if (hoverIdx >= 0 && hoverIdx < view.length) {
+          const hb = view[hoverIdx];
+          const hx = padL + hoverIdx * stepX + offsetX;
+          const hTopPx = Math.max(hb.open, hb.close);
+          const hBotPx = Math.min(hb.open, hb.close);
+          const hyTop = py(hTopPx);
+          const hyBot = py(hBotPx);
+          const hbh = Math.max(2, hyBot - hyTop);
+          const hCenter = hx + bw / 2;
+          const isUp = hb.direction === 1;
+
+          // Crosshairs
+          ctx.save();
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.55)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(hCenter, padT);
+          ctx.lineTo(hCenter, h - padB);
+          ctx.stroke();
+
+          const myClamped = Math.max(padT, Math.min(h - padB, RENKO_HOVER.y));
+          ctx.beginPath();
+          ctx.moveTo(padL, myClamped);
+          ctx.lineTo(w - padR, myClamped);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+
+          // Highlight halo around hovered brick
+          ctx.save();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2.4;
+          ctx.shadowColor = isUp ? '#10b981' : '#f43f5e';
+          ctx.shadowBlur = 10;
+          ctx.strokeRect(hx - 1, hyTop - 1, bw + 2, hbh + 2);
+          ctx.restore();
+
+          // Price Axis Badge at Cursor Y
+          const cursorPrice = maxP - ((myClamped - padT) / plotH) * (maxP - minP);
+          ctx.fillStyle = '#0284c7';
+          ctx.fillRect(w - padR + 2, myClamped - 9, padR - 4, 18);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 9.5px JetBrains Mono, monospace';
+          ctx.fillText('$' + cursorPrice.toFixed(2), w - padR + 4, myClamped + 3.5);
+
+          // Time Axis Badge at Brick Center
+          if (hb.time) {
+            const timeLabel = hb.time.slice(5, 16).replace('T', ' ');
+            ctx.fillStyle = '#0284c7';
+            ctx.font = 'bold 9px JetBrains Mono, monospace';
+            const tw = ctx.measureText(timeLabel).width + 8;
+            const txStart = Math.max(padL, Math.min(w - padR - tw, hCenter - tw / 2));
+            ctx.fillRect(txStart, h - padB + 2, tw, 16);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(timeLabel, txStart + 4, h - padB + 13);
+          }
+
+          // DRAW PRICES DIRECTLY ON / NEXT TO THE BLOCK
+          function drawPill(text, cx, y, bg, fg, above) {
+            ctx.font = 'bold 9.5px JetBrains Mono, monospace';
+            const m = ctx.measureText(text);
+            const pw = m.width + 8;
+            const ph = 15;
+            const px = Math.max(padL + 2, Math.min(w - padR - pw - 2, cx - pw / 2));
+            const pyP = above ? (y - ph - 3) : (y + 3);
+            ctx.fillStyle = bg;
+            ctx.beginPath();
+            if (ctx.roundRect) ctx.roundRect(px, pyP, pw, ph, 3);
+            else ctx.fillRect(px, pyP, pw, ph);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+            ctx.lineWidth = 0.8;
+            ctx.stroke();
+            ctx.fillStyle = fg;
+            ctx.fillText(text, px + 4, pyP + 11);
+          }
+
+          const closeTxt = '$' + hb.close.toFixed(2);
+          const openTxt = '$' + hb.open.toFixed(2);
+
+          if (isUp) {
+            drawPill('▲ ' + closeTxt, hCenter, hyTop, '#065f46', '#34d399', true);
+            drawPill('O: ' + openTxt, hCenter, hyBot, '#1e293b', '#cbd5e1', false);
+          } else {
+            drawPill('O: ' + openTxt, hCenter, hyTop, '#1e293b', '#cbd5e1', true);
+            drawPill('▼ ' + closeTxt, hCenter, hyBot, '#991b1b', '#f87171', false);
+          }
+
+          // Update chart-sub dynamically with full metrics
+          const sub = document.getElementById('chart-sub');
+          if (sub) {
+            const dirIcon = isUp ? '▲' : '▼';
+            const dirColor = isUp ? '#10b981' : '#ef5350';
+            const moveAmt = Math.abs(hb.close - hb.open).toFixed(2);
+            const moveSign = isUp ? '+' : '-';
+            const stStr = hb.st_value !== null ? (' | ST: $' + hb.st_value.toFixed(2) + (hb.st_dir === 1 ? ' (Bull)' : ' (Bear)')) : '';
+            const tStr = hb.time ? (' | ' + hb.time.slice(5, 19).replace('T', ' ') + ' UTC') : '';
+            sub.innerHTML = `<span style="color:#38bdf8; font-weight:700;">BRICK #${hb.index}</span> | ` +
+              `<span style="color:${dirColor}; font-weight:700;">${dirIcon} ${isUp ? 'UP' : 'DOWN'}</span> | ` +
+              `<b>CLOSE: $${hb.close.toFixed(2)}</b> | OPEN: $${hb.open.toFixed(2)} | ` +
+              `SIZE: ${moveSign}$${moveAmt}${stStr}${tStr}`;
+          }
+
+          // Floating Tooltip HUD
+          if (tooltip) {
+            const trIn = entryByBrick[hb.index];
+            const trOut = exitByBrick[hb.index];
+            const veto = vetoByBrick[hb.index];
+
+            let badgeHtml = '';
+            if (trIn) {
+              const bColor = trIn.side === 'LONG' ? '#10b981' : '#ef5350';
+              badgeHtml += `<div style="margin-top:5px; padding:3px 6px; background:rgba(0,0,0,0.5); border-left:3px solid ${bColor}; font-size:10.5px; border-radius:2px;">
+                <b style="color:${bColor};">${trIn.side === 'LONG' ? '🟢 BUY' : '🔴 SELL'} ENTRY</b> @ $${trIn.entry}
+              </div>`;
+            }
+            if (trOut) {
+              badgeHtml += `<div style="margin-top:4px; padding:3px 6px; background:rgba(0,0,0,0.5); border-left:3px solid #ef4444; font-size:10.5px; border-radius:2px;">
+                <b style="color:#ef4444;">🛑 EXIT: ${trOut.why_out || 'SIGNAL'}</b> @ $${trOut.exit}
+              </div>`;
+            }
+            if (veto) {
+              badgeHtml += `<div style="margin-top:4px; padding:3px 6px; background:rgba(0,0,0,0.5); border-left:3px solid #f59e0b; font-size:10.5px; border-radius:2px;">
+                <b style="color:#f59e0b;">⚠ VETO:</b> ${veto.reason || 'FILTERED'}
+              </div>`;
+            }
+
+            const diff = (hb.close - hb.open).toFixed(2);
+            const diffPct = (((hb.close - hb.open) / hb.open) * 100).toFixed(2);
+            const stLabel = hb.st_value !== null ? `$${hb.st_value.toFixed(2)} (${hb.st_dir === 1 ? 'Bullish' : 'Bearish'})` : '--';
+            const stColor = hb.st_dir === 1 ? '#10b981' : '#f43f5e';
+
+            tooltip.innerHTML = `
+              <div class="hud-title">
+                <span style="font-weight:700; color:#38bdf8;">🧱 Brick #${hb.index}</span>
+                <span class="hud-badge" style="background:${isUp ? '#10b981' : '#ef5350'}; color:#fff;">
+                  ${isUp ? '▲ GREEN' : '▼ RED'}
+                </span>
+              </div>
+              <div class="hud-row">
+                <span class="hud-lbl">Close Price:</span>
+                <span class="hud-val" style="font-size:12px; color:${isUp ? '#34d399' : '#f87171'};">$${hb.close.toFixed(2)}</span>
+              </div>
+              <div class="hud-row">
+                <span class="hud-lbl">Open Price:</span>
+                <span class="hud-val">$${hb.open.toFixed(2)}</span>
+              </div>
+              <div class="hud-row">
+                <span class="hud-lbl">Brick Move:</span>
+                <span class="hud-val" style="color:${isUp ? '#34d399' : '#f87171'};">${isUp ? '+' : ''}$${diff} (${diffPct}%)</span>
+              </div>
+              <div class="hud-row">
+                <span class="hud-lbl">Supertrend:</span>
+                <span class="hud-val" style="color:${stColor}; font-size:10px;">${stLabel}</span>
+              </div>
+              <div class="hud-row">
+                <span class="hud-lbl">Timestamp:</span>
+                <span class="hud-val" style="font-size:10px; color:#94a3b8;">${hb.time ? hb.time.slice(0, 19).replace('T', ' ') : '--'}</span>
+              </div>
+              ${badgeHtml}
+            `;
+            tooltip.style.display = 'block';
+
+            const wrapRect = canvas.parentElement.getBoundingClientRect();
+            let leftPos = RENKO_HOVER.x + 16;
+            if (leftPos + 240 > wrapRect.width) {
+              leftPos = RENKO_HOVER.x - 240;
+            }
+            if (leftPos < 10) leftPos = 10;
+
+            let topPos = RENKO_HOVER.y - 40;
+            if (topPos < 10) topPos = 10;
+            if (topPos + 180 > wrapRect.height) topPos = wrapRect.height - 190;
+
+            tooltip.style.left = leftPos + 'px';
+            tooltip.style.top = topPos + 'px';
+          }
+        }
       }
     }
 
@@ -2452,7 +2753,53 @@
         loadState();
       }
     }, 12000);
+    function initRenkoChartEvents() {
+      const canvas = document.getElementById('renko-canvas');
+      const tooltip = document.getElementById('renko-tooltip');
+      if (!canvas) return;
+
+      function handleMove(e) {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+        RENKO_HOVER = { x, y, clientX, clientY };
+        if (CURRENT_RENKO_DATA) {
+          drawRenkoChart(CURRENT_RENKO_DATA.bricks, CURRENT_RENKO_DATA.trades, CURRENT_RENKO_DATA.filtered);
+        }
+      }
+
+      function handleLeave() {
+        RENKO_HOVER = null;
+        if (tooltip) tooltip.style.display = 'none';
+        const sub = document.getElementById('chart-sub');
+        if (sub && CURRENT_RENKO_DATA) {
+          const ds = STATE?.backtest?.data_summary || {};
+          const bot = STATE?.bot || {};
+          const mkt = bot.market || {};
+          const hasLiveBroker = (mkt.bid !== undefined && mkt.bid !== null) && (mkt.offer !== undefined && mkt.offer !== null);
+          const activePx = hasLiveBroker ? mkt.mid : (ds.last_price || null);
+          const view = (CURRENT_RENKO_DATA.bricks || []).slice(-CURRENT_BRICK_COUNT);
+          if (view.length) {
+            const epicTag = (mkt.epic || ds.epic || 'GOLD').toUpperCase();
+            const pxTag = activePx ? ` | ${hasLiveBroker ? 'Live Broker Px' : 'Last Px'}: $${Number(activePx).toFixed(2)}` : '';
+            sub.textContent = `${epicTag} | Showing last ${view.length} bricks (#${view[0].index}–#${view[view.length - 1].index}) | Brick Size: $${(ds.last_brick_size || 0).toFixed(2)}${pxTag}`;
+          }
+        }
+        if (CURRENT_RENKO_DATA) {
+          drawRenkoChart(CURRENT_RENKO_DATA.bricks, CURRENT_RENKO_DATA.trades, CURRENT_RENKO_DATA.filtered);
+        }
+      }
+
+      canvas.addEventListener('mousemove', handleMove);
+      canvas.addEventListener('mouseleave', handleLeave);
+      canvas.addEventListener('touchmove', handleMove, { passive: true });
+      canvas.addEventListener('touchend', handleLeave);
+    }
+
     initDockDraggable();
+    initRenkoChartEvents();
     loadState();
   </script>
 </body>

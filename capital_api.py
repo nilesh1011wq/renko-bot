@@ -50,6 +50,16 @@ def load_env():
                         os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
         except Exception:
             pass
+    creds_json = Path(__file__).with_name("data") / "credentials.json"
+    try:
+        if creds_json.exists():
+            import json
+            cdata = json.loads(creds_json.read_text())
+            for k, v in cdata.items():
+                if v and not os.environ.get(k):
+                    os.environ[k] = str(v)
+    except Exception:
+        pass
 
 
 _SESSION_CACHE: dict[tuple[str, str], tuple[str, str, float]] = {}
