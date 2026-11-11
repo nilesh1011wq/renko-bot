@@ -52,6 +52,9 @@ def load_env():
             pass
 
 
+_SESSION_CACHE: dict[tuple[str, str], tuple[str, str, float]] = {}
+
+
 class Capital:
     def __init__(self, env: str | None = None, api_key: str | None = None,
                  identifier: str | None = None, password: str | None = None):
@@ -67,7 +70,13 @@ class Capital:
                                   ("CAPITAL_PASSWORD", self.pw)) if not v]
         if missing:
             raise CapitalError("missing in .env: " + ", ".join(missing))
-        self.cst = self.sec = None
+
+        # Reuse valid session tokens from process cache to avoid Capital.com HTTP 429 session rate limits
+        cache_hit = _SESSION_CACHE.get((self.env, self.ident or ""))
+        if cache_hit and (time.time() - cache_hit[2] < 21600):  # 6 hours validity
+            self.cst, self.sec = cache_hit[0], cache_hit[1]
+        else:
+            self.cst = self.sec = None
         self._last = 0.0
 
     # ---------------- low level ----------------
@@ -91,15 +100,18 @@ class Capital:
                 if not auth:
                     self.cst = r.headers.get("CST")
                     self.sec = r.headers.get("X-SECURITY-TOKEN")
+                    if self.cst and self.sec:
+                        _SESSION_CACHE[(self.env, self.ident or "")] = (self.cst, self.sec, time.time())
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as e:
             self._last = time.time()
             msg = e.read().decode(errors="replace")[:300]
             if auth and retry and e.code == 401:  # session expired -> log in again once
                 self.cst = None
+                _SESSION_CACHE.pop((self.env, self.ident or ""), None)
                 return self._req(method, path, body, auth, retry=False)
             if retry and e.code == 429:
-                time.sleep(2)
+                time.sleep(3)
                 return self._req(method, path, body, auth, retry=False)
             raise CapitalError("%s %s -> HTTP %s: %s" % (method, path, e.code, msg)) from None
 
