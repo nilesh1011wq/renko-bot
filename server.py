@@ -258,6 +258,24 @@ def check_credentials_present() -> dict:
     }
 
 
+def get_live_market_snapshot(cap: Capital, epic: str) -> tuple[dict, str]:
+    """Query live market snapshot from Capital.com, checking aliases (e.g. GOLD vs XAUUSD)."""
+    candidates = [epic]
+    up = epic.upper()
+    if up == "GOLD":
+        candidates.append("XAUUSD")
+    elif up == "XAUUSD":
+        candidates.append("GOLD")
+    for cand in candidates:
+        try:
+            res = cap.market(cand)
+            if res and res.get("snapshot"):
+                return res.get("snapshot", {}), cand
+        except Exception:
+            continue
+    return {}, epic
+
+
 def serialize_backtest(cfg: dict) -> dict:
     bars, days = ensure_data(cfg)
     use_stop = bool(cfg.get("risk", {}).get("safety_stop_in_backtest", True))
@@ -330,6 +348,21 @@ def serialize_backtest(cfg: dict) -> dict:
 
     mc_net = run_montecarlo([t["net"] for t in trades], runs=2500, seed=19)
     last_b = eng.bricks[-1] if eng.bricks else None
+    last_price = bars[-1]["c"] if bars else None
+
+    # Sync with live broker mid price if Capital.com connected
+    creds = check_credentials_present()
+    if creds.get("connected"):
+        try:
+            cap_live = Capital("live" if cfg.get("live") else "demo")
+            snap_quick, matched_epic = get_live_market_snapshot(cap_live, cfg.get("epic", "GOLD"))
+            b_q, o_q = snap_quick.get("bid"), snap_quick.get("offer")
+            if b_q is not None and o_q is not None:
+                last_price = round((b_q + o_q) / 2, 2)
+            elif b_q is not None or o_q is not None:
+                last_price = round(b_q if b_q is not None else o_q, 2)
+        except Exception:
+            pass
 
     return {
         "data_summary": {
@@ -339,7 +372,7 @@ def serialize_backtest(cfg: dict) -> dict:
             "days_count": len(days),
             "start": bars[0]["t"].isoformat() if bars else None,
             "end": bars[-1]["t"].isoformat() if bars else None,
-            "last_price": bars[-1]["c"] if bars else None,
+            "last_price": last_price,
             "total_bricks": eng.brick_cnt,
             "last_brick_size": round(last_b.brick_size, 2) if last_b else cfg["strategy"]["fallback_size"],
             "last_brick_close": round(eng.last_close, 2) if eng.last_close else None,
@@ -398,17 +431,29 @@ def get_bot_status(cfg: dict) -> dict:
                     "upl": float(pos_info.get("upl", 0.0)),
                     "createdDate": str(pos_info.get("createdDate", "")),
                 })
-            mkt_raw = cap.market(cfg["epic"])
-            snap = mkt_raw.get("snapshot", {})
-            broker_market = {
-                "bid": snap.get("bid"),
-                "offer": snap.get("offer"),
-                "high": snap.get("high"),
-                "low": snap.get("low"),
-                "marketStatus": snap.get("marketStatus", "TRADEABLE"),
-                "netChange": snap.get("netChange"),
-                "percentageChange": snap.get("percentageChange"),
-            }
+            # Query live broker market snapshot (auto-resolves GOLD vs XAUUSD)
+            snap, matched_epic = get_live_market_snapshot(cap, cfg.get("epic", "GOLD"))
+            if matched_epic != cfg.get("epic"):
+                cfg["epic"] = matched_epic
+                save_config(cfg)
+
+            if snap:
+                bid = snap.get("bid")
+                offer = snap.get("offer")
+                mid = round((bid + offer) / 2, 2) if (bid is not None and offer is not None) else (bid or offer)
+                spread = round(offer - bid, 2) if (bid is not None and offer is not None) else None
+                broker_market = {
+                    "epic": matched_epic,
+                    "bid": bid,
+                    "offer": offer,
+                    "mid": mid,
+                    "spread": spread,
+                    "high": snap.get("high"),
+                    "low": snap.get("low"),
+                    "marketStatus": snap.get("marketStatus", "TRADEABLE"),
+                    "netChange": snap.get("netChange"),
+                    "percentageChange": snap.get("percentageChange"),
+                }
         except Exception:
             pass
 
@@ -425,6 +470,27 @@ def get_bot_status(cfg: dict) -> dict:
         "market": broker_market,
         "live_log": list(reversed(live_log)),
     }
+
+
+def fetch_candles_with_fallback(cap: Capital, epic: str, resolution: str, start: datetime, end: datetime):
+    candidates = [epic]
+    if epic.upper() == "GOLD":
+        candidates.append("XAUUSD")
+    elif epic.upper() == "XAUUSD":
+        candidates.append("GOLD")
+
+    last_err = None
+    for cand in candidates:
+        try:
+            bars = cap.prices(cand, resolution, start, end)
+            if bars:
+                return cand, bars
+        except Exception as e:
+            last_err = e
+            continue
+    if last_err:
+        raise last_err
+    return epic, []
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -581,10 +647,28 @@ class Handler(BaseHTTPRequestHandler):
                 cfg["live"] = (env == "live")
                 save_config(cfg)
 
+                # Auto-sync recent market candles from broker
+                try:
+                    cap_sync = Capital(env=env, api_key=api_key, identifier=ident, password=pw)
+                    end = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+                    start = end - timedelta(days=5)
+                    matched_epic, bars = fetch_candles_with_fallback(cap_sync, cfg["epic"], cfg["resolution"], start, end)
+                    if matched_epic != cfg["epic"]:
+                        cfg["epic"] = matched_epic
+                        save_config(cfg)
+                    _, day_bars = fetch_candles_with_fallback(cap_sync, cfg["epic"], "DAY", start - timedelta(days=35), end)
+                    if bars:
+                        save_bars(data_path(cfg["epic"], cfg["resolution"]), bars)
+                    if day_bars:
+                        save_bars(data_path(cfg["epic"], "DAY"), day_bars)
+                except Exception:
+                    pass
+
                 self._send_json({
                     "ok": True,
-                    "message": f"Successfully connected to Capital.com ({env.upper()})! Credentials verified.",
+                    "message": f"Successfully connected to Capital.com ({env.upper()})! Credentials verified and live feed synced.",
                     "bot": get_bot_status(cfg),
+                    "backtest": serialize_backtest(cfg),
                 })
                 return
 
@@ -684,22 +768,48 @@ class Handler(BaseHTTPRequestHandler):
                 })
                 return
 
-            if u.path == "/api/fetch-capital":
-                days = int(body.get("days", 15))
-                cap = Capital("live" if cfg.get("live") else "demo")
-                end = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-                start = end - timedelta(days=days)
-                bars = cap.prices(cfg["epic"], cfg["resolution"], start, end)
-                day_bars = cap.prices(cfg["epic"], "DAY", start - timedelta(days=35), end)
-                save_bars(data_path(cfg["epic"], cfg["resolution"]), bars)
-                save_bars(data_path(cfg["epic"], "DAY"), day_bars)
-                self._send_json({
-                    "ok": True,
-                    "fetched_bars": len(bars),
-                    "config": cfg,
-                    "bot": get_bot_status(cfg),
-                    "backtest": serialize_backtest(cfg),
-                })
+            if u.path in ("/api/fetch-capital", "/api/sync-market"):
+                creds = check_credentials_present()
+                if not (creds.get("connected") or (creds.get("api_key") and creds.get("identifier"))):
+                    self._send_json({
+                        "ok": False,
+                        "error": "Capital.com API is not connected yet. Click 'Connect Broker' to enter your API credentials (Demo or Live)."
+                    }, 400)
+                    return
+                try:
+                    days = int(body.get("days", 15))
+                    cap = Capital("live" if cfg.get("live") else "demo")
+                    end = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+                    start = end - timedelta(days=days)
+                    matched_epic, bars = fetch_candles_with_fallback(cap, cfg["epic"], cfg["resolution"], start, end)
+                    if matched_epic != cfg["epic"]:
+                        cfg["epic"] = matched_epic
+                        save_config(cfg)
+                    _, day_bars = fetch_candles_with_fallback(cap, cfg["epic"], "DAY", start - timedelta(days=35), end)
+                    if bars:
+                        save_bars(data_path(cfg["epic"], cfg["resolution"]), bars)
+                    if day_bars:
+                        save_bars(data_path(cfg["epic"], "DAY"), day_bars)
+
+                    bot_st = get_bot_status(cfg)
+                    bt_st = serialize_backtest(cfg)
+                    mkt = bot_st.get("market", {})
+                    mid_px = mkt.get("mid") or (bars[-1]["c"] if bars else None)
+
+                    self._send_json({
+                        "ok": True,
+                        "fetched_bars": len(bars),
+                        "live_price": mid_px,
+                        "bid": mkt.get("bid"),
+                        "offer": mkt.get("offer"),
+                        "spread": mkt.get("spread"),
+                        "message": f"Synced {len(bars)} {cfg['epic']} candles from Capital.com ({cap.env.upper()})! Live Price: ${mid_px:.2f}" if mid_px else "Market synced.",
+                        "config": cfg,
+                        "bot": bot_st,
+                        "backtest": bt_st,
+                    })
+                except Exception as e:
+                    self._send_json({"ok": False, "error": f"Capital.com sync failed: {e}"}, 400)
                 return
 
             if u.path == "/api/upload-csv":

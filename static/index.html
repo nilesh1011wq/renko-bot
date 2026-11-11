@@ -373,10 +373,41 @@
       font-weight: 700;
     }
 
+    /* Draggable Splitter Handle */
+    .split-handle {
+      height: 9px;
+      margin: -2px 0;
+      cursor: row-resize;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      z-index: 25;
+      user-select: none;
+      touch-action: none;
+      background: transparent;
+      transition: background 0.15s ease;
+    }
+    .split-handle:hover, .split-handle.dragging {
+      background: rgba(59, 130, 246, 0.22);
+    }
+    .split-bar {
+      width: 48px;
+      height: 3px;
+      background: #2a364f;
+      border-radius: 2px;
+      transition: background 0.15s ease, width 0.15s ease;
+    }
+    .split-handle:hover .split-bar, .split-handle.dragging .split-bar {
+      background: var(--blue);
+      width: 72px;
+    }
+
     /* Bottom Multi-Tab Terminal Dock */
     .dock-card {
       height: 210px;
-      min-height: 180px;
+      min-height: 32px;
+      max-height: calc(100% - 140px);
       flex-shrink: 0;
       display: flex;
       flex-direction: column;
@@ -384,6 +415,7 @@
       border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;
+      position: relative;
     }
     .dock-tabs {
       display: flex;
@@ -585,9 +617,10 @@
         <span class="lbl">EPIC</span>
         <span class="val" id="hdr-epic">GOLD</span>
       </div>
-      <div class="pill">
-        <span class="lbl">LAST PX</span>
+      <div class="pill" id="pill-price" style="cursor:pointer;" onclick="syncLiveBrokerPrice()" title="Click to sync live Gold price directly from Capital.com">
+        <span class="lbl">BROKER PX</span>
         <span class="val" id="hdr-px">--</span>
+        <span id="hdr-px-sub" style="font-size:9.5px; font-family:var(--font-mono); margin-left:2px;"></span>
       </div>
       <div class="pill">
         <span class="lbl">BRICK SZ</span>
@@ -617,6 +650,9 @@
       <a href="/studio" target="_blank" style="text-decoration:none;"><button type="button" class="primary">✦ Open Studio Lab</button></a>
       <button id="btn-broker-settings" class="primary" onclick="openBrokerModal()" title="Connect Capital.com Broker API">
         <span>🔑</span> <span id="btn-broker-text">Connect Broker</span>
+      </button>
+      <button id="btn-sync-market" onclick="syncLiveBrokerPrice()" title="Sync real-time Gold price & candles directly from Capital.com">
+        <span>⚡</span> <span>Sync Broker Price</span>
       </button>
       <button id="btn-watcher" class="success" onclick="toggleWatcher()">▶ Start 24/7 Watcher</button>
       <button onclick="simulateTicket('BUY')" title="Test Semi-Auto BUY Ticket">+ Sim BUY</button>
@@ -693,6 +729,14 @@
           <div class="field">
             <label>ST Factor</label>
             <input type="number" id="in-st_factor" value="2.1" step="0.1" min="0.1">
+          </div>
+          <div class="field full">
+            <label>Broker Instrument (Epic)</label>
+            <select id="in-epic">
+              <option value="GOLD">GOLD (Spot Gold CFD - 1 oz)</option>
+              <option value="XAUUSD">XAUUSD (Gold / US Dollar)</option>
+              <option value="SILVER">SILVER (Spot Silver CFD)</option>
+            </select>
           </div>
           <div class="field full">
             <label>Entry Mode</label>
@@ -815,7 +859,9 @@
           <button class="primary" onclick="openBrokerModal()" style="display:flex; align-items:center; justify-content:center; gap:6px; padding:9px; background:linear-gradient(135deg,rgba(59,130,246,0.25),rgba(38,166,154,0.25)); border:1px solid var(--blue); color:var(--text-0);">
             <span>🔑</span> <span id="side-broker-btn-text">Connect Capital.com API</span>
           </button>
-          <button onclick="fetchCapitalData()" id="btn-fetch-capital">Fetch Live GOLD from Capital.com</button>
+          <button onclick="syncLiveBrokerPrice()" id="btn-fetch-capital" style="display:flex; align-items:center; justify-content:center; gap:5px; font-weight:700;">
+            <span>⚡</span> <span>Sync Live Market from Broker</span>
+          </button>
           <div style="display:flex; gap:6px;">
             <button style="flex:1" onclick="regenSample(42)">Sample Regime #1</button>
             <button style="flex:1" onclick="regenSample(99)">Sample Regime #2</button>
@@ -921,6 +967,11 @@
           <canvas id="renko-canvas"></canvas>
         </div>
       </section>
+
+      <!-- DRAGGABLE HORIZONTAL SPLITTER -->
+      <div class="split-handle" id="dock-drag-handle" title="Drag up/down to resize bottom dock | Double-click to collapse/restore">
+        <div class="split-bar"></div>
+      </div>
 
       <!-- BOTTOM MULTI-TAB TERMINAL DOCK (NO SCROLLING DOWN) -->
       <section class="dock-card">
@@ -1368,13 +1419,17 @@
       document.getElementById('in-risk_per_trade_usd').value = cfg.risk_per_trade_usd ?? 50.0;
       document.getElementById('in-mode').value = cfg.mode ?? 'semi-auto';
 
+      const elEpic = document.getElementById('in-epic');
+      if (elEpic && cfg.epic) elEpic.value = cfg.epic.toUpperCase();
       document.getElementById('in-sess_asian').checked = sess.asian !== false;
       document.getElementById('in-sess_london').checked = sess.london !== false;
       document.getElementById('in-sess_ny').checked = sess.new_york !== false;
     }
 
     function readConfigFromInputs() {
+      const elEpic = document.getElementById('in-epic');
       return {
+        epic: elEpic ? elEpic.value : 'GOLD',
         sizing_mode: document.getElementById('in-sizing_mode').value,
         size: parseFloat(document.getElementById('in-size').value),
         risk_per_trade_usd: parseFloat(document.getElementById('in-risk_per_trade_usd').value),
@@ -1459,21 +1514,36 @@
       showToast('Loaded Sample Gold Regime (seed ' + seed + ')');
     }
 
-    async function fetchCapitalData() {
-      showToast('Connecting to Capital.com API...');
-      const res = await apiFetch('/api/fetch-capital', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({days: 15})
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        showToast('Capital.com API: ' + (data.error || 'Missing credentials'));
+    async function syncLiveBrokerPrice() {
+      const creds = STATE?.bot?.credentials || {};
+      const allCreds = creds.connected || (creds.api_key && creds.identifier);
+      if (!allCreds) {
+        showToast('Please connect Capital.com broker API first');
+        openBrokerModal();
         return;
       }
-      STATE = data;
-      renderAll();
-      showToast('Fetched ' + data.fetched_bars + ' GOLD candles from Capital.com!');
+      showToast('Syncing real-time market price & candles from Capital.com...');
+      try {
+        const res = await apiFetch('/api/sync-market', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({days: 10})
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast('✕ Sync failed: ' + (data.error || 'Check connection'));
+          return;
+        }
+        STATE = data;
+        renderAll();
+        showToast(`✓ ${data.message || 'Market synced!'}`);
+      } catch (err) {
+        showToast('✕ Error syncing broker market: ' + err.message);
+      }
+    }
+
+    async function fetchCapitalData() {
+      return syncLiveBrokerPrice();
     }
 
     async function uploadCsv(input) {
@@ -1593,9 +1663,28 @@
 
         // Header pills
         const elEpic = document.getElementById('hdr-epic');
-        if (elEpic && ds.epic) elEpic.textContent = ds.epic + (ds.resolution ? ' (' + ds.resolution + ')' : '');
+        const activeEpic = (bot.market && bot.market.epic) || ds.epic || 'GOLD';
+        if (elEpic) elEpic.textContent = activeEpic + (ds.resolution ? ' (' + ds.resolution + ')' : '');
+
+        const mkt = bot.market || {};
+        const hasLiveBroker = (mkt.bid !== undefined && mkt.bid !== null) && (mkt.offer !== undefined && mkt.offer !== null);
+        const livePx = hasLiveBroker ? mkt.mid : (ds.last_price || null);
         const elPx = document.getElementById('hdr-px');
-        if (elPx) elPx.textContent = ds.last_price ? '$' + ds.last_price.toFixed(2) : '--';
+        const elPxSub = document.getElementById('hdr-px-sub');
+        if (elPx) {
+          elPx.textContent = livePx ? '$' + Number(livePx).toFixed(2) : '--';
+          if (hasLiveBroker) {
+            elPx.style.color = '#38bdf8';
+            if (elPxSub) {
+              elPxSub.innerHTML = `<span style="color:#10b981">B:$${Number(mkt.bid).toFixed(2)}</span> / <span style="color:#ef5350">A:$${Number(mkt.offer).toFixed(2)}</span> <span style="color:var(--text-2); font-size:9.5px;">(Spr $${Number(mkt.spread || 0).toFixed(2)})</span>`;
+            }
+          } else {
+            elPx.style.color = 'var(--text-0)';
+            if (elPxSub) {
+              elPxSub.innerHTML = `<span style="color:var(--text-2); font-size:9px;">(Sample Feed)</span>`;
+            }
+          }
+        }
         const elBs = document.getElementById('hdr-bs');
         if (elBs) elBs.textContent = '$' + (ds.last_brick_size || 0).toFixed(2);
         const elRuns = document.getElementById('hdr-runs');
@@ -1888,9 +1977,16 @@
       const view = bricks.slice(-CURRENT_BRICK_COUNT);
       if (!view.length) return;
       const ds = STATE?.backtest?.data_summary || {};
+      const bot = STATE?.bot || {};
+      const mkt = bot.market || {};
+      const hasLiveBroker = (mkt.bid !== undefined && mkt.bid !== null) && (mkt.offer !== undefined && mkt.offer !== null);
+      const activePx = hasLiveBroker ? mkt.mid : (ds.last_price || null);
+
       const sub = document.getElementById('chart-sub');
       if (sub) {
-        sub.textContent = `Showing last ${view.length} bricks (#${view[0].index}–#${view[view.length - 1].index}) | Brick Size: $${(ds.last_brick_size || 0).toFixed(2)}`;
+        const epicTag = (mkt.epic || ds.epic || 'GOLD').toUpperCase();
+        const pxTag = activePx ? ` | ${hasLiveBroker ? 'Live Broker Px' : 'Last Px'}: $${Number(activePx).toFixed(2)}` : '';
+        sub.textContent = `${epicTag} | Showing last ${view.length} bricks (#${view[0].index}–#${view[view.length - 1].index}) | Brick Size: $${(ds.last_brick_size || 0).toFixed(2)}${pxTag}`;
       }
 
       let minP = Infinity, maxP = -Infinity;
@@ -1898,13 +1994,13 @@
         minP = Math.min(minP, b.open, b.close, b.st_value ?? b.open);
         maxP = Math.max(maxP, b.open, b.close, b.st_value ?? b.open);
       }
-      if (ds.last_price) {
-        minP = Math.min(minP, ds.last_price);
-        maxP = Math.max(maxP, ds.last_price);
+      if (activePx) {
+        minP = Math.min(minP, activePx);
+        maxP = Math.max(maxP, activePx);
       }
       if (minP >= maxP || !isFinite(minP) || !isFinite(maxP)) {
-        minP = (ds.last_price || 2700) - 15;
-        maxP = (ds.last_price || 2700) + 15;
+        minP = (activePx || 2700) - 15;
+        maxP = (activePx || 2700) + 15;
       }
       const padP = (maxP - minP) * 0.08 || 4;
       minP -= padP;
@@ -2055,10 +2151,10 @@
       }
 
       // 6. Current Live Price Line & Axis Badge
-      if (ds.last_price) {
-        const lpy = py(ds.last_price);
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 1.2;
+      if (activePx) {
+        const lpy = py(activePx);
+        ctx.strokeStyle = hasLiveBroker ? '#38bdf8' : '#64748b';
+        ctx.lineWidth = 1.3;
         ctx.setLineDash([4, 3]);
         ctx.beginPath();
         ctx.moveTo(padL, lpy);
@@ -2067,11 +2163,11 @@
         ctx.setLineDash([]);
 
         // Price badge on right axis
-        ctx.fillStyle = '#0284c7';
-        ctx.fillRect(w - padR + 2, lpy - 8, padR - 4, 16);
+        ctx.fillStyle = hasLiveBroker ? '#0284c7' : '#334155';
+        ctx.fillRect(w - padR + 2, lpy - 9, padR - 4, 18);
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 9.5px JetBrains Mono, monospace';
-        ctx.fillText('$' + ds.last_price.toFixed(1), w - padR + 5, lpy + 3.5);
+        ctx.fillText('$' + Number(activePx).toFixed(1), w - padR + 4, lpy + 3.5);
       }
     }
 
@@ -2191,6 +2287,111 @@
       }
     }
 
+    function initDockDraggable() {
+      const handle = document.getElementById('dock-drag-handle');
+      const dock = document.querySelector('.dock-card');
+      if (!handle || !dock) return;
+
+      // Restore saved height from localStorage if available
+      const savedHeight = localStorage.getItem('renko_dock_height');
+      if (savedHeight) {
+        const hNum = parseInt(savedHeight, 10);
+        if (!isNaN(hNum) && hNum >= 32 && hNum < window.innerHeight - 150) {
+          dock.style.height = hNum + 'px';
+        }
+      }
+
+      let isDragging = false;
+      let startY = 0;
+      let startHeight = 0;
+      let prevExpandedHeight = parseInt(dock.style.height, 10) || 210;
+      let rafId = null;
+
+      function onPointerDown(e) {
+        if (e.button !== 0) return;
+        isDragging = true;
+        startY = e.clientY;
+        startHeight = dock.getBoundingClientRect().height;
+        handle.classList.add('dragging');
+        try {
+          handle.setPointerCapture(e.pointerId);
+        } catch (_) {}
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = 'row-resize';
+        e.preventDefault();
+      }
+
+      function onPointerMove(e) {
+        if (!isDragging) return;
+        // Moving up increases dock height; moving down decreases dock height
+        const deltaY = startY - e.clientY;
+        let newHeight = startHeight + deltaY;
+
+        // Clamp: min 32px (tabs only), max window.innerHeight - 160px
+        const minH = 32;
+        const maxH = Math.max(120, window.innerHeight - 160);
+        newHeight = Math.max(minH, Math.min(maxH, newHeight));
+
+        dock.style.height = Math.round(newHeight) + 'px';
+
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = requestAnimationFrame(() => {
+          if (STATE && STATE.backtest) {
+            drawRenkoChart(STATE.backtest.bricks, STATE.backtest.trades, STATE.backtest.filtered_events);
+            const activeTab = document.querySelector('.dock-pane.active');
+            if (activeTab && activeTab.id === 'tab-equity') {
+              drawEquityChart(STATE.backtest.equity_curve, STATE.backtest.raw_curve);
+            } else if (activeTab && activeTab.id === 'tab-mc') {
+              drawMonteCarloChart(STATE.backtest.montecarlo);
+            }
+          }
+        });
+      }
+
+      function onPointerUp(e) {
+        if (!isDragging) return;
+        isDragging = false;
+        handle.classList.remove('dragging');
+        try {
+          handle.releasePointerCapture(e.pointerId);
+        } catch (_) {}
+        document.body.style.userSelect = '';
+        document.body.style.cursor = '';
+
+        const finalH = dock.getBoundingClientRect().height;
+        if (finalH > 40) {
+          prevExpandedHeight = finalH;
+          localStorage.setItem('renko_dock_height', Math.round(finalH));
+        }
+      }
+
+      function onDblClick() {
+        const curH = dock.getBoundingClientRect().height;
+        if (curH > 40) {
+          // Collapse to header tabs only
+          prevExpandedHeight = curH;
+          dock.style.height = '32px';
+          localStorage.setItem('renko_dock_height', 32);
+        } else {
+          // Restore to previous height
+          const restoreH = prevExpandedHeight > 60 ? prevExpandedHeight : 210;
+          dock.style.height = Math.round(restoreH) + 'px';
+          localStorage.setItem('renko_dock_height', Math.round(restoreH));
+        }
+        setTimeout(() => {
+          if (STATE && STATE.backtest) {
+            drawRenkoChart(STATE.backtest.bricks, STATE.backtest.trades, STATE.backtest.filtered_events);
+          }
+        }, 30);
+      }
+
+      handle.addEventListener('pointerdown', onPointerDown);
+      handle.addEventListener('pointermove', onPointerMove);
+      handle.addEventListener('pointerup', onPointerUp);
+      handle.addEventListener('pointercancel', onPointerUp);
+      handle.addEventListener('dblclick', onDblClick);
+    }
+
     window.addEventListener('resize', () => renderAll());
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -2203,6 +2404,7 @@
         loadState();
       }
     }, 12000);
+    initDockDraggable();
     loadState();
   </script>
 </body>
