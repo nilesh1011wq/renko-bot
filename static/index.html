@@ -911,6 +911,8 @@
               <span><i class="swatch" style="background:#ef5350"></i>Down</span>
               <span><i class="swatch" style="background:#10b981; height:3px;"></i>ST Bull</span>
               <span><i class="swatch" style="background:#f43f5e; height:3px;"></i>ST Bear</span>
+              <span><i class="swatch" style="background:#10b981; border-radius:2px; height:6px; width:6px;"></i>Buy ▲</span>
+              <span><i class="swatch" style="background:#ef5350; border-radius:2px; height:6px; width:6px;"></i>Sell ▼</span>
               <span><i class="swatch" style="background:#f59e0b; border-radius:50%;"></i>Veto</span>
             </div>
           </div>
@@ -927,7 +929,7 @@
           <button class="dock-tab" onclick="switchDockTab('tab-positions', this)">⚡ Capital.com Live Orders (<span id="dock-pos-cnt">0</span>)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-equity', this)">📈 Equity Curve (vs Raw)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-mc', this)">🎲 Monte Carlo Cone (2,500 Runs)</button>
-          <button class="dock-tab" onclick="switchDockTab('tab-sessions', this)">🌍 Sessions Breakdown</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-sessions', this)">🔑 Broker Env &amp; Sessions</button>
           <button class="dock-tab" onclick="switchDockTab('tab-log', this)">📜 Bot Activity Log</button>
         </div>
 
@@ -1115,10 +1117,12 @@
       try {
         const res = await apiFetch('/api/state');
         STATE = await res.json();
-        syncInputsFromConfig(STATE.config);
+        if (STATE && STATE.config) {
+          syncInputsFromConfig(STATE.config);
+        }
         renderAll();
       } catch (e) {
-        // handled by login modal if 401
+        console.error('Failed to load cockpit state:', e);
       }
     }
 
@@ -1579,261 +1583,299 @@
 
     function renderAll() {
       if (!STATE) return;
-      const bt = STATE.backtest;
-      const ds = bt.data_summary;
-      const sn = bt.stats_net;
-      const sg = bt.stats_gross;
-      const rawNet = bt.raw_pine_stats_net;
-      const bot = STATE.bot;
+      try {
+        const bt = STATE.backtest || {};
+        const ds = bt.data_summary || {};
+        const sn = bt.stats_net || {};
+        const sg = bt.stats_gross || {};
+        const rawNet = bt.raw_pine_stats_net || {};
+        const bot = STATE.bot || {};
 
-      // Header pills
-      document.getElementById('hdr-epic').textContent = ds.epic + ' (' + ds.resolution + ')';
-      document.getElementById('hdr-px').textContent = ds.last_price ? '$' + ds.last_price.toFixed(2) : '--';
-      document.getElementById('hdr-bs').textContent = '$' + (ds.last_brick_size || 0).toFixed(2);
-      document.getElementById('hdr-runs').innerHTML = `<span class="pos">G:${ds.green_run}</span> / <span class="neg">R:${ds.red_run}</span>`;
-      document.getElementById('hdr-st').innerHTML = ds.st_dir === 1
-        ? `<span class="pos">BULL (${ds.st_now})</span>`
-        : `<span class="neg">BEAR (${ds.st_now})</span>`;
-
-      // Watcher status
-      const w = bot.watcher || {};
-      const wDot = document.getElementById('hdr-watch-dot');
-      const wVal = document.getElementById('hdr-watch');
-      const wBtn = document.getElementById('btn-watcher');
-      const wSub = document.getElementById('watcher-sub-badge');
-      const wTxt = document.getElementById('watcher-status-text');
-      if (w.running) {
-        wDot.className = 'dot green';
-        wVal.textContent = 'RUNNING';
-        wBtn.textContent = '⏸ Pause 24/7 Watcher';
-        wBtn.className = 'warning';
-        wSub.textContent = 'ACTIVE';
-        wSub.style.color = 'var(--green-bright)';
-      } else {
-        wDot.className = 'dot amber';
-        wVal.textContent = 'PAUSED';
-        wBtn.textContent = '▶ Start 24/7 Watcher';
-        wBtn.className = 'success';
-        wSub.textContent = 'PAUSED';
-        wSub.style.color = 'var(--amber)';
-      }
-      wTxt.textContent = `${w.last_status || 'Idle'} | Last: ${w.last_check ? w.last_check.slice(11, 19) + ' UTC' : 'never'}`;
-
-      const creds = bot.credentials || {};
-      const allCreds = creds.connected || (creds.api_key && creds.identifier && creds.password);
-      const dot = document.getElementById('hdr-conn-dot');
-      const connTxt = document.getElementById('hdr-conn');
-      const credLine = document.getElementById('cred-status-line');
-      const btnBrokerTxt = document.getElementById('btn-broker-text');
-      const btnBroker = document.getElementById('btn-broker-settings');
-      const sideBrokerTxt = document.getElementById('side-broker-btn-text');
-      const kpiBrokerStatus = document.getElementById('kpi-broker-status');
-      const kpiBrokerPos = document.getElementById('kpi-broker-pos');
-
-      if (bot.kill_switch) {
-        dot.className = 'dot red';
-        connTxt.textContent = 'KILL SWITCH ACTIVE';
-      } else if (allCreds) {
-        const envLabel = (creds.env || 'demo').toUpperCase();
-        dot.className = 'dot green';
-        connTxt.textContent = `${envLabel} READY`;
-        if (btnBrokerTxt) btnBrokerTxt.textContent = `✓ Capital.com (${envLabel})`;
-        if (btnBroker) btnBroker.className = 'success';
-        if (sideBrokerTxt) sideBrokerTxt.textContent = `✓ Broker: ${creds.masked_identifier || envLabel}`;
-        if (kpiBrokerStatus) {
-          kpiBrokerStatus.textContent = `${envLabel} READY`;
-          kpiBrokerStatus.className = 'k-val pos';
+        // Header pills
+        const elEpic = document.getElementById('hdr-epic');
+        if (elEpic && ds.epic) elEpic.textContent = ds.epic + (ds.resolution ? ' (' + ds.resolution + ')' : '');
+        const elPx = document.getElementById('hdr-px');
+        if (elPx) elPx.textContent = ds.last_price ? '$' + ds.last_price.toFixed(2) : '--';
+        const elBs = document.getElementById('hdr-bs');
+        if (elBs) elBs.textContent = '$' + (ds.last_brick_size || 0).toFixed(2);
+        const elRuns = document.getElementById('hdr-runs');
+        if (elRuns) elRuns.innerHTML = `<span class="pos">G:${ds.green_run ?? 0}</span> / <span class="neg">R:${ds.red_run ?? 0}</span>`;
+        const elSt = document.getElementById('hdr-st');
+        if (elSt) {
+          elSt.innerHTML = ds.st_dir === 1
+            ? `<span class="pos">BULL (${ds.st_now ?? '--'})</span>`
+            : `<span class="neg">BEAR (${ds.st_now ?? '--'})</span>`;
         }
-        credLine.innerHTML = `<span class="pos">✓ Capital.com Connected (${envLabel}): <b>${creds.masked_identifier || 'Active'}</b></span>`;
-      } else {
-        dot.className = 'dot amber';
-        connTxt.textContent = 'SAMPLE / DEMO';
-        if (btnBrokerTxt) btnBrokerTxt.textContent = 'Connect Broker';
-        if (btnBroker) btnBroker.className = 'primary';
-        if (sideBrokerTxt) sideBrokerTxt.textContent = 'Connect Capital.com API';
-        if (kpiBrokerStatus) {
-          kpiBrokerStatus.textContent = 'Sample Feed';
-          kpiBrokerStatus.className = 'k-val neg';
+
+        // Watcher status
+        const w = bot.watcher || {};
+        const wDot = document.getElementById('hdr-watch-dot');
+        const wVal = document.getElementById('hdr-watch');
+        const wBtn = document.getElementById('btn-watcher');
+        const wSub = document.getElementById('watcher-sub-badge');
+        const wTxt = document.getElementById('watcher-status-text');
+        if (wDot && wVal && wBtn && wSub && wTxt) {
+          if (w.running) {
+            wDot.className = 'dot green';
+            wVal.textContent = 'RUNNING';
+            wBtn.textContent = '⏸ Pause 24/7 Watcher';
+            wBtn.className = 'warning';
+            wSub.textContent = 'ACTIVE';
+            wSub.style.color = 'var(--green-bright)';
+          } else {
+            wDot.className = 'dot amber';
+            wVal.textContent = 'PAUSED';
+            wBtn.textContent = '▶ Start 24/7 Watcher';
+            wBtn.className = 'success';
+            wSub.textContent = 'PAUSED';
+            wSub.style.color = 'var(--amber)';
+          }
+          wTxt.textContent = `${w.last_status || 'Idle'} | Last: ${w.last_check ? w.last_check.slice(11, 19) + ' UTC' : 'never'}`;
         }
-        credLine.innerHTML = `<span style="color:var(--amber)">⚠ Capital.com keys not connected yet (using sample feed)</span>`;
-      }
 
-      const killBtn = document.getElementById('btn-kill');
-      if (bot.kill_switch) {
-        killBtn.textContent = 'RESUME BOT (CLEAR STOP)';
-        killBtn.className = 'warning';
-      } else {
-        killBtn.textContent = 'FLATTEN / KILL SWITCH';
-        killBtn.className = 'danger';
-      }
+        const creds = bot.credentials || {};
+        const allCreds = creds.connected || (creds.api_key && creds.identifier && creds.password);
+        const dot = document.getElementById('hdr-conn-dot');
+        const connTxt = document.getElementById('hdr-conn');
+        const credLine = document.getElementById('cred-status-line');
+        const btnBrokerTxt = document.getElementById('btn-broker-text');
+        const btnBroker = document.getElementById('btn-broker-settings');
+        const sideBrokerTxt = document.getElementById('side-broker-btn-text');
+        const kpiBrokerStatus = document.getElementById('kpi-broker-status');
+        const kpiBrokerPos = document.getElementById('kpi-broker-pos');
 
-      // Pending Ticket Banner
-      const banner = document.getElementById('ticket-banner');
-      if (bot.pending_ticket) {
-        const t = bot.pending_ticket;
-        banner.className = 'ticket-card active ' + (t.action === 'SELL' ? 'sell' : '');
-        const px = t.action === 'BUY' ? t.ask : t.bid;
-        document.getElementById('ticket-title').textContent =
-          `${t.action} ${t.size} ${t.epic} @ ~${px} (Brick Close: ${t.last_brick_close})`;
-        document.getElementById('ticket-sub').textContent =
-          `Target: Capital.com ${creds.env ? creds.env.toUpperCase() : 'DEMO'} | Stop: ${t.safety_stop} | Brick Size: $${t.brick_size} | Expires: ${t.expires_at.slice(11, 19)} UTC`;
-      } else {
-        banner.className = 'ticket-card';
-      }
-
-      // KPIs
-      const kNet = document.getElementById('kpi-net');
-      kNet.textContent = fmtUsd(sn.net);
-      kNet.className = 'k-val ' + (sn.net >= 0 ? 'pos' : 'neg');
-      document.getElementById('kpi-gross').textContent = 'Gross: ' + fmtUsd(sg.net);
-
-      const diff = (sn.net - rawNet.net);
-      const kEdge = document.getElementById('kpi-edge');
-      kEdge.textContent = fmtUsd(diff) + ' vs Raw';
-      kEdge.className = 'k-val ' + (diff >= 0 ? 'pos' : 'neg');
-      document.getElementById('kpi-filtered').textContent = `Skipped: ${ds.filtered_count} noise entries`;
-
-      document.getElementById('kpi-win').textContent = (sn['win_rate_%'] || 0).toFixed(1) + '%';
-      document.getElementById('kpi-trades').textContent = `${sn.trades} trades (${rawNet.trades} raw)`;
-
-      document.getElementById('kpi-pf').textContent = sn.profit_factor ?? '--';
-      document.getElementById('kpi-avg').textContent = `W:${fmtUsd(sn.avg_win)} / L:${fmtUsd(sn.avg_loss)}`;
-
-      document.getElementById('kpi-dd').textContent = '-$' + (sn.max_drawdown || 0).toFixed(2);
-      document.getElementById('kpi-streak').textContent = `Worst Streak: ${sn.longest_losing_streak}`;
-
-      document.getElementById('kpi-mfe').textContent = `+${sn.avg_mfe_bricks} / -${sn.avg_mae_bricks} brk`;
-      document.getElementById('kpi-over').textContent = `Avg Overshoot: $${(sn.avg_overshoot || 0).toFixed(2)}`;
-
-      // Capital.com Live Positions Table
-      const livePositions = bot.live_positions || [];
-      const posBody = document.getElementById('positions-tbody');
-      const posCnt = document.getElementById('dock-pos-cnt');
-      if (posCnt) posCnt.textContent = livePositions.length;
-      if (kpiBrokerPos) kpiBrokerPos.textContent = `${livePositions.length} Open Deals`;
-
-      if (posBody) {
-        posBody.innerHTML = '';
-        if (livePositions.length === 0) {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `<td colspan="8" style="text-align:center; padding:16px; color:var(--text-2);">
-            No open positions on Capital.com (${(creds.env || 'demo').toUpperCase()}). Bot will place orders automatically when signals trigger.
-          </td>`;
-          posBody.appendChild(tr);
+        if (bot.kill_switch) {
+          if (dot) dot.className = 'dot red';
+          if (connTxt) connTxt.textContent = 'KILL SWITCH ACTIVE';
+        } else if (allCreds) {
+          const envLabel = (creds.env || 'demo').toUpperCase();
+          if (dot) dot.className = 'dot green';
+          if (connTxt) connTxt.textContent = `${envLabel} READY`;
+          if (btnBrokerTxt) btnBrokerTxt.textContent = `✓ Capital.com (${envLabel})`;
+          if (btnBroker) btnBroker.className = 'success';
+          if (sideBrokerTxt) sideBrokerTxt.textContent = `✓ Broker: ${creds.masked_identifier || envLabel}`;
+          if (kpiBrokerStatus) {
+            kpiBrokerStatus.textContent = `${envLabel} READY`;
+            kpiBrokerStatus.className = 'k-val pos';
+          }
+          if (credLine) credLine.innerHTML = `<span class="pos">✓ Capital.com Connected (${envLabel}): <b>${creds.masked_identifier || 'Active'}</b></span>`;
         } else {
-          for (const p of livePositions) {
-            const tr = document.createElement('tr');
-            const isBuy = p.direction === 'BUY';
-            const sideBadge = isBuy
-              ? '<span class="badge buy">BUY</span>'
-              : '<span class="badge sell">SELL</span>';
-            const uplCls = p.upl >= 0 ? 'pos' : 'neg';
-            tr.innerHTML = `
-              <td>${p.dealId}</td>
-              <td><b>${p.epic}</b></td>
-              <td>${sideBadge}</td>
-              <td>${p.size}</td>
-              <td>$${p.level.toFixed(2)}</td>
-              <td>${p.stopLevel ? '$' + p.stopLevel.toFixed(2) : '--'}</td>
-              <td class="${uplCls}" style="font-weight:700;">${p.upl >= 0 ? '+' : ''}$${p.upl.toFixed(2)}</td>
-              <td>
-                <button class="danger" style="padding:2px 8px; font-size:10.5px;" onclick="closeBrokerDeal('${p.dealId}')">Close</button>
-              </td>
-            `;
-            posBody.appendChild(tr);
+          if (dot) dot.className = 'dot amber';
+          if (connTxt) connTxt.textContent = 'SAMPLE / DEMO';
+          if (btnBrokerTxt) btnBrokerTxt.textContent = 'Connect Broker';
+          if (btnBroker) btnBroker.className = 'primary';
+          if (sideBrokerTxt) sideBrokerTxt.textContent = 'Connect Capital.com API';
+          if (kpiBrokerStatus) {
+            kpiBrokerStatus.textContent = 'Sample Feed';
+            kpiBrokerStatus.className = 'k-val neg';
+          }
+          if (credLine) credLine.innerHTML = `<span style="color:var(--amber)">⚠ Capital.com keys not connected yet (using sample feed)</span>`;
+        }
+
+        const killBtn = document.getElementById('btn-kill');
+        if (killBtn) {
+          if (bot.kill_switch) {
+            killBtn.textContent = 'RESUME BOT (CLEAR STOP)';
+            killBtn.className = 'warning';
+          } else {
+            killBtn.textContent = 'FLATTEN / KILL SWITCH';
+            killBtn.className = 'danger';
           }
         }
-      }
 
-      // Render canvases
-      drawRenkoChart(bt.bricks, bt.trades, bt.filtered_events);
-      drawEquityChart(bt.equity_curve, bt.raw_curve);
-      drawMonteCarloChart(bt.montecarlo);
-
-      // Session Table
-      const sbody = document.getElementById('session-tbody');
-      if (sbody) {
-        sbody.innerHTML = '';
-        const labels = {
-          asian: 'Asian (00:00–07:00)',
-          london: 'London (07:00–13:00)',
-          new_york: 'New York (13:00–21:00)'
-        };
-        for (const [k, st] of Object.entries(bt.sessions_net || {})) {
-          const tr = document.createElement('tr');
-          const cls = st.net >= 0 ? 'pos' : 'neg';
-          tr.innerHTML = `
-            <td>${labels[k] || k}</td>
-            <td>${st.trades}</td>
-            <td>${st['win_rate_%']}%</td>
-            <td>${st.profit_factor}</td>
-            <td>$${(st.avg_overshoot || 0).toFixed(2)}</td>
-            <td class="${cls}" style="font-weight:700">${fmtUsd(st.net)}</td>
-          `;
-          sbody.appendChild(tr);
+        // Pending Ticket Banner
+        const banner = document.getElementById('ticket-banner');
+        if (banner) {
+          if (bot.pending_ticket) {
+            const t = bot.pending_ticket;
+            banner.className = 'ticket-card active ' + (t.action === 'SELL' ? 'sell' : '');
+            const px = t.action === 'BUY' ? t.ask : t.bid;
+            const elTitle = document.getElementById('ticket-title');
+            if (elTitle) {
+              elTitle.textContent = `${t.action} ${t.size} ${t.epic} @ ~${px} (Brick Close: ${t.last_brick_close})`;
+            }
+            const elSub = document.getElementById('ticket-sub');
+            if (elSub) {
+              elSub.textContent = `Target: Capital.com ${creds.env ? creds.env.toUpperCase() : 'DEMO'} | Stop: ${t.safety_stop} | Brick Size: $${t.brick_size} | Expires: ${t.expires_at ? t.expires_at.slice(11, 19) + ' UTC' : 'soon'}`;
+            }
+          } else {
+            banner.className = 'ticket-card';
+          }
         }
-      }
 
-      // Trade List Table
-      const tbody = document.getElementById('trades-tbody');
-      const dockTradeCnt = document.getElementById('dock-trade-cnt');
-      if (dockTradeCnt) dockTradeCnt.textContent = (bt.trades || []).length;
-      if (tbody) {
-        tbody.innerHTML = '';
-        const revTrades = [...(bt.trades || [])].reverse();
-        for (const t of revTrades) {
-          const tr = document.createElement('tr');
-          const sideBadge = t.side === 'LONG' ? '<span class="badge buy">LONG</span>' : '<span class="badge sell">SHORT</span>';
-          const outBadge = t.why_out === 'SAFETY_STOP'
-            ? '<span class="badge stop">SAFETY_STOP</span>'
-            : t.why_out;
-          tr.innerHTML = `
-            <td>${t.num}</td>
-            <td>${sideBadge}</td>
-            <td>${t.session}</td>
-            <td>${t.entry_time.slice(5, 16).replace('T', ' ')}</td>
-            <td>${t.trigger_px.toFixed(2)}</td>
-            <td>${t.entry_exec.toFixed(2)}</td>
-            <td>${t.exit_exec.toFixed(2)}</td>
-            <td>${outBadge}</td>
-            <td>+${t.mfe_bricks} / -${t.mae_bricks}</td>
-            <td class="${t.gross >= 0 ? 'pos' : 'neg'}">${fmtUsd(t.gross)}</td>
-            <td class="${t.net >= 0 ? 'pos' : 'neg'}" style="font-weight:700">${fmtUsd(t.net)}</td>
-          `;
-          tbody.appendChild(tr);
+        // KPIs
+        const kNet = document.getElementById('kpi-net');
+        if (kNet) {
+          kNet.textContent = fmtUsd(sn.net);
+          kNet.className = 'k-val ' + (sn.net >= 0 ? 'pos' : 'neg');
         }
-      }
+        const kGross = document.getElementById('kpi-gross');
+        if (kGross) kGross.textContent = 'Gross: ' + fmtUsd(sg.net);
 
-      // Bot Log Table
-      const logBody = document.getElementById('log-tbody');
-      if (logBody) {
-        logBody.innerHTML = '';
-        const logs = bot.live_log || [];
-        for (const l of logs) {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${(l.time || '').slice(5, 19).replace('T', ' ')}</td>
-            <td><b>${l.event || ''}</b></td>
-            <td>${l.side || ''}</td>
-            <td>${l.size || ''}</td>
-            <td>${l.price || ''}</td>
-            <td>${l.stop || ''}</td>
-            <td>${l.deal_id || ''}</td>
-            <td style="color:var(--text-1); font-size:10.5px;">${l.note || ''}</td>
-          `;
-          logBody.appendChild(tr);
+        const diff = ((sn.net || 0) - (rawNet.net || 0));
+        const kEdge = document.getElementById('kpi-edge');
+        if (kEdge) {
+          kEdge.textContent = fmtUsd(diff) + ' vs Raw';
+          kEdge.className = 'k-val ' + (diff >= 0 ? 'pos' : 'neg');
         }
+        const kFiltered = document.getElementById('kpi-filtered');
+        if (kFiltered) kFiltered.textContent = `Skipped: ${ds.filtered_count ?? 0} noise entries`;
+
+        const kWin = document.getElementById('kpi-win');
+        if (kWin) kWin.textContent = (sn['win_rate_%'] || 0).toFixed(1) + '%';
+        const kTrades = document.getElementById('kpi-trades');
+        if (kTrades) kTrades.textContent = `${sn.trades ?? 0} trades (${rawNet.trades ?? 0} raw)`;
+
+        const kPf = document.getElementById('kpi-pf');
+        if (kPf) kPf.textContent = sn.profit_factor ?? '--';
+        const kAvg = document.getElementById('kpi-avg');
+        if (kAvg) kAvg.textContent = `W:${fmtUsd(sn.avg_win)} / L:${fmtUsd(sn.avg_loss)}`;
+
+        const kDd = document.getElementById('kpi-dd');
+        if (kDd) kDd.textContent = '-$' + (sn.max_drawdown || 0).toFixed(2);
+        const kStreak = document.getElementById('kpi-streak');
+        if (kStreak) kStreak.textContent = `Worst Streak: ${sn.longest_losing_streak ?? 0}`;
+
+        const kMfe = document.getElementById('kpi-mfe');
+        if (kMfe) kMfe.textContent = `+${sn.avg_mfe_bricks ?? 0} / -${sn.avg_mae_bricks ?? 0} brk`;
+        const kOver = document.getElementById('kpi-over');
+        if (kOver) kOver.textContent = `Avg Overshoot: $${(sn.avg_overshoot || 0).toFixed(2)}`;
+
+        // Capital.com Live Positions Table
+        const livePositions = bot.live_positions || [];
+        const posBody = document.getElementById('positions-tbody');
+        const posCnt = document.getElementById('dock-pos-cnt');
+        if (posCnt) posCnt.textContent = livePositions.length;
+        if (kpiBrokerPos) kpiBrokerPos.textContent = `${livePositions.length} Open Deals`;
+
+        if (posBody) {
+          posBody.innerHTML = '';
+          if (livePositions.length === 0) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td colspan="8" style="text-align:center; padding:16px; color:var(--text-2);">
+              No open positions on Capital.com (${(creds.env || 'demo').toUpperCase()}). Bot will place orders automatically when signals trigger.
+            </td>`;
+            posBody.appendChild(tr);
+          } else {
+            for (const p of livePositions) {
+              const tr = document.createElement('tr');
+              const isBuy = p.direction === 'BUY';
+              const sideBadge = isBuy
+                ? '<span class="badge buy">BUY</span>'
+                : '<span class="badge sell">SELL</span>';
+              const uplCls = p.upl >= 0 ? 'pos' : 'neg';
+              tr.innerHTML = `
+                <td>${p.dealId}</td>
+                <td><b>${p.epic}</b></td>
+                <td>${sideBadge}</td>
+                <td>${p.size}</td>
+                <td>$${Number(p.level).toFixed(2)}</td>
+                <td>${p.stopLevel ? '$' + Number(p.stopLevel).toFixed(2) : '--'}</td>
+                <td class="${uplCls}" style="font-weight:700;">${p.upl >= 0 ? '+' : ''}$${Number(p.upl).toFixed(2)}</td>
+                <td>
+                  <button class="danger" style="padding:2px 8px; font-size:10.5px;" onclick="closeBrokerDeal('${p.dealId}')">Close</button>
+                </td>
+              `;
+              posBody.appendChild(tr);
+            }
+          }
+        }
+
+        // Render canvases
+        drawRenkoChart(bt.bricks, bt.trades, bt.filtered_events);
+        drawEquityChart(bt.equity_curve, bt.raw_curve);
+        drawMonteCarloChart(bt.montecarlo);
+
+        // Session Table
+        const sbody = document.getElementById('session-tbody');
+        if (sbody) {
+          sbody.innerHTML = '';
+          const labels = {
+            asian: 'Asian (00:00–07:00)',
+            london: 'London (07:00–13:00)',
+            new_york: 'New York (13:00–21:00)'
+          };
+          for (const [k, st] of Object.entries(bt.sessions_net || {})) {
+            const tr = document.createElement('tr');
+            const cls = (st.net || 0) >= 0 ? 'pos' : 'neg';
+            tr.innerHTML = `
+              <td>${labels[k] || k}</td>
+              <td>${st.trades ?? 0}</td>
+              <td>${st['win_rate_%'] ?? 0}%</td>
+              <td>${st.profit_factor ?? '--'}</td>
+              <td>$${(st.avg_overshoot || 0).toFixed(2)}</td>
+              <td class="${cls}" style="font-weight:700">${fmtUsd(st.net)}</td>
+            `;
+            sbody.appendChild(tr);
+          }
+        }
+
+        // Trade List Table
+        const tbody = document.getElementById('trades-tbody');
+        const dockTradeCnt = document.getElementById('dock-trade-cnt');
+        if (dockTradeCnt) dockTradeCnt.textContent = (bt.trades || []).length;
+        if (tbody) {
+          tbody.innerHTML = '';
+          const revTrades = [...(bt.trades || [])].reverse();
+          for (const t of revTrades) {
+            const tr = document.createElement('tr');
+            const sideBadge = t.side === 'LONG' ? '<span class="badge buy">LONG</span>' : '<span class="badge sell">SHORT</span>';
+            const outBadge = t.why_out === 'SAFETY_STOP'
+              ? '<span class="badge stop">SAFETY_STOP</span>'
+              : (t.why_out || '--');
+            tr.innerHTML = `
+              <td>${t.num}</td>
+              <td>${sideBadge}</td>
+              <td>${t.session}</td>
+              <td>${(t.entry_time || '').slice(5, 16).replace('T', ' ')}</td>
+              <td>${Number(t.trigger_px).toFixed(2)}</td>
+              <td>${Number(t.entry_exec).toFixed(2)}</td>
+              <td>${Number(t.exit_exec).toFixed(2)}</td>
+              <td>${outBadge}</td>
+              <td>+${t.mfe_bricks} / -${t.mae_bricks}</td>
+              <td class="${t.gross >= 0 ? 'pos' : 'neg'}">${fmtUsd(t.gross)}</td>
+              <td class="${t.net >= 0 ? 'pos' : 'neg'}" style="font-weight:700">${fmtUsd(t.net)}</td>
+            `;
+            tbody.appendChild(tr);
+          }
+        }
+
+        // Bot Log Table
+        const logBody = document.getElementById('log-tbody');
+        if (logBody) {
+          logBody.innerHTML = '';
+          const logs = bot.live_log || [];
+          for (const l of logs) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${(l.time || '').slice(5, 19).replace('T', ' ')}</td>
+              <td><b>${l.event || ''}</b></td>
+              <td>${l.side || ''}</td>
+              <td>${l.size || ''}</td>
+              <td>${l.price || ''}</td>
+              <td>${l.stop || ''}</td>
+              <td>${l.deal_id || ''}</td>
+              <td style="color:var(--text-1); font-size:10.5px;">${l.note || ''}</td>
+            `;
+            logBody.appendChild(tr);
+          }
+        }
+      } catch (err) {
+        console.error('Error in renderAll:', err);
       }
     }
 
     function setupCanvas(canvas) {
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
+      const parent = canvas.parentElement;
+      const w = Math.max(rect.width, parent ? parent.clientWidth : 0, 300);
+      const h = Math.max(rect.height, parent ? parent.clientHeight : 0, 160);
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
       const ctx = canvas.getContext('2d');
       ctx.scale(dpr, dpr);
-      return { ctx, w: rect.width, h: rect.height };
+      return { ctx, w, h };
     }
 
     function drawRenkoChart(bricks, trades, filtered) {
@@ -1841,13 +1883,14 @@
       if (!canvas) return;
       const { ctx, w, h } = setupCanvas(canvas);
       ctx.clearRect(0, 0, w, h);
-      if (!bricks || !bricks.length) return;
+      if (!bricks || !bricks.length || w <= 20 || h <= 20) return;
 
       const view = bricks.slice(-CURRENT_BRICK_COUNT);
+      if (!view.length) return;
       const ds = STATE?.backtest?.data_summary || {};
       const sub = document.getElementById('chart-sub');
       if (sub) {
-        sub.textContent = `Showing last ${view.length} bricks (#${view[0].index}–#${view[view.length - 1].index}) | Size: $${(ds.last_brick_size || 0).toFixed(2)}`;
+        sub.textContent = `Showing last ${view.length} bricks (#${view[0].index}–#${view[view.length - 1].index}) | Brick Size: $${(ds.last_brick_size || 0).toFixed(2)}`;
       }
 
       let minP = Infinity, maxP = -Infinity;
@@ -1859,16 +1902,20 @@
         minP = Math.min(minP, ds.last_price);
         maxP = Math.max(maxP, ds.last_price);
       }
+      if (minP >= maxP || !isFinite(minP) || !isFinite(maxP)) {
+        minP = (ds.last_price || 2700) - 15;
+        maxP = (ds.last_price || 2700) + 15;
+      }
       const padP = (maxP - minP) * 0.08 || 4;
       minP -= padP;
       maxP += padP;
 
-      const padL = 10, padR = 64, padT = 14, padB = 22;
-      const plotW = w - padL - padR;
-      const plotH = h - padT - padB;
+      const padL = 12, padR = 68, padT = 16, padB = 24;
+      const plotW = Math.max(50, w - padL - padR);
+      const plotH = Math.max(50, h - padT - padB);
       const py = p => padT + plotH - ((p - minP) / (maxP - minP)) * plotH;
 
-      // Horizontal price grid lines
+      // Horizontal price grid lines and right axis labels
       ctx.strokeStyle = '#161c28';
       ctx.fillStyle = '#64748b';
       ctx.font = '10px JetBrains Mono, monospace';
@@ -1884,11 +1931,27 @@
 
       const stepX = plotW / view.length;
       const bw = Math.max(3, stepX * 0.82);
+      const offsetX = (stepX - bw) / 2;
 
-      // Pre-map trade signals and vetoes
+      // Bottom date/time stamps
+      ctx.fillStyle = '#475569';
+      ctx.font = '9px JetBrains Mono, monospace';
+      const timeInterval = Math.max(1, Math.floor(view.length / 5));
+      for (let i = 0; i < view.length; i += timeInterval) {
+        const b = view[i];
+        if (b.time) {
+          const tLabel = b.time.slice(5, 16).replace('T', ' ');
+          const tx = padL + i * stepX + offsetX;
+          ctx.fillText(tLabel, tx, h - 7);
+        }
+      }
+
+      // Pre-map trade signals, exits, and vetoes
       const entryByBrick = {};
+      const exitByBrick = {};
       for (const t of trades || []) {
         if (t.entry_brick_idx !== undefined) entryByBrick[t.entry_brick_idx] = t;
+        if (t.exit_brick_idx !== undefined) exitByBrick[t.exit_brick_idx] = t;
       }
       const vetoByBrick = {};
       for (const f of filtered || []) {
@@ -1929,7 +1992,7 @@
       // 2. Draw Renko Bricks with crisp TradingView outlines & fills
       for (let i = 0; i < view.length; i++) {
         const b = view[i];
-        const x = padL + i * stepX;
+        const x = padL + i * stepX + offsetX;
         const isUp = b.direction === 1;
         const topPx = Math.max(b.open, b.close);
         const botPx = Math.min(b.open, b.close);
@@ -1953,23 +2016,36 @@
         const tr = entryByBrick[b.index];
         if (tr) {
           const isBuy = tr.side === 'LONG';
-          const my = isBuy ? yBot + 12 : yTop - 12;
+          const cx = x + bw / 2;
+          const my = isBuy ? yBot + 14 : yTop - 14;
           ctx.fillStyle = isBuy ? '#10b981' : '#ef5350';
           ctx.beginPath();
           if (isBuy) {
-            ctx.moveTo(x + bw / 2, yBot + 2);
-            ctx.lineTo(x + bw / 2 - 5, my);
-            ctx.lineTo(x + bw / 2 + 5, my);
+            ctx.moveTo(cx, yBot + 2);
+            ctx.lineTo(cx - 5, my);
+            ctx.lineTo(cx + 5, my);
           } else {
-            ctx.moveTo(x + bw / 2, yTop - 2);
-            ctx.lineTo(x + bw / 2 - 5, my);
-            ctx.lineTo(x + bw / 2 + 5, my);
+            ctx.moveTo(cx, yTop - 2);
+            ctx.lineTo(cx - 5, my);
+            ctx.lineTo(cx + 5, my);
           }
           ctx.closePath();
           ctx.fill();
         }
 
-        // 4. Filter Veto Dots
+        // 4. Trade Exit Markers
+        const trExit = exitByBrick[b.index];
+        if (trExit) {
+          const cx = x + bw / 2;
+          const isStop = trExit.why_out === 'SAFETY_STOP';
+          const ey = trExit.side === 'LONG' ? yTop - 10 : yBot + 10;
+          ctx.fillStyle = isStop ? '#ef4444' : '#94a3b8';
+          ctx.beginPath();
+          ctx.arc(cx, ey, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // 5. Filter Veto Dots
         if (vetoByBrick[b.index]) {
           ctx.fillStyle = '#f59e0b';
           ctx.beginPath();
@@ -1978,7 +2054,7 @@
         }
       }
 
-      // 5. Current Live Price Line & Axis Badge
+      // 6. Current Live Price Line & Axis Badge
       if (ds.last_price) {
         const lpy = py(ds.last_price);
         ctx.strokeStyle = '#38bdf8';
@@ -1998,13 +2074,13 @@
         ctx.fillText('$' + ds.last_price.toFixed(1), w - padR + 5, lpy + 3.5);
       }
     }
-    }
 
     function drawEquityChart(curve, rawCurve) {
       const canvas = document.getElementById('equity-canvas');
+      if (!canvas) return;
       const { ctx, w, h } = setupCanvas(canvas);
       ctx.clearRect(0, 0, w, h);
-      if (!curve || curve.length < 2) return;
+      if (!curve || curve.length < 2 || w <= 20 || h <= 20) return;
 
       const netVals = curve.map(p => p.net);
       const grossVals = curve.map(p => p.gross);
@@ -2014,7 +2090,7 @@
       minV -= pad; maxV += pad;
 
       const padL = 48, padR = 14, padT = 14, padB = 22;
-      const plotW = w - padL - padR, plotH = h - padT - padB;
+      const plotW = Math.max(20, w - padL - padR), plotH = Math.max(20, h - padT - padB);
       const py = v => padT + plotH - ((v - minV) / (maxV - minV)) * plotH;
 
       const y0 = py(0);
@@ -2050,14 +2126,18 @@
 
     function drawMonteCarloChart(mc) {
       const canvas = document.getElementById('mc-canvas');
+      if (!canvas) return;
       const { ctx, w, h } = setupCanvas(canvas);
       ctx.clearRect(0, 0, w, h);
-      if (!mc || !mc.fan_p50 || mc.fan_p50.length < 2) return;
+      if (!mc || !mc.fan_p50 || mc.fan_p50.length < 2 || w <= 20 || h <= 20) return;
 
-      document.getElementById('mc-summary').innerHTML =
-        `<span>95% Max DD: <b class="neg">-$${mc.p95_dd}</b></span>` +
-        `<span>95% Streak: <b>${mc.p95_streak}</b></span>` +
-        `<span>Loss Prob: <b>${mc['loss_prob_%']}%</b></span>`;
+      const elSummary = document.getElementById('mc-summary');
+      if (elSummary) {
+        elSummary.innerHTML =
+          `<span>95% Max DD: <b class="neg">-$${mc.p95_dd}</b></span>` +
+          `<span>95% Streak: <b>${mc.p95_streak}</b></span>` +
+          `<span>Loss Prob: <b>${mc['loss_prob_%']}%</b></span>`;
+      }
 
       const all = [...mc.fan_p10, ...mc.fan_p90, 0];
       for (const p of mc.sample_paths || []) all.push(...p);
@@ -2066,7 +2146,7 @@
       minV -= pad; maxV += pad;
 
       const padL = 48, padR = 14, padT = 14, padB = 22;
-      const plotW = w - padL - padR, plotH = h - padT - padB;
+      const plotW = Math.max(20, w - padL - padR), plotH = Math.max(20, h - padT - padB);
       const py = v => padT + plotH - ((v - minV) / (maxV - minV)) * plotH;
       const n = mc.fan_p50.length;
       const px = i => padL + (i / (n - 1)) * plotW;
