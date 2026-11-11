@@ -9,7 +9,7 @@
   "risk_per_trade_usd": 50,
   "strategy": {
     "atr_len": 5,
-    "atr_div": 5,
+    "atr_div": 15.0,
     "round_tick": true,
     "fallback_size": 10.0,
     "use_hl": true,

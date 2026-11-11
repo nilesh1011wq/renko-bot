@@ -708,12 +708,13 @@
           </div>
           <div class="field">
             <label>ATR Divisor</label>
-            <input type="number" id="in-atr_div" value="5.0" step="0.5" min="0.5">
+            <input type="number" id="in-atr_div" value="15.0" step="0.5" min="0.5">
           </div>
           <div class="field full" style="display:flex; gap:4px; margin-top:-2px; margin-bottom:2px;">
+            <button type="button" class="btn-xs active" style="flex:1;" onclick="setBrickDivisor(15.0, this)" title="Optimal Institutional Balanced (~$3.50 brick, Profit Factor 4.03)">🏆 Best ~$3.50</button>
             <button type="button" class="btn-xs" style="flex:1;" onclick="setBrickDivisor(25.0, this)" title="Intraday fast scalping (~$1.50 brick) with frequent trades">⚡ Scalp ~$1.50</button>
-            <button type="button" class="btn-xs" style="flex:1;" onclick="setBrickDivisor(10.0, this)" title="Standard balanced intraday (~$4.00 brick)">⚖ Medium ~$4</button>
-            <button type="button" class="btn-xs active" style="flex:1;" onclick="setBrickDivisor(5.0, this)" title="Swing trend-following (~$10.00 brick)">🌊 Swing ~$10</button>
+            <button type="button" class="btn-xs" style="flex:1;" onclick="setBrickDivisor(10.0, this)" title="Standard balanced intraday (~$5.00 brick)">⚖ Medium ~$5</button>
+            <button type="button" class="btn-xs" style="flex:1;" onclick="setBrickDivisor(5.0, this)" title="Swing trend-following (~$10.00 brick)">🌊 Swing ~$10</button>
           </div>
           <div class="field">
             <label>Green Bricks → BUY</label>
