@@ -35,6 +35,16 @@ def log_event(event: str, side: str, size: float, price: float | None, stop: flo
         ])
 
 
+def resolve_epic_alias(epic: str) -> list[str]:
+    cands = [epic]
+    up = epic.upper()
+    if up == "GOLD":
+        cands.append("XAUUSD")
+    elif up == "XAUUSD":
+        cands.append("GOLD")
+    return cands
+
+
 def warmup_engine(cap: Capital, cfg: dict):
     """Fetch recent history to warm up DailyAtr and RenkoEngine without repainting."""
     epic = cfg["epic"]
@@ -43,28 +53,53 @@ def warmup_engine(cap: Capital, cfg: dict):
     p = Params.from_dict(cfg["strategy"])
 
     end = datetime.now(timezone.utc)
-    bars = cap.prices(epic, res, end - timedelta(days=5), end)
-    days = cap.prices(epic, "DAY", end - timedelta(days=35), end)
+    bars = []
+    days = []
+    for cand in resolve_epic_alias(epic):
+        try:
+            b_try = cap.prices(cand, res, end - timedelta(days=5), end)
+            if b_try:
+                bars = b_try
+                cfg["epic"] = cand
+                try:
+                    days = cap.prices(cand, "DAY", end - timedelta(days=35), end)
+                except Exception:
+                    pass
+                break
+        except Exception:
+            continue
 
-    bar_delta = timedelta(minutes=RES_MINUTES[res])
-    closed_bars = [b for b in bars if b["t"] + bar_delta <= end]
+    if not bars:
+        try:
+            from backtest import ensure_data
+            bars, _ = ensure_data(cfg)
+        except Exception:
+            bars = []
+
+    bar_delta = timedelta(minutes=RES_MINUTES.get(res, 1))
+    closed_bars = [b for b in bars if b["t"] + bar_delta <= end] if bars else []
 
     datr = DailyAtr([d["t"] for d in days], [pick(d, "h", price_type) for d in days],
-                    [pick(d, "l", price_type) for d in days], [pick(d, "c", price_type) for d in days], p.atr_len)
+                    [pick(d, "l", price_type) for d in days], [pick(d, "c", price_type) for d in days], p.atr_len) if days else None
     eng = RenkoEngine(p)
     tick = cfg["tick"]
     last_n = 0
     last_bs = p.fallback_size
     for b in closed_bars:
-        last_bs = brick_size_from_atr(datr.at(b["t"]), p, tick)
+        last_bs = brick_size_from_atr(datr.at(b["t"]) if datr else None, p, tick)
         last_n = eng.on_bar(b["t"], pick(b, "h", price_type), pick(b, "l", price_type),
                             pick(b, "c", price_type), last_bs)
     return eng, datr, closed_bars, last_n, last_bs
 
 
 def broker_position(cap: Capital, epic: str):
-    """Inspect open positions on Capital.com for this epic."""
-    positions = [p for p in cap.positions() if p.get("market", {}).get("epic") == epic]
+    """Inspect open positions on Capital.com for this epic (including aliases)."""
+    cands = set(resolve_epic_alias(epic))
+    try:
+        raw_pos = cap.positions()
+    except Exception:
+        raw_pos = []
+    positions = [p for p in raw_pos if p.get("market", {}).get("epic") in cands]
     if not positions:
         return 0, [], None, 0.0
     direction = positions[0].get("position", {}).get("direction", "BUY")
@@ -81,22 +116,39 @@ def execute_decision(cap: Capital, cfg: dict, action: str, reverse: bool,
     sz = size if size is not None else compute_size(cfg, bs)
     if action in ("EXIT", "COVER") or (reverse and deal_ids):
         for did in deal_ids:
-            conf = cap.close_position(did)
-            log_event("CLOSE", action, sz, conf.get("level"), None, did,
-                      realized_pnl=conf.get("profit", 0.0), note=conf.get("dealStatus", ""))
-            print(f"Closed deal {did}: status={conf.get('dealStatus')} level={conf.get('level')}")
+            try:
+                conf = cap.close_position(did)
+                log_event("CLOSE", action, sz, conf.get("level"), None, did,
+                          realized_pnl=conf.get("profit", 0.0), note=conf.get("dealStatus", ""))
+                print(f"Closed deal {did}: status={conf.get('dealStatus')} level={conf.get('level')}")
+            except Exception as e:
+                print(f"Error closing deal {did}: {e}")
+                log_event("ERROR", action, sz, None, None, did, note=str(e))
         if action in ("EXIT", "COVER"):
             return
 
     if action in ("BUY", "SELL"):
         side = 1 if action == "BUY" else -1
         stop = safety_stop_level(side, last_close, bs, cfg)
-        conf = cap.open_position(epic, action, sz, stop_level=stop)
-        did = conf.get("dealId", "")
-        evt = "REVERSE_OPEN" if reverse else "OPEN"
-        log_event(evt, action, sz, conf.get("level"), stop, did, note=conf.get("dealStatus", ""))
-        print(f"Opened {action} {sz} {epic}: dealId={did} status={conf.get('dealStatus')} "
-              f"level={conf.get('level')} stop={stop}")
+        conf = None
+        last_err = None
+        for cand in resolve_epic_alias(epic):
+            try:
+                conf = cap.open_position(cand, action, sz, stop_level=stop)
+                cfg["epic"] = cand
+                break
+            except Exception as e:
+                last_err = e
+                continue
+        if conf:
+            did = conf.get("dealId", "")
+            evt = "REVERSE_OPEN" if reverse else "OPEN"
+            log_event(evt, action, sz, conf.get("level"), stop, did, note=conf.get("dealStatus", ""))
+            print(f"Opened {action} {sz} {cfg['epic']}: dealId={did} status={conf.get('dealStatus')} "
+                  f"level={conf.get('level')} stop={stop}")
+        else:
+            log_event("ERROR", action, sz, None, stop, note=f"Order failed: {last_err}")
+            print(f"Failed to open {action}: {last_err}")
 
 
 def cmd_status(a, cfg):
@@ -129,7 +181,16 @@ def step_once(cap: Capital, cfg: dict):
         print("No closed bars returned.")
         return
     pos_dir, deal_ids, current_stop, _ = broker_position(cap, cfg["epic"])
-    mkt = cap.market(cfg["epic"]).get("snapshot", {})
+    mkt = {}
+    for cand in resolve_epic_alias(cfg["epic"]):
+        try:
+            res = cap.market(cand)
+            if res and res.get("snapshot"):
+                mkt = res.get("snapshot", {})
+                cfg["epic"] = cand
+                break
+        except Exception:
+            continue
     bid, ask = mkt.get("bid"), mkt.get("offer")
 
     if pos_dir != 0 and deal_ids and eng.last_close is not None:
@@ -145,6 +206,17 @@ def step_once(cap: Capital, cfg: dict):
     st_label = "BULL" if eng.st_dir == 1 else "BEAR"
     print(f"[{last_bar_t}] brick={eng.last_close:.2f} (bs={bs:.2f}) G={eng.green_run} R={eng.red_run} "
           f"ST={st_label} pos={pos_dir} -> signal={d.action or 'NONE'} ({d.filtered_reason or 'ok'})")
+
+    # Record scan pulse in activity log so trader sees live monitoring in dashboard
+    need_scan_log = False
+    if not LIVE_TRADES.exists() or LIVE_TRADES.stat().st_size < 120:
+        need_scan_log = True
+    elif last_n > 0:
+        need_scan_log = True
+
+    if need_scan_log:
+        status_note = f"G:{eng.green_run} R:{eng.red_run} | ST:{st_label} | Brick:${bs:.2f} | Sig:{d.action or 'Waiting'}"
+        log_event("SCAN", st_label, 0.0, eng.last_close, None, "", note=status_note)
 
     if not d.action:
         return

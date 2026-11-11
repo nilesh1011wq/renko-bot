@@ -639,6 +639,10 @@
         <span class="lbl">24/7 BOT</span>
         <span class="val" id="hdr-watch">PAUSED</span>
       </div>
+      <div class="pill" id="pill-mode" style="cursor:pointer;" onclick="toggleBotMode()" title="Click to switch between Full Auto (direct broker orders) and Semi-Auto (on-screen tickets)">
+        <span class="lbl">MODE</span>
+        <span class="val" id="hdr-mode" style="color:var(--green-bright); font-weight:700;">AUTO</span>
+      </div>
       <div class="pill" id="pill-broker" style="cursor:pointer;" onclick="openBrokerModal()" title="Click to view or connect Capital.com Broker API">
         <span class="dot amber" id="hdr-conn-dot"></span>
         <span class="lbl">BROKER</span>
@@ -705,6 +709,11 @@
           <div class="field">
             <label>ATR Divisor</label>
             <input type="number" id="in-atr_div" value="5.0" step="0.5" min="0.5">
+          </div>
+          <div class="field full" style="display:flex; gap:4px; margin-top:-2px; margin-bottom:2px;">
+            <button type="button" class="btn-xs" style="flex:1;" onclick="setBrickDivisor(25.0, this)" title="Intraday fast scalping (~$1.50 brick) with frequent trades">⚡ Scalp ~$1.50</button>
+            <button type="button" class="btn-xs" style="flex:1;" onclick="setBrickDivisor(10.0, this)" title="Standard balanced intraday (~$4.00 brick)">⚖ Medium ~$4</button>
+            <button type="button" class="btn-xs active" style="flex:1;" onclick="setBrickDivisor(5.0, this)" title="Swing trend-following (~$10.00 brick)">🌊 Swing ~$10</button>
           </div>
           <div class="field">
             <label>Green Bricks → BUY</label>
@@ -1546,6 +1555,37 @@
       return syncLiveBrokerPrice();
     }
 
+    async function toggleBotMode() {
+      const cur = (STATE?.config?.mode || 'auto').toLowerCase();
+      const next = cur === 'auto' ? 'semi-auto' : 'auto';
+      const updated = {...(STATE?.config || {}), mode: next};
+      const elMode = document.getElementById('in-mode');
+      if (elMode) elMode.value = next;
+      try {
+        const res = await apiFetch('/api/config', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(updated)
+        });
+        const data = await res.json();
+        STATE = data;
+        renderAll();
+        showToast(next === 'auto'
+          ? '⚡ Switched to FULL AUTO: Valid Renko signals will execute directly on broker!'
+          : '📋 Switched to SEMI-AUTO: Signals will trigger on-screen ticket for manual approval.');
+      } catch (err) {
+        showToast('Error changing bot mode: ' + err.message);
+      }
+    }
+
+    function setBrickDivisor(divVal, btn) {
+      const el = document.getElementById('in-atr_div');
+      if (el) el.value = divVal;
+      document.querySelectorAll('.panel .btn-xs').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      applyConfigAndRun();
+    }
+
     async function uploadCsv(input) {
       const file = input.files[0];
       if (!file) return;
@@ -1720,6 +1760,13 @@
             wSub.style.color = 'var(--amber)';
           }
           wTxt.textContent = `${w.last_status || 'Idle'} | Last: ${w.last_check ? w.last_check.slice(11, 19) + ' UTC' : 'never'}`;
+        }
+
+        const elMode = document.getElementById('hdr-mode');
+        const activeMode = (STATE?.config?.mode || 'auto').toUpperCase();
+        if (elMode) {
+          elMode.textContent = activeMode === 'AUTO' ? 'FULL AUTO' : 'SEMI-AUTO';
+          elMode.style.color = activeMode === 'AUTO' ? 'var(--green-bright)' : 'var(--blue-light)';
         }
 
         const creds = bot.credentials || {};

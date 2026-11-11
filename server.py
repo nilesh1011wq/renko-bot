@@ -664,9 +664,11 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     pass
 
+                WATCHER.start()
+
                 self._send_json({
                     "ok": True,
-                    "message": f"Successfully connected to Capital.com ({env.upper()})! Credentials verified and live feed synced.",
+                    "message": f"Successfully connected to Capital.com ({env.upper()})! 24/7 Watcher is now active and monitoring market.",
                     "bot": get_bot_status(cfg),
                     "backtest": serialize_backtest(cfg),
                 })
@@ -961,8 +963,9 @@ def main():
     cfg = load_config()
     ensure_data(cfg)
 
-    if os.environ.get("AUTO_START_WATCHER", "").lower() in ("1", "true", "yes"):
+    if os.environ.get("AUTO_START_WATCHER", "").lower() in ("1", "true", "yes") or check_credentials_present().get("connected"):
         WATCHER.start()
+        print("24/7 Watcher auto-started (Broker credentials active).")
 
     srv = ThreadingHTTPServer((a.host, a.port), Handler)
     print(f"Renko ATR Pro Cloud Dashboard running at http://{a.host}:{a.port}")
