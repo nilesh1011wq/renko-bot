@@ -377,7 +377,40 @@ def get_bot_status(cfg: dict) -> dict:
     live_log = []
     if LIVE_TRADES.exists():
         with LIVE_TRADES.open() as f:
-            live_log = list(csv.DictReader(f))[-30:]
+            live_log = list(csv.DictReader(f))[-40:]
+
+    broker_positions = []
+    broker_market = {}
+    if creds.get("connected"):
+        try:
+            cap = Capital("live" if cfg.get("live") else "demo")
+            pos_raw = cap.positions()
+            for p in pos_raw:
+                pos_info = p.get("position", {})
+                mkt_info = p.get("market", {})
+                broker_positions.append({
+                    "dealId": str(pos_info.get("dealId", "")),
+                    "epic": mkt_info.get("epic", cfg["epic"]),
+                    "direction": str(pos_info.get("direction", "BUY")),
+                    "size": float(pos_info.get("size", 0.0)),
+                    "level": float(pos_info.get("level", 0.0)),
+                    "stopLevel": float(pos_info["stopLevel"]) if pos_info.get("stopLevel") is not None else None,
+                    "upl": float(pos_info.get("upl", 0.0)),
+                    "createdDate": str(pos_info.get("createdDate", "")),
+                })
+            mkt_raw = cap.market(cfg["epic"])
+            snap = mkt_raw.get("snapshot", {})
+            broker_market = {
+                "bid": snap.get("bid"),
+                "offer": snap.get("offer"),
+                "high": snap.get("high"),
+                "low": snap.get("low"),
+                "marketStatus": snap.get("marketStatus", "TRADEABLE"),
+                "netChange": snap.get("netChange"),
+                "percentageChange": snap.get("percentageChange"),
+            }
+        except Exception:
+            pass
 
     return {
         "credentials": creds,
@@ -388,6 +421,8 @@ def get_bot_status(cfg: dict) -> dict:
         "today_trades": cnt,
         "today_pnl": pnl,
         "pending_ticket": pending,
+        "live_positions": broker_positions,
+        "market": broker_market,
         "live_log": list(reversed(live_log)),
     }
 
@@ -581,6 +616,26 @@ class Handler(BaseHTTPRequestHandler):
                     "message": "Broker disconnected. Keys cleared from memory.",
                     "bot": get_bot_status(cfg),
                 })
+                return
+
+            if u.path == "/api/close-position":
+                deal_id = str(body.get("dealId", "")).strip()
+                if not deal_id:
+                    self._send_json({"error": "Missing dealId"}, 400)
+                    return
+                try:
+                    cap = Capital("live" if cfg.get("live") else "demo")
+                    conf = cap.close_position(deal_id)
+                    from bot import log_event
+                    log_event("MANUAL_CLOSE", "CLOSE", 0, conf.get("level"), None, deal_id,
+                              realized_pnl=conf.get("profit", 0.0), note=conf.get("dealStatus", "CLOSED"))
+                    self._send_json({
+                        "ok": True,
+                        "message": f"Closed Capital.com deal {deal_id}",
+                        "bot": get_bot_status(cfg)
+                    })
+                except Exception as e:
+                    self._send_json({"error": f"Failed to close deal {deal_id}: {e}"}, 400)
                 return
 
             if u.path == "/api/watcher":
