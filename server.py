@@ -408,7 +408,7 @@ def serialize_backtest(cfg: dict, use_cache: bool = True, skip_network: bool = F
         raw_eq = round(raw_eq + t["net"], 2)
         raw_curve.append(raw_eq)
 
-    mc_net = run_montecarlo([t["net"] for t in trades], runs=2500, seed=19)
+    mc_net = run_montecarlo([t["net"] for t in trades], runs=500, seed=19)
     last_b = eng.bricks[-1] if eng.bricks else None
     last_price = round(bars[-1]["c"], digits) if bars else None
 
@@ -1106,21 +1106,6 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": str(e)}, 500)
 
 
-def prewarm_backtest_cache():
-    """Background pre-warm of backtest cache so instrument switches are 0ms."""
-    try:
-        base_cfg = load_config()
-        for ep in ("GOLD", "SILVER", "OIL_CRUDE", "OIL_BRENT", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "US500", "US100", "US30", "GER40", "JP225"):
-            c = copy.deepcopy(base_cfg)
-            c["epic"] = ep
-            if ep in INSTRUMENT_SPECS:
-                c["tick"] = INSTRUMENT_SPECS[ep]["tick"]
-                c["strategy"]["fallback_size"] = INSTRUMENT_SPECS[ep]["fallback_size"]
-            serialize_backtest(c, use_cache=True)
-    except Exception:
-        pass
-
-
 def main():
     load_env()
     default_host = os.environ.get("HOST", "0.0.0.0")
@@ -1132,9 +1117,6 @@ def main():
 
     cfg = load_config()
     ensure_data(cfg)
-
-    # Pre-warm backtest cache in background for instant switching
-    threading.Thread(target=prewarm_backtest_cache, daemon=True).start()
 
     if os.environ.get("AUTO_START_WATCHER", "").lower() in ("1", "true", "yes") or check_credentials_present().get("connected"):
         WATCHER.start()
