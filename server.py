@@ -280,14 +280,29 @@ def check_credentials_present() -> dict:
     }
 
 
+_MARKET_SNAP_CACHE: dict[str, tuple[float, dict, str]] = {}
+_MARKET_SNAP_LOCK = threading.Lock()
+MARKET_SNAP_TTL = 10.0
+
+
 def get_live_market_snapshot(cap: Capital, epic: str) -> tuple[dict, str]:
-    """Query live market snapshot from Capital.com, checking aliases (e.g. GOLD vs XAUUSD, OIL_CRUDE vs USCRUDE)."""
+    """Query live market snapshot from Capital.com, checking aliases with in-memory caching."""
+    now = time.time()
+    with _MARKET_SNAP_LOCK:
+        if epic in _MARKET_SNAP_CACHE:
+            ts, snap, cand = _MARKET_SNAP_CACHE[epic]
+            if now - ts < MARKET_SNAP_TTL:
+                return snap, cand
+
     candidates = resolve_epic_alias(epic)
     for cand in candidates:
         try:
             res = cap.market(cand)
             if res and res.get("snapshot"):
-                return res.get("snapshot", {}), cand
+                snap = res.get("snapshot", {})
+                with _MARKET_SNAP_LOCK:
+                    _MARKET_SNAP_CACHE[epic] = (now, snap, cand)
+                return snap, cand
         except Exception:
             continue
     return {}, epic
@@ -312,7 +327,7 @@ def clear_backtest_cache():
         _BACKTEST_CACHE.clear()
 
 
-def serialize_backtest(cfg: dict, use_cache: bool = True) -> dict:
+def serialize_backtest(cfg: dict, use_cache: bool = True, skip_network: bool = False) -> dict:
     cache_key = _cfg_cache_key(cfg)
     now = time.time()
     if use_cache:
@@ -398,18 +413,19 @@ def serialize_backtest(cfg: dict, use_cache: bool = True) -> dict:
     last_price = round(bars[-1]["c"], digits) if bars else None
 
     # Sync with live broker mid price if Capital.com connected
-    creds = check_credentials_present()
-    if creds.get("connected"):
-        try:
-            cap_live = Capital("live" if cfg.get("live") else "demo")
-            snap_quick, matched_epic = get_live_market_snapshot(cap_live, cfg.get("epic", "GOLD"))
-            b_q, o_q = snap_quick.get("bid"), snap_quick.get("offer")
-            if b_q is not None and o_q is not None:
-                last_price = round((b_q + o_q) / 2, digits)
-            elif b_q is not None or o_q is not None:
-                last_price = round(b_q if b_q is not None else o_q, digits)
-        except Exception:
-            pass
+    if not skip_network:
+        creds = check_credentials_present()
+        if creds.get("connected"):
+            try:
+                cap_live = Capital("live" if cfg.get("live") else "demo")
+                snap_quick, matched_epic = get_live_market_snapshot(cap_live, cfg.get("epic", "GOLD"))
+                b_q, o_q = snap_quick.get("bid"), snap_quick.get("offer")
+                if b_q is not None and o_q is not None:
+                    last_price = round((b_q + o_q) / 2, digits)
+                elif b_q is not None or o_q is not None:
+                    last_price = round(b_q if b_q is not None else o_q, digits)
+            except Exception:
+                pass
 
     res = {
         "data_summary": {
@@ -453,7 +469,7 @@ def serialize_backtest(cfg: dict, use_cache: bool = True) -> dict:
     return res
 
 
-def get_bot_status(cfg: dict) -> dict:
+def get_bot_status(cfg: dict, skip_network: bool = False) -> dict:
     creds = check_credentials_present()
     cnt, pnl = today_stats()
     pending = None
@@ -470,7 +486,7 @@ def get_bot_status(cfg: dict) -> dict:
 
     broker_positions = []
     broker_market = {}
-    if creds.get("connected"):
+    if not skip_network and creds.get("connected"):
         try:
             cap = Capital("live" if cfg.get("live") else "demo")
             pos_raw = cap.positions()
@@ -856,8 +872,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({
                     "ok": True,
                     "config": cfg,
-                    "bot": get_bot_status(cfg),
-                    "backtest": serialize_backtest(cfg, use_cache=True),
+                    "bot": get_bot_status(cfg, skip_network=True),
+                    "backtest": serialize_backtest(cfg, use_cache=True, skip_network=True),
                     "instrument_specs": INSTRUMENT_SPECS,
                 })
                 return
