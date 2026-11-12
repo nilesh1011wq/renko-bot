@@ -820,9 +820,31 @@
           <div class="field full">
             <label>Broker Instrument (Epic)</label>
             <select id="in-epic">
-              <option value="GOLD">GOLD (Spot Gold CFD - 1 oz)</option>
-              <option value="XAUUSD">XAUUSD (Gold / US Dollar)</option>
-              <option value="SILVER">SILVER (Spot Silver CFD)</option>
+              <optgroup label="Metals">
+                <option value="GOLD">GOLD (Spot Gold CFD - 1 oz)</option>
+                <option value="XAUUSD">XAUUSD (Gold / US Dollar)</option>
+                <option value="SILVER">SILVER (Spot Silver CFD)</option>
+              </optgroup>
+              <optgroup label="Energy &amp; Oil">
+                <option value="OIL_CRUDE">OIL_CRUDE (WTI Light Crude Oil)</option>
+                <option value="OIL_BRENT">OIL_BRENT (Brent Crude Oil)</option>
+              </optgroup>
+              <optgroup label="Major Forex Pairs">
+                <option value="EURUSD">EUR/USD (Euro / US Dollar)</option>
+                <option value="GBPUSD">GBP/USD (British Pound / US Dollar)</option>
+                <option value="USDJPY">USD/JPY (US Dollar / Japanese Yen)</option>
+                <option value="AUDUSD">AUD/USD (Australian Dollar / US Dollar)</option>
+                <option value="USDCAD">USD/CAD (US Dollar / Canadian Dollar)</option>
+                <option value="USDCHF">USD/CHF (US Dollar / Swiss Franc)</option>
+              </optgroup>
+              <optgroup label="Major Global Indices">
+                <option value="US500">US500 (S&amp;P 500 Index)</option>
+                <option value="US100">US100 (Nasdaq 100 Tech Index)</option>
+                <option value="US30">US30 (Wall Street 30 / Dow Jones)</option>
+                <option value="GER40">GER40 (Germany DAX 40)</option>
+                <option value="UK100">UK100 (UK FTSE 100)</option>
+                <option value="JP225">JP225 (Japan Nikkei 225)</option>
+              </optgroup>
             </select>
           </div>
           <div class="field full">
@@ -1233,6 +1255,29 @@
       if (v === null || v === undefined || isNaN(v)) return '--';
       const sign = v > 0 ? '+' : '';
       return sign + '$' + Number(v).toFixed(2);
+    }
+
+    function getInstrumentDigits() {
+      const ds = (window.STATE && window.STATE.backtest && window.STATE.backtest.data_summary) || {};
+      if (ds.digits !== undefined && ds.digits !== null) return ds.digits;
+      const epic = ((window.STATE && window.STATE.config && window.STATE.config.epic) || 'GOLD').toUpperCase();
+      if (epic.includes('EUR') || epic.includes('GBP') || epic.includes('AUD') || epic.includes('CAD') || epic.includes('CHF')) return 4;
+      if (epic.includes('SILVER') || epic.includes('XAG')) return 3;
+      if (epic.includes('JP225')) return 0;
+      return 2;
+    }
+
+    function getInstrumentCurrency() {
+      const epic = ((window.STATE && window.STATE.config && window.STATE.config.epic) || 'GOLD').toUpperCase();
+      if (epic.includes('EUR') || epic.includes('GBP') || epic.includes('AUD') || epic.includes('CAD') || epic.includes('CHF') || epic.includes('USDJPY')) return '';
+      return '$';
+    }
+
+    function fmtPx(v, decimals) {
+      if (v === null || v === undefined || isNaN(v)) return '--';
+      const d = decimals !== undefined ? decimals : getInstrumentDigits();
+      const pfx = getInstrumentCurrency();
+      return pfx + Number(v).toFixed(d);
     }
 
     async function apiFetch(url, options = {}) {
@@ -1877,14 +1922,16 @@
         const mkt = bot.market || {};
         const hasLiveBroker = (mkt.bid !== undefined && mkt.bid !== null) && (mkt.offer !== undefined && mkt.offer !== null);
         const livePx = hasLiveBroker ? mkt.mid : (ds.last_price || null);
+        const digits = getInstrumentDigits();
+        const pfx = getInstrumentCurrency();
         const elPx = document.getElementById('hdr-px');
         const elPxSub = document.getElementById('hdr-px-sub');
         if (elPx) {
-          elPx.textContent = livePx ? '$' + Number(livePx).toFixed(2) : '--';
+          elPx.textContent = livePx ? pfx + Number(livePx).toFixed(digits) : '--';
           if (hasLiveBroker) {
             elPx.style.color = '#38bdf8';
             if (elPxSub) {
-              elPxSub.innerHTML = `<span style="color:#10b981">B:$${Number(mkt.bid).toFixed(2)}</span> / <span style="color:#ef5350">A:$${Number(mkt.offer).toFixed(2)}</span> <span style="color:var(--text-2); font-size:9.5px;">(Spr $${Number(mkt.spread || 0).toFixed(2)})</span>`;
+              elPxSub.innerHTML = `<span style="color:#10b981">B:${pfx}${Number(mkt.bid).toFixed(digits)}</span> / <span style="color:#ef5350">A:${pfx}${Number(mkt.offer).toFixed(digits)}</span> <span style="color:var(--text-2); font-size:9.5px;">(Spr ${pfx}${Number(mkt.spread || 0).toFixed(digits)})</span>`;
             }
           } else {
             elPx.style.color = 'var(--text-0)';
@@ -1894,14 +1941,15 @@
           }
         }
         const elBs = document.getElementById('hdr-bs');
-        if (elBs) elBs.textContent = '$' + (ds.last_brick_size || 0).toFixed(2);
+        if (elBs) elBs.textContent = pfx + (ds.last_brick_size || 0).toFixed(digits);
         const elRuns = document.getElementById('hdr-runs');
         if (elRuns) elRuns.innerHTML = `<span class="pos">G:${ds.green_run ?? 0}</span> / <span class="neg">R:${ds.red_run ?? 0}</span>`;
         const elSt = document.getElementById('hdr-st');
         if (elSt) {
+          const stValStr = ds.st_now !== null && ds.st_now !== undefined ? `${pfx}${Number(ds.st_now).toFixed(digits)}` : '--';
           elSt.innerHTML = ds.st_dir === 1
-            ? `<span class="pos">BULL (${ds.st_now ?? '--'})</span>`
-            : `<span class="neg">BEAR (${ds.st_now ?? '--'})</span>`;
+            ? `<span class="pos">BULL (${stValStr})</span>`
+            : `<span class="neg">BEAR (${stValStr})</span>`;
         }
 
         // Watcher status
@@ -2043,7 +2091,7 @@
         const kMfe = document.getElementById('kpi-mfe');
         if (kMfe) kMfe.textContent = `+${sn.avg_mfe_bricks ?? 0} / -${sn.avg_mae_bricks ?? 0} brk`;
         const kOver = document.getElementById('kpi-over');
-        if (kOver) kOver.textContent = `Avg Overshoot: $${(sn.avg_overshoot || 0).toFixed(2)}`;
+        if (kOver) kOver.textContent = `Avg Overshoot: ${pfx}${(sn.avg_overshoot || 0).toFixed(digits)}`;
 
         // Capital.com Live Positions Table
         const livePositions = bot.live_positions || [];
@@ -2073,8 +2121,8 @@
                 <td><b>${p.epic}</b></td>
                 <td>${sideBadge}</td>
                 <td>${p.size}</td>
-                <td>$${Number(p.level).toFixed(2)}</td>
-                <td>${p.stopLevel ? '$' + Number(p.stopLevel).toFixed(2) : '--'}</td>
+                <td>${pfx}${Number(p.level).toFixed(digits)}</td>
+                <td>${p.stopLevel ? pfx + Number(p.stopLevel).toFixed(digits) : '--'}</td>
                 <td class="${uplCls}" style="font-weight:700;">${p.upl >= 0 ? '+' : ''}$${Number(p.upl).toFixed(2)}</td>
                 <td>
                   <button class="danger" style="padding:2px 8px; font-size:10.5px;" onclick="closeBrokerDeal('${p.dealId}')">Close</button>
@@ -2107,7 +2155,7 @@
               <td>${st.trades ?? 0}</td>
               <td>${st['win_rate_%'] ?? 0}%</td>
               <td>${st.profit_factor ?? '--'}</td>
-              <td>$${(st.avg_overshoot || 0).toFixed(2)}</td>
+              <td>${pfx}${(st.avg_overshoot || 0).toFixed(digits)}</td>
               <td class="${cls}" style="font-weight:700">${fmtUsd(st.net)}</td>
             `;
             sbody.appendChild(tr);
@@ -2132,9 +2180,9 @@
               <td>${sideBadge}</td>
               <td>${t.session}</td>
               <td>${(t.entry_time || '').slice(5, 16).replace('T', ' ')}</td>
-              <td>${Number(t.trigger_px).toFixed(2)}</td>
-              <td>${Number(t.entry_exec).toFixed(2)}</td>
-              <td>${Number(t.exit_exec).toFixed(2)}</td>
+              <td>${Number(t.trigger_px).toFixed(digits)}</td>
+              <td>${Number(t.entry_exec).toFixed(digits)}</td>
+              <td>${Number(t.exit_exec).toFixed(digits)}</td>
               <td>${outBadge}</td>
               <td>+${t.mfe_bricks} / -${t.mae_bricks}</td>
               <td class="${t.gross >= 0 ? 'pos' : 'neg'}">${fmtUsd(t.gross)}</td>
@@ -2207,6 +2255,8 @@
       const mkt = bot.market || {};
       const hasLiveBroker = (mkt.bid !== undefined && mkt.bid !== null) && (mkt.offer !== undefined && mkt.offer !== null);
       const activePx = hasLiveBroker ? mkt.mid : (ds.last_price || null);
+      const digits = getInstrumentDigits();
+      const pfx = getInstrumentCurrency();
 
       // Update Live buttons visibility
       const btnFloat = document.getElementById('btn-floating-live');
@@ -2226,11 +2276,11 @@
       const sub = document.getElementById('chart-sub');
       if (sub && (!RENKO_HOVER || isChartDragging)) {
         const epicTag = (mkt.epic || ds.epic || 'GOLD').toUpperCase();
-        const pxTag = activePx ? ` | ${hasLiveBroker ? 'Live Broker Px' : 'Last Px'}: $${Number(activePx).toFixed(2)}` : '';
+        const pxTag = activePx ? ` | ${hasLiveBroker ? 'Live Broker Px' : 'Last Px'}: ${pfx}${Number(activePx).toFixed(digits)}` : '';
         const modeBadge = CHART_SCROLL_OFFSET > 0 
           ? `<span style="color:var(--amber); font-weight:700;">📜 HISTORY (-${CHART_SCROLL_OFFSET} bricks)</span>`
           : `<span style="color:var(--green); font-weight:700;">⚡ LIVE</span>`;
-        sub.innerHTML = `${modeBadge} | ${epicTag} | Showing ${view.length} bricks (#${view[0].index}–#${view[view.length - 1].index} of ${totalBricks}) | Brick Size: $${(ds.last_brick_size || 0).toFixed(2)}${pxTag}`;
+        sub.innerHTML = `${modeBadge} | ${epicTag} | Showing ${view.length} bricks (#${view[0].index}–#${view[view.length - 1].index} of ${totalBricks}) | Brick Size: ${pfx}${(ds.last_brick_size || 0).toFixed(digits)}${pxTag}`;
       }
 
       let minP = Infinity, maxP = -Infinity;
@@ -2266,7 +2316,7 @@
         ctx.moveTo(padL, y);
         ctx.lineTo(w - padR, y);
         ctx.stroke();
-        ctx.fillText('$' + p.toFixed(1), w - padR + 6, y + 3.5);
+        ctx.fillText(pfx + p.toFixed(digits >= 4 ? 4 : (digits === 0 ? 0 : 1)), w - padR + 6, y + 3.5);
       }
 
       const stepX = plotW / view.length;
@@ -2411,7 +2461,7 @@
         ctx.fillRect(w - padR + 2, lpy - 9, padR - 4, 18);
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 9.5px JetBrains Mono, monospace';
-        ctx.fillText('$' + Number(activePx).toFixed(1), w - padR + 4, lpy + 3.5);
+        ctx.fillText(pfx + Number(activePx).toFixed(digits), w - padR + 4, lpy + 3.5);
       }
 
       // 7. Interactive Hover: Crosshairs, Halo, Prices on Block, Floating Tooltip
@@ -2462,7 +2512,7 @@
           ctx.fillRect(w - padR + 2, myClamped - 9, padR - 4, 18);
           ctx.fillStyle = '#ffffff';
           ctx.font = 'bold 9.5px JetBrains Mono, monospace';
-          ctx.fillText('$' + cursorPrice.toFixed(2), w - padR + 4, myClamped + 3.5);
+          ctx.fillText(pfx + cursorPrice.toFixed(digits), w - padR + 4, myClamped + 3.5);
 
           // Time Axis Badge at Brick Center
           if (hb.time) {
@@ -2496,8 +2546,8 @@
             ctx.fillText(text, px + 4, pyP + 11);
           }
 
-          const closeTxt = '$' + hb.close.toFixed(2);
-          const openTxt = '$' + hb.open.toFixed(2);
+          const closeTxt = pfx + hb.close.toFixed(digits);
+          const openTxt = pfx + hb.open.toFixed(digits);
 
           if (isUp) {
             drawPill('▲ ' + closeTxt, hCenter, hyTop, '#065f46', '#34d399', true);
@@ -2512,14 +2562,14 @@
           if (sub) {
             const dirIcon = isUp ? '▲' : '▼';
             const dirColor = isUp ? '#10b981' : '#ef5350';
-            const moveAmt = Math.abs(hb.close - hb.open).toFixed(2);
+            const moveAmt = Math.abs(hb.close - hb.open).toFixed(digits);
             const moveSign = isUp ? '+' : '-';
-            const stStr = hb.st_value !== null ? (' | ST: $' + hb.st_value.toFixed(2) + (hb.st_dir === 1 ? ' (Bull)' : ' (Bear)')) : '';
+            const stStr = hb.st_value !== null ? (' | ST: ' + pfx + hb.st_value.toFixed(digits) + (hb.st_dir === 1 ? ' (Bull)' : ' (Bear)')) : '';
             const tStr = hb.time ? (' | ' + hb.time.slice(5, 19).replace('T', ' ') + ' UTC') : '';
             sub.innerHTML = `<span style="color:#38bdf8; font-weight:700;">BRICK #${hb.index}</span> | ` +
               `<span style="color:${dirColor}; font-weight:700;">${dirIcon} ${isUp ? 'UP' : 'DOWN'}</span> | ` +
-              `<b>CLOSE: $${hb.close.toFixed(2)}</b> | OPEN: $${hb.open.toFixed(2)} | ` +
-              `SIZE: ${moveSign}$${moveAmt}${stStr}${tStr}`;
+              `<b>CLOSE: ${pfx}${hb.close.toFixed(digits)}</b> | OPEN: ${pfx}${hb.open.toFixed(digits)} | ` +
+              `SIZE: ${moveSign}${pfx}${moveAmt}${stStr}${tStr}`;
           }
 
           // Floating Tooltip HUD
@@ -2532,12 +2582,12 @@
             if (trIn) {
               const bColor = trIn.side === 'LONG' ? '#10b981' : '#ef5350';
               badgeHtml += `<div style="margin-top:5px; padding:3px 6px; background:rgba(0,0,0,0.5); border-left:3px solid ${bColor}; font-size:10.5px; border-radius:2px;">
-                <b style="color:${bColor};">${trIn.side === 'LONG' ? '🟢 BUY' : '🔴 SELL'} ENTRY</b> @ $${trIn.entry}
+                <b style="color:${bColor};">${trIn.side === 'LONG' ? '🟢 BUY' : '🔴 SELL'} ENTRY</b> @ ${pfx}${Number(trIn.entry).toFixed(digits)}
               </div>`;
             }
             if (trOut) {
               badgeHtml += `<div style="margin-top:4px; padding:3px 6px; background:rgba(0,0,0,0.5); border-left:3px solid #ef4444; font-size:10.5px; border-radius:2px;">
-                <b style="color:#ef4444;">🛑 EXIT: ${trOut.why_out || 'SIGNAL'}</b> @ $${trOut.exit}
+                <b style="color:#ef4444;">🛑 EXIT: ${trOut.why_out || 'SIGNAL'}</b> @ ${pfx}${Number(trOut.exit).toFixed(digits)}
               </div>`;
             }
             if (veto) {
@@ -2546,9 +2596,9 @@
               </div>`;
             }
 
-            const diff = (hb.close - hb.open).toFixed(2);
+            const diff = Math.abs(hb.close - hb.open).toFixed(digits);
             const diffPct = (((hb.close - hb.open) / hb.open) * 100).toFixed(2);
-            const stLabel = hb.st_value !== null ? `$${hb.st_value.toFixed(2)} (${hb.st_dir === 1 ? 'Bullish' : 'Bearish'})` : '--';
+            const stLabel = hb.st_value !== null ? `${pfx}${hb.st_value.toFixed(digits)} (${hb.st_dir === 1 ? 'Bullish' : 'Bearish'})` : '--';
             const stColor = hb.st_dir === 1 ? '#10b981' : '#f43f5e';
 
             tooltip.innerHTML = `
@@ -2560,15 +2610,15 @@
               </div>
               <div class="hud-row">
                 <span class="hud-lbl">Close Price:</span>
-                <span class="hud-val" style="font-size:12px; color:${isUp ? '#34d399' : '#f87171'};">$${hb.close.toFixed(2)}</span>
+                <span class="hud-val" style="font-size:12px; color:${isUp ? '#34d399' : '#f87171'};">${pfx}${hb.close.toFixed(digits)}</span>
               </div>
               <div class="hud-row">
                 <span class="hud-lbl">Open Price:</span>
-                <span class="hud-val">$${hb.open.toFixed(2)}</span>
+                <span class="hud-val">${pfx}${hb.open.toFixed(digits)}</span>
               </div>
               <div class="hud-row">
                 <span class="hud-lbl">Brick Move:</span>
-                <span class="hud-val" style="color:${isUp ? '#34d399' : '#f87171'};">${isUp ? '+' : ''}$${diff} (${diffPct}%)</span>
+                <span class="hud-val" style="color:${isUp ? '#34d399' : '#f87171'};">${isUp ? '+' : '-'}${pfx}${diff} (${diffPct}%)</span>
               </div>
               <div class="hud-row">
                 <span class="hud-lbl">Supertrend:</span>
@@ -2950,6 +3000,14 @@
 
     initDockDraggable();
     initRenkoChartEvents();
+
+    const inEpicSelect = document.getElementById('in-epic');
+    if (inEpicSelect) {
+      inEpicSelect.addEventListener('change', () => {
+        saveAndRun();
+      });
+    }
+
     loadState();
   </script>
 </body>

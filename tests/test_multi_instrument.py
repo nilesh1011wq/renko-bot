@@ -1,0 +1,83 @@
+import unittest
+from backtest import INSTRUMENT_SPECS, generate_sample_gold_data
+from bot import resolve_epic_alias, EPIC_ALIASES
+from server import serialize_backtest, load_config
+
+
+class TestMultiInstrument(unittest.TestCase):
+    def test_instrument_specs_coverage(self):
+        """Verify all requested asset classes (Oil, Forex, Indices) exist in INSTRUMENT_SPECS."""
+        required = [
+            # Metals
+            "GOLD", "XAUUSD", "SILVER",
+            # Energy & Oil
+            "OIL_CRUDE", "OIL_BRENT",
+            # Major Forex
+            "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF",
+            # Major Indices
+            "US500", "US100", "US30", "GER40", "UK100", "JP225",
+        ]
+        for epic in required:
+            self.assertIn(epic, INSTRUMENT_SPECS, f"Missing spec for {epic}")
+            spec = INSTRUMENT_SPECS[epic]
+            self.assertGreater(spec["base_px"], 0)
+            self.assertGreater(spec["tick"], 0)
+            self.assertGreater(spec["fallback_size"], 0)
+
+    def test_alias_resolution(self):
+        """Verify broker alias mapping works for Oil, Forex, and Indices."""
+        # Crude oil aliases
+        oil_aliases = resolve_epic_alias("OIL_CRUDE")
+        self.assertIn("USCRUDE", oil_aliases)
+        self.assertIn("WTI", oil_aliases)
+
+        # Forex aliases
+        eur_aliases = resolve_epic_alias("EURUSD")
+        self.assertIn("EUR/USD", eur_aliases)
+
+        # Index aliases
+        us500_aliases = resolve_epic_alias("US500")
+        self.assertIn("SP500", us500_aliases)
+
+    def test_sample_candle_generation_across_classes(self):
+        """Verify realistic candles are generated with correct scale & price levels."""
+        # Oil
+        oil_bars, _ = generate_sample_gold_data(epic="OIL_CRUDE", days_intraday=3, seed=42)
+        self.assertTrue(len(oil_bars) > 0)
+        self.assertTrue(40.0 < oil_bars[-1]["c"] < 120.0, f"Unexpected oil price: {oil_bars[-1]['c']}")
+
+        # EURUSD
+        eur_bars, _ = generate_sample_gold_data(epic="EURUSD", days_intraday=3, seed=42)
+        self.assertTrue(len(eur_bars) > 0)
+        self.assertTrue(0.80 < eur_bars[-1]["c"] < 1.40, f"Unexpected EURUSD price: {eur_bars[-1]['c']}")
+
+        # US500
+        sp_bars, _ = generate_sample_gold_data(epic="US500", days_intraday=3, seed=42)
+        self.assertTrue(len(sp_bars) > 0)
+        self.assertTrue(4000.0 < sp_bars[-1]["c"] < 8000.0, f"Unexpected US500 price: {sp_bars[-1]['c']}")
+
+    def test_serialize_backtest_with_oil_and_forex(self):
+        """Verify serialize_backtest returns correct digits and brick metrics for other instruments."""
+        # Test Oil
+        cfg_oil = load_config()
+        cfg_oil["epic"] = "OIL_CRUDE"
+        cfg_oil["tick"] = 0.01
+        cfg_oil["strategy"]["fallback_size"] = 0.20
+        res_oil = serialize_backtest(cfg_oil)
+        self.assertEqual(res_oil["data_summary"]["epic"], "OIL_CRUDE")
+        self.assertEqual(res_oil["data_summary"]["digits"], 2)
+        self.assertGreater(len(res_oil["bricks"]), 0)
+
+        # Test EURUSD
+        cfg_eur = load_config()
+        cfg_eur["epic"] = "EURUSD"
+        cfg_eur["tick"] = 0.0001
+        cfg_eur["strategy"]["fallback_size"] = 0.0008
+        res_eur = serialize_backtest(cfg_eur)
+        self.assertEqual(res_eur["data_summary"]["epic"], "EURUSD")
+        self.assertEqual(res_eur["data_summary"]["digits"], 4)
+        self.assertGreater(len(res_eur["bricks"]), 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

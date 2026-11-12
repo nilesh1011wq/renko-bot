@@ -48,32 +48,57 @@ def load_bars(path):
     return rows
 
 
+INSTRUMENT_SPECS = {
+    "GOLD": {"base_px": 2640.0, "tick": 0.01, "digits": 2, "scale": 1.0, "half_sp": 0.14, "fallback_size": 3.50},
+    "XAUUSD": {"base_px": 2640.0, "tick": 0.01, "digits": 2, "scale": 1.0, "half_sp": 0.14, "fallback_size": 3.50},
+    "SILVER": {"base_px": 31.50, "tick": 0.001, "digits": 3, "scale": 31.5 / 2640.0, "half_sp": 0.01, "fallback_size": 0.08},
+    "OIL_CRUDE": {"base_px": 72.00, "tick": 0.01, "digits": 2, "scale": 72.0 / 2640.0, "half_sp": 0.03, "fallback_size": 0.20},
+    "OIL_BRENT": {"base_px": 76.00, "tick": 0.01, "digits": 2, "scale": 76.0 / 2640.0, "half_sp": 0.03, "fallback_size": 0.20},
+    "EURUSD": {"base_px": 1.0850, "tick": 0.0001, "digits": 4, "scale": 1.085 / 2640.0, "half_sp": 0.0001, "fallback_size": 0.0008},
+    "GBPUSD": {"base_px": 1.2950, "tick": 0.0001, "digits": 4, "scale": 1.295 / 2640.0, "half_sp": 0.00012, "fallback_size": 0.0010},
+    "USDJPY": {"base_px": 153.00, "tick": 0.01, "digits": 2, "scale": 153.0 / 2640.0, "half_sp": 0.015, "fallback_size": 0.15},
+    "AUDUSD": {"base_px": 0.6650, "tick": 0.0001, "digits": 4, "scale": 0.665 / 2640.0, "half_sp": 0.0001, "fallback_size": 0.0006},
+    "USDCAD": {"base_px": 1.3850, "tick": 0.0001, "digits": 4, "scale": 1.385 / 2640.0, "half_sp": 0.0001, "fallback_size": 0.0007},
+    "USDCHF": {"base_px": 0.8850, "tick": 0.0001, "digits": 4, "scale": 0.885 / 2640.0, "half_sp": 0.0001, "fallback_size": 0.0007},
+    "US500": {"base_px": 5850.0, "tick": 0.1, "digits": 1, "scale": 5850.0 / 2640.0, "half_sp": 0.35, "fallback_size": 5.0},
+    "US100": {"base_px": 20800.0, "tick": 0.5, "digits": 1, "scale": 20800.0 / 2640.0, "half_sp": 1.2, "fallback_size": 25.0},
+    "US30": {"base_px": 43500.0, "tick": 1.0, "digits": 1, "scale": 43500.0 / 2640.0, "half_sp": 2.0, "fallback_size": 35.0},
+    "GER40": {"base_px": 19400.0, "tick": 1.0, "digits": 1, "scale": 19400.0 / 2640.0, "half_sp": 1.5, "fallback_size": 18.0},
+    "UK100": {"base_px": 8200.0, "tick": 1.0, "digits": 1, "scale": 8200.0 / 2640.0, "half_sp": 1.0, "fallback_size": 10.0},
+    "JP225": {"base_px": 39000.0, "tick": 5.0, "digits": 0, "scale": 39000.0 / 2640.0, "half_sp": 5.0, "fallback_size": 50.0},
+}
+
+
 def generate_sample_gold_data(epic="GOLD", res="MINUTE", days_intraday=12, seed=42):
-    """Generate realistic Gold (XAUUSD) 1-minute & daily candles with trend regimes,
-    Asian chop, London/NY breakouts, rollover spread widening, and occasional news spikes."""
+    """Generate realistic 1-minute & daily candles across asset classes (Gold, Oil, Forex, Indices)."""
+    spec = INSTRUMENT_SPECS.get(epic.upper(), INSTRUMENT_SPECS["GOLD"])
+    scale = spec["scale"]
+    px = spec["base_px"]
+    digits = spec["digits"]
+    base_sp = spec["half_sp"]
+
     rng = random.Random(seed)
     end_day = datetime(2026, 11, 6, 21, 0, tzinfo=timezone.utc)
     start_day = end_day - timedelta(days=45)
 
     # 1. Build 45 days of daily candles first (so ATR(5) is warm)
     day_bars = []
-    px = 2640.0
     cur = start_day.replace(hour=0, minute=0)
     intraday_start = end_day - timedelta(days=days_intraday)
 
     while cur < intraday_start:
         if cur.weekday() < 5:
-            drift = rng.gauss(1.2, 14.0)
-            hi = px + abs(rng.gauss(13.0, 5.0)) + max(0, drift)
-            lo = px - abs(rng.gauss(13.0, 5.0)) + min(0, drift)
-            cl = max(lo + 1.0, min(hi - 1.0, px + drift))
+            drift = rng.gauss(1.2 * scale, 14.0 * scale)
+            hi = px + abs(rng.gauss(13.0 * scale, 5.0 * scale)) + max(0, drift)
+            lo = px - abs(rng.gauss(13.0 * scale, 5.0 * scale)) + min(0, drift)
+            cl = max(lo + 1.0 * scale, min(hi - 1.0 * scale, px + drift))
             day_bars.append({
-                "t": cur, "o": round(px, 2), "h": round(hi, 2),
-                "l": round(lo, 2), "c": round(cl, 2),
-                "o_bid": round(px - 0.15, 2), "o_ask": round(px + 0.15, 2),
-                "h_bid": round(hi - 0.15, 2), "h_ask": round(hi + 0.15, 2),
-                "l_bid": round(lo - 0.15, 2), "l_ask": round(lo + 0.15, 2),
-                "c_bid": round(cl - 0.15, 2), "c_ask": round(cl + 0.15, 2),
+                "t": cur, "o": round(px, digits), "h": round(hi, digits),
+                "l": round(lo, digits), "c": round(cl, digits),
+                "o_bid": round(px - base_sp, digits), "o_ask": round(px + base_sp, digits),
+                "h_bid": round(hi - base_sp, digits), "h_ask": round(hi + base_sp, digits),
+                "l_bid": round(lo - base_sp, digits), "l_ask": round(lo + base_sp, digits),
+                "c_bid": round(cl - base_sp, digits), "c_ask": round(cl + base_sp, digits),
             })
             px = cl
         cur += timedelta(days=1)
@@ -93,20 +118,20 @@ def generate_sample_gold_data(epic="GOLD", res="MINUTE", days_intraday=12, seed=
             # Pick a regime: strong trend up, strong trend down, or mean-reverting range
             sess = session_of(t)
             if sess == "asian":
-                regime_drift = rng.choice([-0.03, 0.0, 0.03])
+                regime_drift = rng.choice([-0.03, 0.0, 0.03]) * scale
                 regime_left = rng.randint(60, 180)
             else:
-                regime_drift = rng.choice([-0.16, -0.10, 0.0, 0.11, 0.18])
+                regime_drift = rng.choice([-0.16, -0.10, 0.0, 0.11, 0.18]) * scale
                 regime_left = rng.randint(45, 160)
         regime_left -= 1
 
         sess = session_of(t)
-        vol = 0.42 if sess == "asian" else (0.78 if sess == "london" else 0.95)
+        vol = (0.42 if sess == "asian" else (0.78 if sess == "london" else 0.95)) * scale
 
         # Occasional news candle at 12:30 UTC (US macro release)
         is_news = (t.hour == 12 and t.minute == 30 and rng.random() < 0.35)
         if is_news:
-            step = rng.choice([-1, 1]) * rng.uniform(14.0, 24.0)
+            step = rng.choice([-1, 1]) * rng.uniform(14.0 * scale, 24.0 * scale)
         else:
             step = regime_drift + rng.gauss(0, vol)
 
@@ -117,15 +142,15 @@ def generate_sample_gold_data(epic="GOLD", res="MINUTE", days_intraday=12, seed=
         h = max(o, c) + wick_up
         l = min(o, c) - wick_dn
 
-        # Spread: ~0.28 normal, ~1.40 in rollover window or news minute
-        half_sp = 0.70 if (in_rollover_blackout(t) or is_news) else 0.14
+        # Spread: ~normal, ~5x in rollover window or news minute
+        half_sp = (base_sp * 5.0) if (in_rollover_blackout(t) or is_news) else base_sp
         min_bars.append({
             "t": t,
-            "o": round(o, 2), "h": round(h, 2), "l": round(l, 2), "c": round(c, 2),
-            "o_bid": round(o - half_sp, 2), "o_ask": round(o + half_sp, 2),
-            "h_bid": round(h - half_sp, 2), "h_ask": round(h + half_sp, 2),
-            "l_bid": round(l - half_sp, 2), "l_ask": round(l + half_sp, 2),
-            "c_bid": round(c - half_sp, 2), "c_ask": round(c + half_sp, 2),
+            "o": round(o, digits), "h": round(h, digits), "l": round(l, digits), "c": round(c, digits),
+            "o_bid": round(o - half_sp, digits), "o_ask": round(o + half_sp, digits),
+            "h_bid": round(h - half_sp, digits), "h_ask": round(h + half_sp, digits),
+            "l_bid": round(l - half_sp, digits), "l_ask": round(l + half_sp, digits),
+            "c_bid": round(c - half_sp, digits), "c_ask": round(c + half_sp, digits),
         })
         px = c
         t += timedelta(minutes=1)

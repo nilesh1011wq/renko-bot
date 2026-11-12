@@ -33,10 +33,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from backtest import (DATA, JOURNAL, data_path, ensure_data, generate_sample_gold_data,
+from backtest import (DATA, JOURNAL, INSTRUMENT_SPECS, data_path, ensure_data, generate_sample_gold_data,
                       load_config, save_bars, save_config, session_breakdown,
                       simulate, stats, write_trades)
-from bot import LIVE_TRADES, PENDING_FILE, step_once
+from bot import LIVE_TRADES, PENDING_FILE, resolve_epic_alias, step_once
 from capital_api import Capital, CapitalError, RES_MINUTES, SSL_CTX, load_env
 from montecarlo import run_montecarlo
 from risk import kill_switch_active, set_kill_switch, today_stats
@@ -280,13 +280,8 @@ def check_credentials_present() -> dict:
 
 
 def get_live_market_snapshot(cap: Capital, epic: str) -> tuple[dict, str]:
-    """Query live market snapshot from Capital.com, checking aliases (e.g. GOLD vs XAUUSD)."""
-    candidates = [epic]
-    up = epic.upper()
-    if up == "GOLD":
-        candidates.append("XAUUSD")
-    elif up == "XAUUSD":
-        candidates.append("GOLD")
+    """Query live market snapshot from Capital.com, checking aliases (e.g. GOLD vs XAUUSD, OIL_CRUDE vs USCRUDE)."""
+    candidates = resolve_epic_alias(epic)
     for cand in candidates:
         try:
             res = cap.market(cand)
@@ -317,15 +312,17 @@ def serialize_backtest(cfg: dict) -> dict:
     raw_trades, _, _, _ = simulate(bars, days, raw_cfg, use_stop=False)
 
     tail_bricks = eng.bricks[-250:]
+    spec = INSTRUMENT_SPECS.get(cfg.get("epic", "GOLD").upper(), INSTRUMENT_SPECS.get("GOLD", {}))
+    digits = spec.get("digits", 2)
     bricks_json = [{
         "index": b.index,
-        "open": round(b.open, 2),
-        "close": round(b.close, 2),
+        "open": round(b.open, digits),
+        "close": round(b.close, digits),
         "direction": b.direction,
         "time": b.time.isoformat() if hasattr(b.time, "isoformat") else str(b.time),
-        "st_value": round(b.st_value, 2) if b.st_value is not None else None,
+        "st_value": round(b.st_value, digits) if b.st_value is not None else None,
         "st_dir": b.st_dir,
-        "brick_size": round(b.brick_size, 2),
+        "brick_size": round(b.brick_size, max(digits, 2)),
     } for b in tail_bricks]
 
     trades_json = []
@@ -369,7 +366,7 @@ def serialize_backtest(cfg: dict) -> dict:
 
     mc_net = run_montecarlo([t["net"] for t in trades], runs=2500, seed=19)
     last_b = eng.bricks[-1] if eng.bricks else None
-    last_price = bars[-1]["c"] if bars else None
+    last_price = round(bars[-1]["c"], digits) if bars else None
 
     # Sync with live broker mid price if Capital.com connected
     creds = check_credentials_present()
@@ -379,9 +376,9 @@ def serialize_backtest(cfg: dict) -> dict:
             snap_quick, matched_epic = get_live_market_snapshot(cap_live, cfg.get("epic", "GOLD"))
             b_q, o_q = snap_quick.get("bid"), snap_quick.get("offer")
             if b_q is not None and o_q is not None:
-                last_price = round((b_q + o_q) / 2, 2)
+                last_price = round((b_q + o_q) / 2, digits)
             elif b_q is not None or o_q is not None:
-                last_price = round(b_q if b_q is not None else o_q, 2)
+                last_price = round(b_q if b_q is not None else o_q, digits)
         except Exception:
             pass
 
@@ -391,16 +388,18 @@ def serialize_backtest(cfg: dict) -> dict:
             "resolution": cfg["resolution"],
             "bars_count": len(bars),
             "days_count": len(days),
+            "digits": digits,
+            "tick": cfg.get("tick", spec.get("tick", 0.01)),
             "start": bars[0]["t"].isoformat() if bars else None,
             "end": bars[-1]["t"].isoformat() if bars else None,
             "last_price": last_price,
             "total_bricks": eng.brick_cnt,
-            "last_brick_size": round(last_b.brick_size, 2) if last_b else cfg["strategy"]["fallback_size"],
-            "last_brick_close": round(eng.last_close, 2) if eng.last_close else None,
+            "last_brick_size": round(last_b.brick_size, max(digits, 2)) if last_b else cfg["strategy"]["fallback_size"],
+            "last_brick_close": round(eng.last_close, digits) if eng.last_close else None,
             "green_run": eng.green_run,
             "red_run": eng.red_run,
             "st_dir": eng.st_dir,
-            "st_now": round(eng.st_now, 2) if eng.st_now else None,
+            "st_now": round(eng.st_now, digits) if eng.st_now else None,
             "filtered_count": len(filtered),
         },
         "stats_gross": stats(trades, "gross"),
@@ -458,11 +457,13 @@ def get_bot_status(cfg: dict) -> dict:
                 cfg["epic"] = matched_epic
                 save_config(cfg)
 
+            spec = INSTRUMENT_SPECS.get(cfg.get("epic", "GOLD").upper(), INSTRUMENT_SPECS.get("GOLD", {}))
+            digits = spec.get("digits", 2)
             if snap:
                 bid = snap.get("bid")
                 offer = snap.get("offer")
-                mid = round((bid + offer) / 2, 2) if (bid is not None and offer is not None) else (bid or offer)
-                spread = round(offer - bid, 2) if (bid is not None and offer is not None) else None
+                mid = round((bid + offer) / 2, digits) if (bid is not None and offer is not None) else (bid or offer)
+                spread = round(offer - bid, digits) if (bid is not None and offer is not None) else None
                 broker_market = {
                     "epic": matched_epic,
                     "bid": bid,
@@ -494,12 +495,7 @@ def get_bot_status(cfg: dict) -> dict:
 
 
 def fetch_candles_with_fallback(cap: Capital, epic: str, resolution: str, start: datetime, end: datetime):
-    candidates = [epic]
-    if epic.upper() == "GOLD":
-        candidates.append("XAUUSD")
-    elif epic.upper() == "XAUUSD":
-        candidates.append("GOLD")
-
+    candidates = resolve_epic_alias(epic)
     last_err = None
     for cand in candidates:
         try:
@@ -761,9 +757,17 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             if u.path == "/api/config":
+                old_epic = str(cfg.get("epic", "GOLD")).upper()
                 for k in ("epic", "resolution", "price", "tick", "size", "sizing_mode", "risk_per_trade_usd", "mode", "live"):
                     if k in body:
                         cfg[k] = body[k]
+                new_epic = str(cfg.get("epic", "GOLD")).upper()
+                if new_epic != old_epic and new_epic in INSTRUMENT_SPECS:
+                    spec = INSTRUMENT_SPECS[new_epic]
+                    if "tick" not in body:
+                        cfg["tick"] = spec["tick"]
+                    if "strategy" not in body or "fallback_size" not in body.get("strategy", {}):
+                        cfg["strategy"]["fallback_size"] = spec["fallback_size"]
                 if "strategy" in body and isinstance(body["strategy"], dict):
                     cfg["strategy"].update(body["strategy"])
                 if "risk" in body and isinstance(body["risk"], dict):
@@ -818,6 +822,8 @@ class Handler(BaseHTTPRequestHandler):
                     bt_st = serialize_backtest(cfg)
                     mkt = bot_st.get("market", {})
                     mid_px = mkt.get("mid") or (bars[-1]["c"] if bars else None)
+                    spec = INSTRUMENT_SPECS.get(cfg.get("epic", "GOLD").upper(), INSTRUMENT_SPECS.get("GOLD", {}))
+                    digits = spec.get("digits", 2)
 
                     self._send_json({
                         "ok": True,
@@ -826,7 +832,7 @@ class Handler(BaseHTTPRequestHandler):
                         "bid": mkt.get("bid"),
                         "offer": mkt.get("offer"),
                         "spread": mkt.get("spread"),
-                        "message": f"Synced {len(bars)} {cfg['epic']} candles from Capital.com ({cap.env.upper()})! Live Price: ${mid_px:.2f}" if mid_px else "Market synced.",
+                        "message": f"Synced {len(bars)} {cfg['epic']} candles from Capital.com ({cap.env.upper()})! Live Price: {mid_px:.{digits}f}" if mid_px else "Market synced.",
                         "config": cfg,
                         "bot": bot_st,
                         "backtest": bt_st,
@@ -879,12 +885,15 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/simulate-ticket":
                 bt = serialize_backtest(cfg)
                 ds = bt["data_summary"]
-                bs = ds["last_brick_size"] or 3.0
-                lc = ds["last_brick_close"] or 2680.0
+                spec = INSTRUMENT_SPECS.get(cfg.get("epic", "GOLD").upper(), INSTRUMENT_SPECS.get("GOLD", {}))
+                digits = spec.get("digits", 2)
+                half_sp = spec.get("half_sp", 0.14)
+                bs = ds["last_brick_size"] or spec.get("fallback_size", 3.50)
+                lc = ds["last_brick_close"] or spec.get("base_px", 2680.0)
                 action = body.get("action", "BUY")
                 side = 1 if action == "BUY" else -1
                 k_stop = float(cfg["risk"].get("safety_stop_bricks", 3.0))
-                stop = round(lc - side * k_stop * bs, 2)
+                stop = round(lc - side * k_stop * bs, digits)
                 now_utc = datetime.now(timezone.utc)
                 ttl = int(cfg["risk"].get("ticket_ttl_seconds", 180))
                 ticket = {
@@ -899,8 +908,8 @@ class Handler(BaseHTTPRequestHandler):
                     "last_brick_close": lc,
                     "brick_size": bs,
                     "safety_stop": stop,
-                    "bid": round(lc - 0.14, 2),
-                    "ask": round(lc + 0.14, 2),
+                    "bid": round(lc - half_sp, digits),
+                    "ask": round(lc + half_sp, digits),
                     "deal_ids": [],
                     "simulated": True,
                 }

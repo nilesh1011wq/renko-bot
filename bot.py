@@ -35,14 +35,37 @@ def log_event(event: str, side: str, size: float, price: float | None, stop: flo
         ])
 
 
+EPIC_ALIASES = {
+    "GOLD": ["GOLD", "XAUUSD", "XAU/USD"],
+    "XAUUSD": ["XAUUSD", "GOLD", "XAU/USD"],
+    "SILVER": ["SILVER", "XAGUSD", "XAG/USD"],
+    "XAGUSD": ["XAGUSD", "SILVER", "XAG/USD"],
+    "OIL_CRUDE": ["OIL_CRUDE", "USCRUDE", "WTI", "USOIL", "OIL", "LIGHTCRUDE"],
+    "OIL_BRENT": ["OIL_BRENT", "BRENT", "UKOIL"],
+    "EURUSD": ["EURUSD", "EUR/USD"],
+    "GBPUSD": ["GBPUSD", "GBP/USD"],
+    "USDJPY": ["USDJPY", "USD/JPY"],
+    "AUDUSD": ["AUDUSD", "AUD/USD"],
+    "USDCAD": ["USDCAD", "USD/CAD"],
+    "USDCHF": ["USDCHF", "USD/CHF"],
+    "US500": ["US500", "SP500", "USA500", "US500_M"],
+    "US100": ["US100", "NASDAQ", "USTECH100", "US100_M"],
+    "US30": ["US30", "WALLSTREET", "US30_M"],
+    "GER40": ["GER40", "DAX", "DE40"],
+    "UK100": ["UK100", "FTSE"],
+    "JP225": ["JP225", "NIKKEI"],
+}
+
+
 def resolve_epic_alias(epic: str) -> list[str]:
-    cands = [epic]
-    up = epic.upper()
-    if up == "GOLD":
-        cands.append("XAUUSD")
-    elif up == "XAUUSD":
-        cands.append("GOLD")
-    return cands
+    up = epic.upper().replace("/", "")
+    if up in EPIC_ALIASES:
+        return list(dict.fromkeys([epic] + EPIC_ALIASES[up]))
+    for k, aliases in EPIC_ALIASES.items():
+        clean_aliases = [a.upper().replace("/", "") for a in aliases]
+        if up in clean_aliases:
+            return list(dict.fromkeys([epic] + aliases))
+    return [epic]
 
 
 def warmup_engine(cap: Capital, cfg: dict):
