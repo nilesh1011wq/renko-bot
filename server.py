@@ -17,6 +17,7 @@ Features for Internet / Cloud Hosting (Railway, Render, Fly.io, Docker, VPS):
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import hashlib
 import hmac
@@ -292,7 +293,35 @@ def get_live_market_snapshot(cap: Capital, epic: str) -> tuple[dict, str]:
     return {}, epic
 
 
-def serialize_backtest(cfg: dict) -> dict:
+_BACKTEST_CACHE: dict[str, tuple[float, dict]] = {}
+_BACKTEST_CACHE_LOCK = threading.Lock()
+BACKTEST_CACHE_TTL = 60.0  # seconds
+
+
+def _cfg_cache_key(cfg: dict) -> str:
+    epic = str(cfg.get("epic", "GOLD")).upper()
+    strat = cfg.get("strategy", {})
+    risk = cfg.get("risk", {})
+    strat_str = f"{strat.get('mode')}_{strat.get('atr_len')}_{strat.get('atr_factor')}_{strat.get('green_run')}_{strat.get('red_run')}_{strat.get('st_atr_len')}_{strat.get('st_factor')}_{strat.get('fallback_size')}"
+    risk_str = f"{risk.get('safety_stop_bricks')}_{risk.get('breakeven_after_bricks')}_{risk.get('rollover_blackout')}"
+    return f"{epic}_{cfg.get('resolution','MINUTE')}_{strat_str}_{risk_str}"
+
+
+def clear_backtest_cache():
+    with _BACKTEST_CACHE_LOCK:
+        _BACKTEST_CACHE.clear()
+
+
+def serialize_backtest(cfg: dict, use_cache: bool = True) -> dict:
+    cache_key = _cfg_cache_key(cfg)
+    now = time.time()
+    if use_cache:
+        with _BACKTEST_CACHE_LOCK:
+            if cache_key in _BACKTEST_CACHE:
+                cached_time, cached_res = _BACKTEST_CACHE[cache_key]
+                if now - cached_time < BACKTEST_CACHE_TTL:
+                    return cached_res
+
     bars, days = ensure_data(cfg)
     use_stop = bool(cfg.get("risk", {}).get("safety_stop_in_backtest", True))
 
@@ -382,7 +411,7 @@ def serialize_backtest(cfg: dict) -> dict:
         except Exception:
             pass
 
-    return {
+    res = {
         "data_summary": {
             "epic": cfg["epic"],
             "resolution": cfg["resolution"],
@@ -419,6 +448,9 @@ def serialize_backtest(cfg: dict) -> dict:
         "raw_curve": raw_curve,
         "montecarlo": mc_net,
     }
+    with _BACKTEST_CACHE_LOCK:
+        _BACKTEST_CACHE[cache_key] = (now, res)
+    return res
 
 
 def get_bot_status(cfg: dict) -> dict:
@@ -802,29 +834,30 @@ class Handler(BaseHTTPRequestHandler):
                     cfg["strategy"]["fallback_size"] = spec["fallback_size"]
                 save_config(cfg)
 
+                # Decouple broker candle synchronization into a background worker so chart responds in <15ms
                 creds = check_credentials_present()
                 if creds.get("connected"):
-                    try:
-                        cap = Capital("live" if cfg.get("live") else "demo")
-                        end = datetime.now(timezone.utc).replace(second=0, microsecond=0)
-                        start = end - timedelta(days=15)
-                        matched, bars = fetch_candles_with_fallback(cap, target_epic, cfg["resolution"], start, end)
-                        if matched != target_epic:
-                            cfg["epic"] = matched
-                            save_config(cfg)
-                        _, day_bars = fetch_candles_with_fallback(cap, cfg["epic"], "DAY", start - timedelta(days=35), end)
-                        if bars:
-                            save_bars(data_path(cfg["epic"], cfg["resolution"]), bars)
-                        if day_bars:
-                            save_bars(data_path(cfg["epic"], "DAY"), day_bars)
-                    except Exception:
-                        pass
+                    def _bg_sync(epic_to_sync, resolution, is_live):
+                        try:
+                            cap = Capital("live" if is_live else "demo")
+                            end = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+                            start = end - timedelta(days=15)
+                            matched, bars = fetch_candles_with_fallback(cap, epic_to_sync, resolution, start, end)
+                            _, day_bars = fetch_candles_with_fallback(cap, matched, "DAY", start - timedelta(days=35), end)
+                            if bars:
+                                save_bars(data_path(matched, resolution), bars)
+                            if day_bars:
+                                save_bars(data_path(matched, "DAY"), day_bars)
+                            clear_backtest_cache()
+                        except Exception:
+                            pass
+                    threading.Thread(target=_bg_sync, args=(target_epic, cfg.get("resolution", "MINUTE"), bool(cfg.get("live"))), daemon=True).start()
 
                 self._send_json({
                     "ok": True,
                     "config": cfg,
                     "bot": get_bot_status(cfg),
-                    "backtest": serialize_backtest(cfg),
+                    "backtest": serialize_backtest(cfg, use_cache=True),
                     "instrument_specs": INSTRUMENT_SPECS,
                 })
                 return
@@ -850,10 +883,11 @@ class Handler(BaseHTTPRequestHandler):
                         else:
                             cfg["risk"][rk] = rv
                 save_config(cfg)
+                clear_backtest_cache()
                 self._send_json({
                     "config": cfg,
                     "bot": get_bot_status(cfg),
-                    "backtest": serialize_backtest(cfg),
+                    "backtest": serialize_backtest(cfg, use_cache=False),
                     "instrument_specs": INSTRUMENT_SPECS,
                 })
                 return
@@ -862,10 +896,11 @@ class Handler(BaseHTTPRequestHandler):
                 days = int(body.get("days", 12))
                 seed = int(body.get("seed", 42))
                 generate_sample_gold_data(cfg["epic"], cfg["resolution"], days_intraday=days, seed=seed)
+                clear_backtest_cache()
                 self._send_json({
                     "config": cfg,
                     "bot": get_bot_status(cfg),
-                    "backtest": serialize_backtest(cfg),
+                    "backtest": serialize_backtest(cfg, use_cache=False),
                 })
                 return
 
@@ -1055,6 +1090,21 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": str(e)}, 500)
 
 
+def prewarm_backtest_cache():
+    """Background pre-warm of backtest cache so instrument switches are 0ms."""
+    try:
+        base_cfg = load_config()
+        for ep in ("GOLD", "SILVER", "OIL_CRUDE", "OIL_BRENT", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "US500", "US100", "US30", "GER40", "JP225"):
+            c = copy.deepcopy(base_cfg)
+            c["epic"] = ep
+            if ep in INSTRUMENT_SPECS:
+                c["tick"] = INSTRUMENT_SPECS[ep]["tick"]
+                c["strategy"]["fallback_size"] = INSTRUMENT_SPECS[ep]["fallback_size"]
+            serialize_backtest(c, use_cache=True)
+    except Exception:
+        pass
+
+
 def main():
     load_env()
     default_host = os.environ.get("HOST", "0.0.0.0")
@@ -1066,6 +1116,9 @@ def main():
 
     cfg = load_config()
     ensure_data(cfg)
+
+    # Pre-warm backtest cache in background for instant switching
+    threading.Thread(target=prewarm_backtest_cache, daemon=True).start()
 
     if os.environ.get("AUTO_START_WATCHER", "").lower() in ("1", "true", "yes") or check_credentials_present().get("connected"):
         WATCHER.start()

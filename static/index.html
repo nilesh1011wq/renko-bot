@@ -690,9 +690,36 @@
     </div>
 
     <div class="ticker-strip">
-      <div class="pill" style="cursor:pointer;" onclick="document.getElementById('in-epic').focus();" title="Select instrument: Metals, Oil, Forex, Indices">
-        <span class="lbl">EPIC</span>
-        <span class="val" id="hdr-epic">GOLD</span>
+      <div class="pill market-select-pill" style="padding: 2px 8px; display: inline-flex; align-items: center; gap: 6px; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 4px;" title="Select Active Market / Instrument">
+        <span class="lbl" style="color: #38bdf8; font-weight: 700; letter-spacing: 0.5px; font-size: 10px;">MARKET</span>
+        <select id="in-epic" onchange="switchInstrument(this.value)" style="background: transparent; color: #f8fafc; font-weight: 700; font-size: 11.5px; font-family: var(--font-mono); border: none; outline: none; cursor: pointer; padding: 2px 4px;">
+          <optgroup label="Metals" style="background: #0f172a; color: #f8fafc;">
+            <option value="GOLD">GOLD (XAU/USD)</option>
+            <option value="XAUUSD">XAUUSD (Gold CFD)</option>
+            <option value="SILVER">SILVER (XAG/USD)</option>
+          </optgroup>
+          <optgroup label="Energy &amp; Oil" style="background: #0f172a; color: #f8fafc;">
+            <option value="OIL_CRUDE">OIL_CRUDE (WTI)</option>
+            <option value="OIL_BRENT">OIL_BRENT</option>
+          </optgroup>
+          <optgroup label="Major Forex" style="background: #0f172a; color: #f8fafc;">
+            <option value="EURUSD">EUR/USD</option>
+            <option value="GBPUSD">GBP/USD</option>
+            <option value="USDJPY">USD/JPY</option>
+            <option value="AUDUSD">AUD/USD</option>
+            <option value="USDCAD">USD/CAD</option>
+            <option value="USDCHF">USD/CHF</option>
+          </optgroup>
+          <optgroup label="Major Indices" style="background: #0f172a; color: #f8fafc;">
+            <option value="US500">US500 (S&amp;P 500)</option>
+            <option value="US100">US100 (Nasdaq 100)</option>
+            <option value="US30">US30 (Dow 30)</option>
+            <option value="GER40">GER40 (DAX 40)</option>
+            <option value="UK100">UK100 (FTSE 100)</option>
+            <option value="JP225">JP225 (Nikkei 225)</option>
+          </optgroup>
+        </select>
+        <span id="hdr-epic" style="display: none;">GOLD</span>
       </div>
       <div class="pill" id="pill-scanner" style="cursor:pointer;" onclick="switchDockTab('scanner', document.getElementById('tab-scanner'));" title="Click to view 16-Market Strategy Scanner">
         <span class="lbl">SCANNER</span>
@@ -821,35 +848,11 @@
             <label>ST Factor</label>
             <input type="number" id="in-st_factor" value="2.1" step="0.1" min="0.1">
           </div>
-          <div class="field full">
-            <label>Broker Instrument (Epic) <span style="font-weight:400; color:#38bdf8; font-size:10px;">(Metals, Oil, Forex, Indices)</span></label>
-            <select id="in-epic">
-              <optgroup label="Metals">
-                <option value="GOLD">GOLD (Spot Gold CFD - 1 oz)</option>
-                <option value="XAUUSD">XAUUSD (Gold / US Dollar)</option>
-                <option value="SILVER">SILVER (Spot Silver CFD)</option>
-              </optgroup>
-              <optgroup label="Energy &amp; Oil">
-                <option value="OIL_CRUDE">OIL_CRUDE (WTI Light Crude Oil)</option>
-                <option value="OIL_BRENT">OIL_BRENT (Brent Crude Oil)</option>
-              </optgroup>
-              <optgroup label="Major Forex Pairs">
-                <option value="EURUSD">EUR/USD (Euro / US Dollar)</option>
-                <option value="GBPUSD">GBP/USD (British Pound / US Dollar)</option>
-                <option value="USDJPY">USD/JPY (US Dollar / Japanese Yen)</option>
-                <option value="AUDUSD">AUD/USD (Australian Dollar / US Dollar)</option>
-                <option value="USDCAD">USD/CAD (US Dollar / Canadian Dollar)</option>
-                <option value="USDCHF">USD/CHF (US Dollar / Swiss Franc)</option>
-              </optgroup>
-              <optgroup label="Major Global Indices">
-                <option value="US500">US500 (S&amp;P 500 Index)</option>
-                <option value="US100">US100 (Nasdaq 100 Tech Index)</option>
-                <option value="US30">US30 (Wall Street 30 / Dow Jones)</option>
-                <option value="GER40">GER40 (Germany DAX 40)</option>
-                <option value="UK100">UK100 (UK FTSE 100)</option>
-                <option value="JP225">JP225 (Japan Nikkei 225)</option>
-              </optgroup>
-            </select>
+          <div class="field full" style="display: flex; align-items: center; justify-content: space-between; background: rgba(56, 189, 248, 0.05); padding: 7px 10px; border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.18);">
+            <label style="margin: 0; font-size: 11px; color: var(--text-2); font-weight: 600;">Active Market</label>
+            <span style="font-family: var(--font-mono); font-size: 11.5px; font-weight: 700; color: #38bdf8;">
+              <span id="left-active-epic">GOLD</span> <span style="font-size: 9.5px; color: #64748b; font-weight: 400;">(Top Header ⇡)</span>
+            </span>
           </div>
           <div class="field full">
             <label>Entry Mode</label>
@@ -1353,10 +1356,11 @@
       return spec.currency + num;
     }
 
+    const CLIENT_STATE_CACHE = {};
+
     async function switchInstrument(newEpic) {
       if (!newEpic) return;
       const cleanEpic = newEpic.toUpperCase();
-      showToast(`⚡ Switching to ${cleanEpic}...`);
 
       const elTitle = document.getElementById('chart-title-epic');
       if (elTitle) elTitle.textContent = cleanEpic;
@@ -1364,6 +1368,17 @@
       if (elHdrEpic) elHdrEpic.textContent = cleanEpic;
       const elSelect = document.getElementById('in-epic');
       if (elSelect && elSelect.value !== cleanEpic) elSelect.value = cleanEpic;
+      const elLeftBadge = document.getElementById('left-active-epic');
+      if (elLeftBadge) elLeftBadge.textContent = cleanEpic;
+
+      // 1. OPTIMISTIC INSTANT RENDER (0ms latency from client cache)
+      if (CLIENT_STATE_CACHE[cleanEpic]) {
+        STATE = JSON.parse(JSON.stringify(CLIENT_STATE_CACHE[cleanEpic]));
+        syncInputsFromConfig(STATE.config);
+        renderAll();
+      }
+
+      showToast(`⚡ Switching to ${cleanEpic}...`);
 
       try {
         const res = await apiFetch('/api/switch-instrument', {
@@ -1373,6 +1388,7 @@
         });
         if (res.ok) {
           STATE = await res.json();
+          CLIENT_STATE_CACHE[cleanEpic] = JSON.parse(JSON.stringify(STATE));
           syncInputsFromConfig(STATE.config);
           renderAll();
           showToast(`✓ Switched to ${cleanEpic} (${STATE.backtest?.data_summary?.total_bricks || 0} bricks)`);
@@ -1563,6 +1579,9 @@
         STATE = await res.json();
         if (STATE && STATE.config) {
           syncInputsFromConfig(STATE.config);
+          if (STATE.config.epic) {
+            CLIENT_STATE_CACHE[STATE.config.epic.toUpperCase()] = JSON.parse(JSON.stringify(STATE));
+          }
         }
         await checkAndRestoreBrokerCredentials();
         renderAll();
@@ -1841,6 +1860,8 @@
 
       const elEpic = document.getElementById('in-epic');
       if (elEpic && cfg.epic) elEpic.value = cfg.epic.toUpperCase();
+      const elLeftBadge = document.getElementById('left-active-epic');
+      if (elLeftBadge && cfg.epic) elLeftBadge.textContent = cfg.epic.toUpperCase();
       document.getElementById('in-sess_asian').checked = sess.asian !== false;
       document.getElementById('in-sess_london').checked = sess.london !== false;
       document.getElementById('in-sess_ny').checked = sess.new_york !== false;
@@ -1919,6 +1940,9 @@
         body: JSON.stringify(payload)
       });
       STATE = await res.json();
+      if (STATE && STATE.config && STATE.config.epic) {
+        CLIENT_STATE_CACHE[STATE.config.epic.toUpperCase()] = JSON.parse(JSON.stringify(STATE));
+      }
       renderAll();
       showToast('Backtest & Monte Carlo updated');
     }
