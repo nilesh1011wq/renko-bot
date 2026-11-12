@@ -398,6 +398,35 @@
       font-weight: 700;
     }
 
+    .btn-floating-live {
+      position: absolute;
+      bottom: 32px;
+      right: 76px;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(2, 132, 199, 0.92);
+      color: #ffffff;
+      border: 1px solid rgba(56, 189, 248, 0.5);
+      border-radius: 20px;
+      padding: 5px 13px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6), 0 0 10px rgba(56, 189, 248, 0.3);
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+    .btn-floating-live:hover {
+      background: #0284c7;
+      transform: scale(1.05);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.7), 0 0 14px rgba(56, 189, 248, 0.45);
+    }
+
     /* Density button group */
     .density-group {
       display: inline-flex;
@@ -1004,6 +1033,12 @@
             <span id="chart-sub" style="font-size:11px; color:var(--text-2); font-family:var(--font-mono);">--</span>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
+            <!-- History Navigation Controls -->
+            <div style="display:flex; align-items:center; gap:2px;">
+              <button type="button" class="btn-xs" onclick="scrollChartBricks(25)" title="Scroll backward into past history (25 bricks)">◀ Past</button>
+              <button type="button" class="btn-xs" id="btn-chart-live" onclick="resetChartToLive()" style="display:none; background:#0284c7; color:#fff; font-weight:700;" title="Jump to Real-Time latest bricks">▶▶ Live</button>
+              <button type="button" class="btn-xs" onclick="scrollChartBricks(-25)" title="Scroll forward toward real-time">Next ▶</button>
+            </div>
             <div class="density-group">
               <button type="button" class="btn-xs" onclick="setBrickDensity(50, this)">50</button>
               <button type="button" class="btn-xs active" onclick="setBrickDensity(80, this)">80</button>
@@ -1024,6 +1059,9 @@
         <div class="renko-canvas-wrap" id="renko-wrap">
           <canvas id="renko-canvas"></canvas>
           <div id="renko-tooltip" class="renko-hover-hud" style="display:none;"></div>
+          <button id="btn-floating-live" class="btn-floating-live" onclick="resetChartToLive()" style="display:none;" title="Click to jump back to real-time live bricks">
+            <span>▶▶</span> <span>Real-Time</span> <span id="lbl-scroll-offset" style="opacity:0.85; font-size:10px;"></span>
+          </button>
         </div>
       </section>
 
@@ -1761,6 +1799,7 @@
     }
 
     let CURRENT_BRICK_COUNT = 80;
+    let CHART_SCROLL_OFFSET = 0; // 0 = viewing real-time / latest bricks; > 0 = scrolled backward into history
 
     function setBrickDensity(count, btn) {
       CURRENT_BRICK_COUNT = count;
@@ -1769,6 +1808,22 @@
       if (STATE && STATE.backtest) {
         drawRenkoChart(STATE.backtest.bricks, STATE.backtest.trades, STATE.backtest.filtered_events);
       }
+    }
+
+    function resetChartToLive() {
+      CHART_SCROLL_OFFSET = 0;
+      if (CURRENT_RENKO_DATA && CURRENT_RENKO_DATA.bricks) {
+        drawRenkoChart(CURRENT_RENKO_DATA.bricks, CURRENT_RENKO_DATA.trades, CURRENT_RENKO_DATA.filtered);
+      }
+      showToast('✓ Jumped to Real-Time latest bricks');
+    }
+
+    function scrollChartBricks(delta) {
+      if (!CURRENT_RENKO_DATA || !CURRENT_RENKO_DATA.bricks) return;
+      const total = CURRENT_RENKO_DATA.bricks.length;
+      const count = Math.min(CURRENT_BRICK_COUNT, total);
+      CHART_SCROLL_OFFSET = Math.max(0, Math.min(total - count, CHART_SCROLL_OFFSET + delta));
+      drawRenkoChart(CURRENT_RENKO_DATA.bricks, CURRENT_RENKO_DATA.trades, CURRENT_RENKO_DATA.filtered);
     }
 
     function switchDockTab(tabId, btn) {
@@ -2138,19 +2193,44 @@
       ctx.clearRect(0, 0, w, h);
       if (!bricks || !bricks.length || w <= 20 || h <= 20) return;
 
-      const view = bricks.slice(-CURRENT_BRICK_COUNT);
+      const totalBricks = bricks.length;
+      const count = Math.min(CURRENT_BRICK_COUNT, totalBricks);
+      CHART_SCROLL_OFFSET = Math.max(0, Math.min(totalBricks - count, CHART_SCROLL_OFFSET));
+
+      const endIdx = totalBricks - CHART_SCROLL_OFFSET;
+      const startIdx = Math.max(0, endIdx - count);
+      const view = bricks.slice(startIdx, endIdx);
       if (!view.length) return;
+
       const ds = STATE?.backtest?.data_summary || {};
       const bot = STATE?.bot || {};
       const mkt = bot.market || {};
       const hasLiveBroker = (mkt.bid !== undefined && mkt.bid !== null) && (mkt.offer !== undefined && mkt.offer !== null);
       const activePx = hasLiveBroker ? mkt.mid : (ds.last_price || null);
 
+      // Update Live buttons visibility
+      const btnFloat = document.getElementById('btn-floating-live');
+      const btnHeaderLive = document.getElementById('btn-chart-live');
+      const lblOffset = document.getElementById('lbl-scroll-offset');
+      if (CHART_SCROLL_OFFSET > 0) {
+        if (btnFloat) {
+          btnFloat.style.display = 'flex';
+          if (lblOffset) lblOffset.textContent = `(-${CHART_SCROLL_OFFSET} bricks)`;
+        }
+        if (btnHeaderLive) btnHeaderLive.style.display = 'inline-block';
+      } else {
+        if (btnFloat) btnFloat.style.display = 'none';
+        if (btnHeaderLive) btnHeaderLive.style.display = 'none';
+      }
+
       const sub = document.getElementById('chart-sub');
-      if (sub) {
+      if (sub && (!RENKO_HOVER || isChartDragging)) {
         const epicTag = (mkt.epic || ds.epic || 'GOLD').toUpperCase();
         const pxTag = activePx ? ` | ${hasLiveBroker ? 'Live Broker Px' : 'Last Px'}: $${Number(activePx).toFixed(2)}` : '';
-        sub.textContent = `${epicTag} | Showing last ${view.length} bricks (#${view[0].index}–#${view[view.length - 1].index}) | Brick Size: $${(ds.last_brick_size || 0).toFixed(2)}${pxTag}`;
+        const modeBadge = CHART_SCROLL_OFFSET > 0 
+          ? `<span style="color:var(--amber); font-weight:700;">📜 HISTORY (-${CHART_SCROLL_OFFSET} bricks)</span>`
+          : `<span style="color:var(--green); font-weight:700;">⚡ LIVE</span>`;
+        sub.innerHTML = `${modeBadge} | ${epicTag} | Showing ${view.length} bricks (#${view[0].index}–#${view[view.length - 1].index} of ${totalBricks}) | Brick Size: $${(ds.last_brick_size || 0).toFixed(2)}${pxTag}`;
       }
 
       let minP = Infinity, maxP = -Infinity;
@@ -2753,49 +2833,119 @@
         loadState();
       }
     }, 12000);
+    let isChartDragging = false;
+    let dragStartX = 0;
+    let dragStartOffset = 0;
+    let hasDraggedMeaningfully = false;
+
     function initRenkoChartEvents() {
       const canvas = document.getElementById('renko-canvas');
       const tooltip = document.getElementById('renko-tooltip');
       if (!canvas) return;
 
+      function getClientPos(e) {
+        if (e.touches && e.touches.length > 0) {
+          return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+        }
+        return { clientX: e.clientX, clientY: e.clientY };
+      }
+
+      function handleDown(e) {
+        const pos = getClientPos(e);
+        const rect = canvas.getBoundingClientRect();
+        if (pos.clientX < rect.left || pos.clientX > rect.right || pos.clientY < rect.top || pos.clientY > rect.bottom) return;
+        isChartDragging = true;
+        hasDraggedMeaningfully = false;
+        dragStartX = pos.clientX;
+        dragStartOffset = CHART_SCROLL_OFFSET;
+        canvas.style.cursor = 'grabbing';
+      }
+
       function handleMove(e) {
         const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        const x = clientX - rect.left;
-        const y = clientY - rect.top;
-        RENKO_HOVER = { x, y, clientX, clientY };
+        const pos = getClientPos(e);
+        const x = pos.clientX - rect.left;
+        const y = pos.clientY - rect.top;
+
+        if (isChartDragging && CURRENT_RENKO_DATA && CURRENT_RENKO_DATA.bricks) {
+          const dx = pos.clientX - dragStartX;
+          if (Math.abs(dx) > 3) {
+            hasDraggedMeaningfully = true;
+          }
+          if (tooltip) tooltip.style.display = 'none';
+
+          const total = CURRENT_RENKO_DATA.bricks.length;
+          const count = Math.min(CURRENT_BRICK_COUNT, total);
+          const plotW = Math.max(50, rect.width - 12 - 68);
+          const stepX = Math.max(3, plotW / count);
+
+          // Drag right (dx > 0) scrolls backward into past history (offset increases)
+          // Drag left (dx < 0) scrolls forward toward real-time (offset decreases)
+          const brickShift = Math.round(dx / stepX);
+          CHART_SCROLL_OFFSET = Math.max(0, Math.min(total - count, dragStartOffset + brickShift));
+
+          drawRenkoChart(CURRENT_RENKO_DATA.bricks, CURRENT_RENKO_DATA.trades, CURRENT_RENKO_DATA.filtered);
+          return;
+        }
+
+        // Normal hover tracking
+        RENKO_HOVER = { x, y, clientX: pos.clientX, clientY: pos.clientY };
         if (CURRENT_RENKO_DATA) {
           drawRenkoChart(CURRENT_RENKO_DATA.bricks, CURRENT_RENKO_DATA.trades, CURRENT_RENKO_DATA.filtered);
+        }
+      }
+
+      function handleUp() {
+        if (isChartDragging) {
+          isChartDragging = false;
+          canvas.style.cursor = 'crosshair';
         }
       }
 
       function handleLeave() {
+        if (isChartDragging) {
+          isChartDragging = false;
+          canvas.style.cursor = 'crosshair';
+        }
         RENKO_HOVER = null;
         if (tooltip) tooltip.style.display = 'none';
-        const sub = document.getElementById('chart-sub');
-        if (sub && CURRENT_RENKO_DATA) {
-          const ds = STATE?.backtest?.data_summary || {};
-          const bot = STATE?.bot || {};
-          const mkt = bot.market || {};
-          const hasLiveBroker = (mkt.bid !== undefined && mkt.bid !== null) && (mkt.offer !== undefined && mkt.offer !== null);
-          const activePx = hasLiveBroker ? mkt.mid : (ds.last_price || null);
-          const view = (CURRENT_RENKO_DATA.bricks || []).slice(-CURRENT_BRICK_COUNT);
-          if (view.length) {
-            const epicTag = (mkt.epic || ds.epic || 'GOLD').toUpperCase();
-            const pxTag = activePx ? ` | ${hasLiveBroker ? 'Live Broker Px' : 'Last Px'}: $${Number(activePx).toFixed(2)}` : '';
-            sub.textContent = `${epicTag} | Showing last ${view.length} bricks (#${view[0].index}–#${view[view.length - 1].index}) | Brick Size: $${(ds.last_brick_size || 0).toFixed(2)}${pxTag}`;
-          }
-        }
         if (CURRENT_RENKO_DATA) {
           drawRenkoChart(CURRENT_RENKO_DATA.bricks, CURRENT_RENKO_DATA.trades, CURRENT_RENKO_DATA.filtered);
         }
       }
 
+      function handleWheel(e) {
+        if (!CURRENT_RENKO_DATA || !CURRENT_RENKO_DATA.bricks) return;
+        e.preventDefault();
+        const total = CURRENT_RENKO_DATA.bricks.length;
+        const count = Math.min(CURRENT_BRICK_COUNT, total);
+
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+          // Trackpad horizontal swipe: swipe left scrolls forward, swipe right scrolls backward
+          const delta = Math.round(e.deltaX / 10);
+          CHART_SCROLL_OFFSET = Math.max(0, Math.min(total - count, CHART_SCROLL_OFFSET - delta));
+        } else if (e.ctrlKey || e.metaKey) {
+          // Pinch-to-zoom / Ctrl+Wheel: adjust brick density
+          const zoomChange = Math.sign(e.deltaY) * 5;
+          CURRENT_BRICK_COUNT = Math.max(20, Math.min(300, CURRENT_BRICK_COUNT + zoomChange));
+        } else {
+          // Standard vertical wheel: scroll up (deltaY < 0) scrolls backward into history, down scrolls to live
+          const wheelDelta = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / 25));
+          CHART_SCROLL_OFFSET = Math.max(0, Math.min(total - count, CHART_SCROLL_OFFSET - wheelDelta));
+        }
+
+        drawRenkoChart(CURRENT_RENKO_DATA.bricks, CURRENT_RENKO_DATA.trades, CURRENT_RENKO_DATA.filtered);
+      }
+
+      canvas.addEventListener('mousedown', handleDown);
+      window.addEventListener('mouseup', handleUp);
       canvas.addEventListener('mousemove', handleMove);
       canvas.addEventListener('mouseleave', handleLeave);
+      canvas.addEventListener('wheel', handleWheel, { passive: false });
+
+      canvas.addEventListener('touchstart', handleDown, { passive: true });
+      window.addEventListener('touchend', handleUp);
       canvas.addEventListener('touchmove', handleMove, { passive: true });
-      canvas.addEventListener('touchend', handleLeave);
     }
 
     initDockDraggable();
