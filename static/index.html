@@ -694,6 +694,10 @@
         <span class="lbl">EPIC</span>
         <span class="val" id="hdr-epic">GOLD</span>
       </div>
+      <div class="pill" id="pill-scanner" style="cursor:pointer;" onclick="switchDockTab('scanner', document.getElementById('tab-scanner'));" title="Click to view 16-Market Strategy Scanner">
+        <span class="lbl">SCANNER</span>
+        <span class="val" id="hdr-scanner-status" style="color:#38bdf8; font-weight:700;">⚪ 16 Mkts</span>
+      </div>
       <div class="pill" id="pill-price" style="cursor:pointer;" onclick="syncLiveBrokerPrice()" title="Click to sync live Gold price directly from Capital.com">
         <span class="lbl">BROKER PX</span>
         <span class="val" id="hdr-px">--</span>
@@ -1051,7 +1055,7 @@
       <section class="renko-card">
         <div class="chart-header">
           <div class="chart-title">
-            <span>Renko Bricks &amp; Supertrend (XAUUSD)</span>
+            <span>Renko Bricks &amp; Supertrend (<span id="chart-title-epic" style="color:#38bdf8; font-weight:700;">GOLD</span>)</span>
             <span id="chart-sub" style="font-size:11px; color:var(--text-2); font-family:var(--font-mono);">--</span>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
@@ -1097,6 +1101,7 @@
         <div class="dock-tabs">
           <button class="dock-tab active" onclick="switchDockTab('tab-journal', this)">📋 Trade Journal (<span id="dock-trade-cnt">0</span>)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-positions', this)">⚡ Capital.com Live Orders (<span id="dock-pos-cnt">0</span>)</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-scanner', this)">📊 Market Scanner (<span id="dock-scanner-cnt" style="color:#10b981; font-weight:700;">16</span>)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-equity', this)">📈 Equity Curve (vs Raw)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-mc', this)">🎲 Monte Carlo Cone (2,500 Runs)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-sessions', this)">🔑 Broker Env &amp; Sessions</button>
@@ -1151,6 +1156,44 @@
                   </tr>
                 </thead>
                 <tbody id="positions-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Tab: Multi-Market Scanner -->
+          <div id="tab-scanner" class="dock-pane">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:11.5px; font-weight:700; color:var(--text-1);">
+                  Continuous Strategy Scanner (16 Global Markets)
+                </span>
+                <span id="scanner-signal-pill" class="badge" style="background:#0284c7; color:#fff; font-size:10px;">Scanning...</span>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <span id="scanner-last-sync" style="font-size:10px; color:var(--text-2); font-family:var(--font-mono);">--</span>
+                <button type="button" class="btn-xs" onclick="fetchScannerData(true)" style="padding:2px 8px; font-size:10.5px;">↻ Scan All Now</button>
+              </div>
+            </div>
+            <div class="table-wrap" style="max-height:calc(100% - 28px);">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Symbol</th>
+                    <th>Market</th>
+                    <th>Category</th>
+                    <th>Live Price</th>
+                    <th>Spread</th>
+                    <th>Brick Size</th>
+                    <th>Wave Run</th>
+                    <th>Supertrend</th>
+                    <th>Strategy Signal</th>
+                    <th>Filter Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="scanner-tbody">
+                  <tr><td colspan="11" style="text-align:center; padding:12px; color:var(--text-2);">Loading 16-market strategy scanner...</td></tr>
+                </tbody>
               </table>
             </div>
           </div>
@@ -1257,27 +1300,199 @@
       return sign + '$' + Number(v).toFixed(2);
     }
 
-    function getInstrumentDigits() {
-      const ds = (window.STATE && window.STATE.backtest && window.STATE.backtest.data_summary) || {};
-      if (ds.digits !== undefined && ds.digits !== null) return ds.digits;
-      const epic = ((window.STATE && window.STATE.config && window.STATE.config.epic) || 'GOLD').toUpperCase();
-      if (epic.includes('EUR') || epic.includes('GBP') || epic.includes('AUD') || epic.includes('CAD') || epic.includes('CHF')) return 4;
-      if (epic.includes('SILVER') || epic.includes('XAG')) return 3;
-      if (epic.includes('JP225')) return 0;
-      return 2;
+    function getSpec(epic) {
+      const ep = (epic || (window.STATE && window.STATE.config && window.STATE.config.epic) || (window.STATE && window.STATE.backtest && window.STATE.backtest.data_summary && window.STATE.backtest.data_summary.epic) || 'GOLD').toUpperCase();
+      if (window.STATE && window.STATE.instrument_specs && window.STATE.instrument_specs[ep]) {
+        return window.STATE.instrument_specs[ep];
+      }
+      const isForex = ep.includes('EUR') || ep.includes('GBP') || ep.includes('AUD') || ep.includes('CAD') || ep.includes('CHF');
+      const isYen = ep.includes('JPY');
+      const isSilver = ep.includes('SILVER') || ep.includes('XAG');
+      const isNikkei = ep.includes('JP225');
+      const isIndex = ep.includes('US500') || ep.includes('US100') || ep.includes('US30') || ep.includes('GER40') || ep.includes('UK100');
+
+      if (isForex) return { name: ep, category: 'Forex', digits: 4, currency: '', pip_factor: 10000 };
+      if (isYen) return { name: ep, category: 'Forex', digits: 2, currency: '', pip_factor: 100 };
+      if (isSilver) return { name: ep, category: 'Metals', digits: 3, currency: '$', pip_factor: 1 };
+      if (isNikkei) return { name: ep, category: 'Indices', digits: 0, currency: '', pip_factor: 1 };
+      if (isIndex) return { name: ep, category: 'Indices', digits: 1, currency: '$', pip_factor: 1 };
+      return { name: ep, category: 'Metals', digits: 2, currency: '$', pip_factor: 1 };
     }
 
-    function getInstrumentCurrency() {
-      const epic = ((window.STATE && window.STATE.config && window.STATE.config.epic) || 'GOLD').toUpperCase();
-      if (epic.includes('EUR') || epic.includes('GBP') || epic.includes('AUD') || epic.includes('CAD') || epic.includes('CHF') || epic.includes('USDJPY')) return '';
-      return '$';
+    function getInstrumentDigits(epic) {
+      return getSpec(epic).digits;
     }
 
-    function fmtPx(v, decimals) {
-      if (v === null || v === undefined || isNaN(v)) return '--';
-      const d = decimals !== undefined ? decimals : getInstrumentDigits();
-      const pfx = getInstrumentCurrency();
-      return pfx + Number(v).toFixed(d);
+    function getInstrumentCurrency(epic) {
+      return getSpec(epic).currency;
+    }
+
+    function fmtPrice(val, epic, explicitDigits) {
+      if (val === null || val === undefined || isNaN(val)) return '--';
+      const spec = getSpec(epic);
+      const d = explicitDigits !== undefined ? explicitDigits : spec.digits;
+      return spec.currency + Number(val).toFixed(d);
+    }
+
+    function fmtPx(v, decimals, epic) {
+      return fmtPrice(v, epic, decimals);
+    }
+
+    function fmtBrickSize(val, epic) {
+      if (val === null || val === undefined || isNaN(val)) return '--';
+      const spec = getSpec(epic);
+      const d = spec.digits;
+      const num = Number(val).toFixed(d);
+      if (spec.pip_factor === 10000) {
+        const pips = (Number(val) * 10000).toFixed(1);
+        return `${num} (${pips} pips)`;
+      } else if (spec.pip_factor === 100) {
+        const pips = (Number(val) * 100).toFixed(1);
+        return `${num} (${pips} pips)`;
+      }
+      return spec.currency + num;
+    }
+
+    async function switchInstrument(newEpic) {
+      if (!newEpic) return;
+      const cleanEpic = newEpic.toUpperCase();
+      showToast(`⚡ Switching to ${cleanEpic}...`);
+
+      const elTitle = document.getElementById('chart-title-epic');
+      if (elTitle) elTitle.textContent = cleanEpic;
+      const elHdrEpic = document.getElementById('hdr-epic');
+      if (elHdrEpic) elHdrEpic.textContent = cleanEpic;
+      const elSelect = document.getElementById('in-epic');
+      if (elSelect && elSelect.value !== cleanEpic) elSelect.value = cleanEpic;
+
+      try {
+        const res = await apiFetch('/api/switch-instrument', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({epic: cleanEpic})
+        });
+        if (res.ok) {
+          STATE = await res.json();
+          syncInputsFromConfig(STATE.config);
+          renderAll();
+          showToast(`✓ Switched to ${cleanEpic} (${STATE.backtest?.data_summary?.total_bricks || 0} bricks)`);
+        } else {
+          showToast(`✕ Failed to switch to ${cleanEpic}`);
+        }
+      } catch (err) {
+        showToast(`✕ Error switching instrument: ${err.message}`);
+      }
+    }
+
+    async function fetchScannerData(force = false) {
+      try {
+        const res = await apiFetch('/api/scanner', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({force: force})
+        });
+        if (res.ok) {
+          const data = await res.json();
+          renderScannerTable(data);
+        }
+      } catch (e) {
+        console.error("Scanner fetch failed:", e);
+      }
+    }
+
+    function renderScannerTable(data) {
+      if (!data || !data.items) return;
+      const tbody = document.getElementById('scanner-tbody');
+      const badgeCnt = document.getElementById('dock-scanner-cnt');
+      const hdrStatus = document.getElementById('hdr-scanner-status');
+      const pill = document.getElementById('scanner-signal-pill');
+      const lastSync = document.getElementById('scanner-last-sync');
+
+      if (lastSync && data.scanned_at) {
+        lastSync.textContent = `Scanned: ${data.scanned_at.slice(11, 19)} UTC`;
+      }
+
+      const activeTotal = data.total_active_signals || 0;
+      if (badgeCnt) {
+        badgeCnt.textContent = activeTotal > 0 ? `${activeTotal} SIG` : data.items.length;
+        badgeCnt.style.background = activeTotal > 0 ? '#10b981' : '#334155';
+        badgeCnt.style.display = 'inline-block';
+      }
+
+      if (hdrStatus) {
+        if (activeTotal > 0) {
+          hdrStatus.innerHTML = `<span style="color:#10b981; font-weight:700;">🟢 ${activeTotal} ALERTS</span>`;
+        } else {
+          hdrStatus.innerHTML = `<span style="color:#38bdf8;">⚪ ${data.items.length} Mkts</span>`;
+        }
+      }
+
+      if (pill) {
+        if (activeTotal > 0) {
+          pill.style.background = '#10b981';
+          pill.textContent = `⚡ ${activeTotal} ACTIVE SIGNALS`;
+        } else {
+          pill.style.background = '#0284c7';
+          pill.textContent = `✓ 16 MARKETS SCANNED (NO ACTIVE VETO)`;
+        }
+      }
+
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      for (const it of data.items) {
+        const tr = document.createElement('tr');
+        const isCurrent = (STATE && STATE.config && STATE.config.epic === it.epic);
+        if (isCurrent) {
+          tr.style.background = 'rgba(56, 189, 248, 0.08)';
+        }
+
+        const isBuy = it.signal_type === 'BUY';
+        const isSell = it.signal_type === 'SELL';
+        const isVeto = !!it.veto;
+
+        let sigBadge = `<span style="color:var(--text-2); font-size:11px;">${it.signal}</span>`;
+        if (isBuy && !isVeto) {
+          sigBadge = `<span class="badge buy" style="font-weight:700; padding:3px 7px;">🟢 BUY SIGNAL</span>`;
+        } else if (isSell && !isVeto) {
+          sigBadge = `<span class="badge sell" style="font-weight:700; padding:3px 7px;">🔴 SELL SIGNAL</span>`;
+        } else if (it.signal_type === 'HOLD_LONG') {
+          sigBadge = `<span style="color:#10b981; font-weight:600;">▲ Long Run (G:${it.green_run})</span>`;
+        } else if (it.signal_type === 'HOLD_SHORT') {
+          sigBadge = `<span style="color:#ef5350; font-weight:600;">▼ Short Run (R:${it.red_run})</span>`;
+        } else if (isVeto) {
+          sigBadge = `<span style="color:#f59e0b; font-weight:600;">⚠️ ${it.signal}</span>`;
+        }
+
+        const stBadge = it.st_dir === 1
+          ? `<span class="pos" style="font-size:11px;">▲ Bull (${it.currency}${it.st_now})</span>`
+          : (it.st_dir === -1 ? `<span class="neg" style="font-size:11px;">▼ Bear (${it.currency}${it.st_now})</span>` : '--');
+
+        const filterBadge = it.veto
+          ? `<span style="color:#f59e0b; font-size:10.5px;">⚠️ ${it.veto}</span>`
+          : `<span style="color:#10b981; font-size:10.5px;">✓ Filter Pass</span>`;
+
+        const activeTag = isCurrent ? `<span style="font-size:9.5px; color:#38bdf8; font-weight:700; margin-left:4px;">(Active)</span>` : '';
+
+        tr.innerHTML = `
+          <td><b style="color:${isCurrent ? '#38bdf8' : 'var(--text-0)'};">${it.epic}</b>${activeTag}</td>
+          <td>${it.name || it.epic}</td>
+          <td><span style="font-size:10.5px; color:var(--text-2);">${it.category || ''}</span></td>
+          <td style="font-weight:700; font-family:var(--font-mono);">${it.currency}${it.price}</td>
+          <td style="font-family:var(--font-mono); font-size:11px; color:var(--text-2);">${it.currency}${it.spread}</td>
+          <td style="font-family:var(--font-mono);">${fmtBrickSize(it.brick_size, it.epic)}</td>
+          <td><span class="pos">G:${it.green_run}</span> / <span class="neg">R:${it.red_run}</span></td>
+          <td>${stBadge}</td>
+          <td>${sigBadge}</td>
+          <td>${filterBadge}</td>
+          <td>
+            <button class="btn-xs" style="padding:2px 8px; font-weight:700; ${isCurrent ? 'background:#334155; color:#94a3b8;' : 'background:#0284c7; color:#fff;'}" onclick="switchInstrument('${it.epic}')">
+              ${isCurrent ? 'Viewing' : '📈 Load Chart'}
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
     }
 
     async function apiFetch(url, options = {}) {
@@ -1916,22 +2131,23 @@
 
         // Header pills
         const elEpic = document.getElementById('hdr-epic');
-        const activeEpic = (bot.market && bot.market.epic) || ds.epic || 'GOLD';
-        if (elEpic) elEpic.textContent = activeEpic + (ds.resolution ? ' (' + ds.resolution + ')' : '');
+        const activeEpic = (bot.market && bot.market.epic) || ds.epic || (STATE && STATE.config && STATE.config.epic) || 'GOLD';
+        if (elEpic) elEpic.textContent = activeEpic.toUpperCase() + (ds.resolution ? ' (' + ds.resolution + ')' : '');
+
+        const elTitleEpic = document.getElementById('chart-title-epic');
+        if (elTitleEpic) elTitleEpic.textContent = activeEpic.toUpperCase();
 
         const mkt = bot.market || {};
         const hasLiveBroker = (mkt.bid !== undefined && mkt.bid !== null) && (mkt.offer !== undefined && mkt.offer !== null);
         const livePx = hasLiveBroker ? mkt.mid : (ds.last_price || null);
-        const digits = getInstrumentDigits();
-        const pfx = getInstrumentCurrency();
         const elPx = document.getElementById('hdr-px');
         const elPxSub = document.getElementById('hdr-px-sub');
         if (elPx) {
-          elPx.textContent = livePx ? pfx + Number(livePx).toFixed(digits) : '--';
+          elPx.textContent = livePx ? fmtPrice(livePx, activeEpic) : '--';
           if (hasLiveBroker) {
             elPx.style.color = '#38bdf8';
             if (elPxSub) {
-              elPxSub.innerHTML = `<span style="color:#10b981">B:${pfx}${Number(mkt.bid).toFixed(digits)}</span> / <span style="color:#ef5350">A:${pfx}${Number(mkt.offer).toFixed(digits)}</span> <span style="color:var(--text-2); font-size:9.5px;">(Spr ${pfx}${Number(mkt.spread || 0).toFixed(digits)})</span>`;
+              elPxSub.innerHTML = `<span style="color:#10b981">B:${fmtPrice(mkt.bid, activeEpic)}</span> / <span style="color:#ef5350">A:${fmtPrice(mkt.offer, activeEpic)}</span> <span style="color:var(--text-2); font-size:9.5px;">(Spr ${fmtPrice(mkt.spread || 0, activeEpic)})</span>`;
             }
           } else {
             elPx.style.color = 'var(--text-0)';
@@ -1941,12 +2157,12 @@
           }
         }
         const elBs = document.getElementById('hdr-bs');
-        if (elBs) elBs.textContent = pfx + (ds.last_brick_size || 0).toFixed(digits);
+        if (elBs) elBs.textContent = fmtBrickSize(ds.last_brick_size || 0, activeEpic);
         const elRuns = document.getElementById('hdr-runs');
         if (elRuns) elRuns.innerHTML = `<span class="pos">G:${ds.green_run ?? 0}</span> / <span class="neg">R:${ds.red_run ?? 0}</span>`;
         const elSt = document.getElementById('hdr-st');
         if (elSt) {
-          const stValStr = ds.st_now !== null && ds.st_now !== undefined ? `${pfx}${Number(ds.st_now).toFixed(digits)}` : '--';
+          const stValStr = ds.st_now !== null && ds.st_now !== undefined ? fmtPrice(ds.st_now, activeEpic) : '--';
           elSt.innerHTML = ds.st_dir === 1
             ? `<span class="pos">BULL (${stValStr})</span>`
             : `<span class="neg">BEAR (${stValStr})</span>`;
@@ -2091,7 +2307,7 @@
         const kMfe = document.getElementById('kpi-mfe');
         if (kMfe) kMfe.textContent = `+${sn.avg_mfe_bricks ?? 0} / -${sn.avg_mae_bricks ?? 0} brk`;
         const kOver = document.getElementById('kpi-over');
-        if (kOver) kOver.textContent = `Avg Overshoot: ${pfx}${(sn.avg_overshoot || 0).toFixed(digits)}`;
+        if (kOver) kOver.textContent = `Avg Overshoot: ${fmtPrice(sn.avg_overshoot || 0, activeEpic)}`;
 
         // Capital.com Live Positions Table
         const livePositions = bot.live_positions || [];
@@ -2121,8 +2337,8 @@
                 <td><b>${p.epic}</b></td>
                 <td>${sideBadge}</td>
                 <td>${p.size}</td>
-                <td>${pfx}${Number(p.level).toFixed(digits)}</td>
-                <td>${p.stopLevel ? pfx + Number(p.stopLevel).toFixed(digits) : '--'}</td>
+                <td>${fmtPrice(p.level, p.epic)}</td>
+                <td>${p.stopLevel ? fmtPrice(p.stopLevel, p.epic) : '--'}</td>
                 <td class="${uplCls}" style="font-weight:700;">${p.upl >= 0 ? '+' : ''}$${Number(p.upl).toFixed(2)}</td>
                 <td>
                   <button class="danger" style="padding:2px 8px; font-size:10.5px;" onclick="closeBrokerDeal('${p.dealId}')">Close</button>
@@ -2155,7 +2371,7 @@
               <td>${st.trades ?? 0}</td>
               <td>${st['win_rate_%'] ?? 0}%</td>
               <td>${st.profit_factor ?? '--'}</td>
-              <td>${pfx}${(st.avg_overshoot || 0).toFixed(digits)}</td>
+              <td>${fmtPrice(st.avg_overshoot || 0, activeEpic)}</td>
               <td class="${cls}" style="font-weight:700">${fmtUsd(st.net)}</td>
             `;
             sbody.appendChild(tr);
@@ -2180,9 +2396,9 @@
               <td>${sideBadge}</td>
               <td>${t.session}</td>
               <td>${(t.entry_time || '').slice(5, 16).replace('T', ' ')}</td>
-              <td>${Number(t.trigger_px).toFixed(digits)}</td>
-              <td>${Number(t.entry_exec).toFixed(digits)}</td>
-              <td>${Number(t.exit_exec).toFixed(digits)}</td>
+              <td>${fmtPrice(t.trigger_px, activeEpic)}</td>
+              <td>${fmtPrice(t.entry_exec, activeEpic)}</td>
+              <td>${fmtPrice(t.exit_exec, activeEpic)}</td>
               <td>${outBadge}</td>
               <td>+${t.mfe_bricks} / -${t.mae_bricks}</td>
               <td class="${t.gross >= 0 ? 'pos' : 'neg'}">${fmtUsd(t.gross)}</td>
@@ -2255,8 +2471,10 @@
       const mkt = bot.market || {};
       const hasLiveBroker = (mkt.bid !== undefined && mkt.bid !== null) && (mkt.offer !== undefined && mkt.offer !== null);
       const activePx = hasLiveBroker ? mkt.mid : (ds.last_price || null);
-      const digits = getInstrumentDigits();
-      const pfx = getInstrumentCurrency();
+      const activeEpic = (mkt.epic || ds.epic || (STATE && STATE.config && STATE.config.epic) || 'GOLD').toUpperCase();
+      const spec = getSpec(activeEpic);
+      const digits = spec.digits;
+      const pfx = spec.currency;
 
       // Update Live buttons visibility
       const btnFloat = document.getElementById('btn-floating-live');
@@ -2275,12 +2493,11 @@
 
       const sub = document.getElementById('chart-sub');
       if (sub && (!RENKO_HOVER || isChartDragging)) {
-        const epicTag = (mkt.epic || ds.epic || 'GOLD').toUpperCase();
-        const pxTag = activePx ? ` | ${hasLiveBroker ? 'Live Broker Px' : 'Last Px'}: ${pfx}${Number(activePx).toFixed(digits)}` : '';
+        const pxTag = activePx ? ` | ${hasLiveBroker ? 'Live Broker Px' : 'Last Px'}: ${fmtPrice(activePx, activeEpic)}` : '';
         const modeBadge = CHART_SCROLL_OFFSET > 0 
           ? `<span style="color:var(--amber); font-weight:700;">📜 HISTORY (-${CHART_SCROLL_OFFSET} bricks)</span>`
           : `<span style="color:var(--green); font-weight:700;">⚡ LIVE</span>`;
-        sub.innerHTML = `${modeBadge} | ${epicTag} | Showing ${view.length} bricks (#${view[0].index}–#${view[view.length - 1].index} of ${totalBricks}) | Brick Size: ${pfx}${(ds.last_brick_size || 0).toFixed(digits)}${pxTag}`;
+        sub.innerHTML = `${modeBadge} | ${activeEpic} | Showing ${view.length} bricks (#${view[0].index}–#${view[view.length - 1].index} of ${totalBricks}) | Brick Size: ${fmtBrickSize(ds.last_brick_size || 0, activeEpic)}${pxTag}`;
       }
 
       let minP = Infinity, maxP = -Infinity;
@@ -2316,7 +2533,7 @@
         ctx.moveTo(padL, y);
         ctx.lineTo(w - padR, y);
         ctx.stroke();
-        ctx.fillText(pfx + p.toFixed(digits >= 4 ? 4 : (digits === 0 ? 0 : 1)), w - padR + 6, y + 3.5);
+        ctx.fillText(fmtPrice(p, activeEpic, digits >= 4 ? 4 : (digits === 0 ? 0 : 1)), w - padR + 6, y + 3.5);
       }
 
       const stepX = plotW / view.length;
@@ -2461,7 +2678,7 @@
         ctx.fillRect(w - padR + 2, lpy - 9, padR - 4, 18);
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 9.5px JetBrains Mono, monospace';
-        ctx.fillText(pfx + Number(activePx).toFixed(digits), w - padR + 4, lpy + 3.5);
+        ctx.fillText(fmtPrice(activePx, activeEpic, digits), w - padR + 4, lpy + 3.5);
       }
 
       // 7. Interactive Hover: Crosshairs, Halo, Prices on Block, Floating Tooltip
@@ -2512,7 +2729,7 @@
           ctx.fillRect(w - padR + 2, myClamped - 9, padR - 4, 18);
           ctx.fillStyle = '#ffffff';
           ctx.font = 'bold 9.5px JetBrains Mono, monospace';
-          ctx.fillText(pfx + cursorPrice.toFixed(digits), w - padR + 4, myClamped + 3.5);
+          ctx.fillText(fmtPrice(cursorPrice, activeEpic, digits), w - padR + 4, myClamped + 3.5);
 
           // Time Axis Badge at Brick Center
           if (hb.time) {
@@ -2546,8 +2763,8 @@
             ctx.fillText(text, px + 4, pyP + 11);
           }
 
-          const closeTxt = pfx + hb.close.toFixed(digits);
-          const openTxt = pfx + hb.open.toFixed(digits);
+          const closeTxt = fmtPrice(hb.close, activeEpic);
+          const openTxt = fmtPrice(hb.open, activeEpic);
 
           if (isUp) {
             drawPill('▲ ' + closeTxt, hCenter, hyTop, '#065f46', '#34d399', true);
@@ -2564,12 +2781,12 @@
             const dirColor = isUp ? '#10b981' : '#ef5350';
             const moveAmt = Math.abs(hb.close - hb.open).toFixed(digits);
             const moveSign = isUp ? '+' : '-';
-            const stStr = hb.st_value !== null ? (' | ST: ' + pfx + hb.st_value.toFixed(digits) + (hb.st_dir === 1 ? ' (Bull)' : ' (Bear)')) : '';
+            const stStr = hb.st_value !== null ? (' | ST: ' + fmtPrice(hb.st_value, activeEpic) + (hb.st_dir === 1 ? ' (Bull)' : ' (Bear)')) : '';
             const tStr = hb.time ? (' | ' + hb.time.slice(5, 19).replace('T', ' ') + ' UTC') : '';
             sub.innerHTML = `<span style="color:#38bdf8; font-weight:700;">BRICK #${hb.index}</span> | ` +
               `<span style="color:${dirColor}; font-weight:700;">${dirIcon} ${isUp ? 'UP' : 'DOWN'}</span> | ` +
-              `<b>CLOSE: ${pfx}${hb.close.toFixed(digits)}</b> | OPEN: ${pfx}${hb.open.toFixed(digits)} | ` +
-              `SIZE: ${moveSign}${pfx}${moveAmt}${stStr}${tStr}`;
+              `<b>CLOSE: ${fmtPrice(hb.close, activeEpic)}</b> | OPEN: ${fmtPrice(hb.open, activeEpic)} | ` +
+              `SIZE: ${moveSign}${spec.currency}${moveAmt}${stStr}${tStr}`;
           }
 
           // Floating Tooltip HUD
@@ -2582,12 +2799,12 @@
             if (trIn) {
               const bColor = trIn.side === 'LONG' ? '#10b981' : '#ef5350';
               badgeHtml += `<div style="margin-top:5px; padding:3px 6px; background:rgba(0,0,0,0.5); border-left:3px solid ${bColor}; font-size:10.5px; border-radius:2px;">
-                <b style="color:${bColor};">${trIn.side === 'LONG' ? '🟢 BUY' : '🔴 SELL'} ENTRY</b> @ ${pfx}${Number(trIn.entry).toFixed(digits)}
+                <b style="color:${bColor};">${trIn.side === 'LONG' ? '🟢 BUY' : '🔴 SELL'} ENTRY</b> @ ${fmtPrice(trIn.entry, activeEpic)}
               </div>`;
             }
             if (trOut) {
               badgeHtml += `<div style="margin-top:4px; padding:3px 6px; background:rgba(0,0,0,0.5); border-left:3px solid #ef4444; font-size:10.5px; border-radius:2px;">
-                <b style="color:#ef4444;">🛑 EXIT: ${trOut.why_out || 'SIGNAL'}</b> @ ${pfx}${Number(trOut.exit).toFixed(digits)}
+                <b style="color:#ef4444;">🛑 EXIT: ${trOut.why_out || 'SIGNAL'}</b> @ ${fmtPrice(trOut.exit, activeEpic)}
               </div>`;
             }
             if (veto) {
@@ -2598,7 +2815,7 @@
 
             const diff = Math.abs(hb.close - hb.open).toFixed(digits);
             const diffPct = (((hb.close - hb.open) / hb.open) * 100).toFixed(2);
-            const stLabel = hb.st_value !== null ? `${pfx}${hb.st_value.toFixed(digits)} (${hb.st_dir === 1 ? 'Bullish' : 'Bearish'})` : '--';
+            const stLabel = hb.st_value !== null ? `${fmtPrice(hb.st_value, activeEpic)} (${hb.st_dir === 1 ? 'Bullish' : 'Bearish'})` : '--';
             const stColor = hb.st_dir === 1 ? '#10b981' : '#f43f5e';
 
             tooltip.innerHTML = `
@@ -2610,15 +2827,15 @@
               </div>
               <div class="hud-row">
                 <span class="hud-lbl">Close Price:</span>
-                <span class="hud-val" style="font-size:12px; color:${isUp ? '#34d399' : '#f87171'};">${pfx}${hb.close.toFixed(digits)}</span>
+                <span class="hud-val" style="font-size:12px; color:${isUp ? '#34d399' : '#f87171'};">${fmtPrice(hb.close, activeEpic)}</span>
               </div>
               <div class="hud-row">
                 <span class="hud-lbl">Open Price:</span>
-                <span class="hud-val">${pfx}${hb.open.toFixed(digits)}</span>
+                <span class="hud-val">${fmtPrice(hb.open, activeEpic)}</span>
               </div>
               <div class="hud-row">
                 <span class="hud-lbl">Brick Move:</span>
-                <span class="hud-val" style="color:${isUp ? '#34d399' : '#f87171'};">${isUp ? '+' : '-'}${pfx}${diff} (${diffPct}%)</span>
+                <span class="hud-val" style="color:${isUp ? '#34d399' : '#f87171'};">${isUp ? '+' : '-'}${spec.currency}${diff} (${diffPct}%)</span>
               </div>
               <div class="hud-row">
                 <span class="hud-lbl">Supertrend:</span>
@@ -3004,11 +3221,17 @@
     const inEpicSelect = document.getElementById('in-epic');
     if (inEpicSelect) {
       inEpicSelect.addEventListener('change', () => {
-        saveAndRun();
+        switchInstrument(inEpicSelect.value);
       });
     }
 
-    loadState();
+    loadState().then(() => {
+      fetchScannerData();
+    });
+    // Continuously scan all instruments in background every 25 seconds
+    setInterval(() => {
+      fetchScannerData();
+    }, 25000);
   </script>
 </body>
 </html>

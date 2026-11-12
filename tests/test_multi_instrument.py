@@ -78,6 +78,55 @@ class TestMultiInstrument(unittest.TestCase):
         self.assertEqual(res_eur["data_summary"]["digits"], 4)
         self.assertGreater(len(res_eur["bricks"]), 0)
 
+    def test_forex_decimal_points_and_trade_rounding(self):
+        """Verify Forex trades and bricks maintain full 4-5 decimal precision (not truncated to 2)."""
+        from backtest import simulate
+        cfg_gbp = load_config()
+        cfg_gbp["epic"] = "GBPUSD"
+        cfg_gbp["tick"] = 0.0001
+        cfg_gbp["strategy"]["fallback_size"] = 0.0010
+        bars, days = generate_sample_gold_data(epic="GBPUSD", days_intraday=12, seed=42)
+        trades, eng, signals, filtered = simulate(bars, days, cfg_gbp)
+        self.assertGreater(len(trades), 0, "Expected backtest trades on GBPUSD")
+        for t in trades:
+            # Entry and exit prices should have 4 decimal precision
+            entry_str = f"{t['entry']:.4f}"
+            self.assertEqual(t["entry"], round(t["entry"], 4))
+            self.assertGreater(t["brick_size"], 0.0)
+            self.assertLess(t["brick_size"], 0.05, f"Brick size too large for Forex: {t['brick_size']}")
+
+    def test_scanner_engine_all_instruments(self):
+        """Verify multi-instrument scanner evaluates all 16 instruments with correct metadata."""
+        from scanner import scan_all_instruments, get_cached_or_scan_all
+        cfg = load_config()
+        res = scan_all_instruments(cfg)
+        self.assertIn("items", res)
+        self.assertEqual(len(res["items"]), 16)
+        
+        epics = {it["epic"] for it in res["items"]}
+        expected_epics = {"GOLD", "SILVER", "OIL_CRUDE", "OIL_BRENT", "EURUSD", "GBPUSD", "USDJPY",
+                          "AUDUSD", "USDCAD", "USDCHF", "US500", "US100", "US30", "GER40", "UK100", "JP225"}
+        self.assertEqual(epics, expected_epics)
+
+        for it in res["items"]:
+            self.assertIn("price", it)
+            self.assertIn("spread", it)
+            self.assertIn("brick_size", it)
+            self.assertIn("st_dir", it)
+            self.assertIn("signal", it)
+            self.assertIn("pip_factor", it)
+            if it["epic"] in ("EURUSD", "GBPUSD", "AUDUSD", "USDCAD", "USDCHF"):
+                self.assertEqual(it["currency"], "")
+                self.assertEqual(it["pip_factor"], 10000)
+                self.assertEqual(it["digits"], 4)
+            elif it["epic"] == "USDJPY":
+                self.assertEqual(it["currency"], "")
+                self.assertEqual(it["pip_factor"], 100)
+                self.assertEqual(it["digits"], 2)
+            elif it["epic"] in ("GOLD", "SILVER", "OIL_CRUDE", "OIL_BRENT"):
+                self.assertEqual(it["currency"], "$")
+
+
 
 if __name__ == "__main__":
     unittest.main()

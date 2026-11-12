@@ -49,23 +49,23 @@ def load_bars(path):
 
 
 INSTRUMENT_SPECS = {
-    "GOLD": {"base_px": 2640.0, "tick": 0.01, "digits": 2, "scale": 1.0, "half_sp": 0.14, "fallback_size": 3.50},
-    "XAUUSD": {"base_px": 2640.0, "tick": 0.01, "digits": 2, "scale": 1.0, "half_sp": 0.14, "fallback_size": 3.50},
-    "SILVER": {"base_px": 31.50, "tick": 0.001, "digits": 3, "scale": 31.5 / 2640.0, "half_sp": 0.01, "fallback_size": 0.08},
-    "OIL_CRUDE": {"base_px": 72.00, "tick": 0.01, "digits": 2, "scale": 72.0 / 2640.0, "half_sp": 0.03, "fallback_size": 0.20},
-    "OIL_BRENT": {"base_px": 76.00, "tick": 0.01, "digits": 2, "scale": 76.0 / 2640.0, "half_sp": 0.03, "fallback_size": 0.20},
-    "EURUSD": {"base_px": 1.0850, "tick": 0.0001, "digits": 4, "scale": 1.085 / 2640.0, "half_sp": 0.0001, "fallback_size": 0.0008},
-    "GBPUSD": {"base_px": 1.2950, "tick": 0.0001, "digits": 4, "scale": 1.295 / 2640.0, "half_sp": 0.00012, "fallback_size": 0.0010},
-    "USDJPY": {"base_px": 153.00, "tick": 0.01, "digits": 2, "scale": 153.0 / 2640.0, "half_sp": 0.015, "fallback_size": 0.15},
-    "AUDUSD": {"base_px": 0.6650, "tick": 0.0001, "digits": 4, "scale": 0.665 / 2640.0, "half_sp": 0.0001, "fallback_size": 0.0006},
-    "USDCAD": {"base_px": 1.3850, "tick": 0.0001, "digits": 4, "scale": 1.385 / 2640.0, "half_sp": 0.0001, "fallback_size": 0.0007},
-    "USDCHF": {"base_px": 0.8850, "tick": 0.0001, "digits": 4, "scale": 0.885 / 2640.0, "half_sp": 0.0001, "fallback_size": 0.0007},
-    "US500": {"base_px": 5850.0, "tick": 0.1, "digits": 1, "scale": 5850.0 / 2640.0, "half_sp": 0.35, "fallback_size": 5.0},
-    "US100": {"base_px": 20800.0, "tick": 0.5, "digits": 1, "scale": 20800.0 / 2640.0, "half_sp": 1.2, "fallback_size": 25.0},
-    "US30": {"base_px": 43500.0, "tick": 1.0, "digits": 1, "scale": 43500.0 / 2640.0, "half_sp": 2.0, "fallback_size": 35.0},
-    "GER40": {"base_px": 19400.0, "tick": 1.0, "digits": 1, "scale": 19400.0 / 2640.0, "half_sp": 1.5, "fallback_size": 18.0},
-    "UK100": {"base_px": 8200.0, "tick": 1.0, "digits": 1, "scale": 8200.0 / 2640.0, "half_sp": 1.0, "fallback_size": 10.0},
-    "JP225": {"base_px": 39000.0, "tick": 5.0, "digits": 0, "scale": 39000.0 / 2640.0, "half_sp": 5.0, "fallback_size": 50.0},
+    "GOLD": {"name": "Gold / USD", "category": "Metals", "currency": "$", "base_px": 2640.0, "tick": 0.01, "digits": 2, "scale": 1.0, "half_sp": 0.14, "fallback_size": 3.50, "pip_factor": 1.0},
+    "XAUUSD": {"name": "Gold / USD", "category": "Metals", "currency": "$", "base_px": 2640.0, "tick": 0.01, "digits": 2, "scale": 1.0, "half_sp": 0.14, "fallback_size": 3.50, "pip_factor": 1.0},
+    "SILVER": {"name": "Silver / USD", "category": "Metals", "currency": "$", "base_px": 31.50, "tick": 0.001, "digits": 3, "scale": 31.5 / 2640.0, "half_sp": 0.01, "fallback_size": 0.08, "pip_factor": 1.0},
+    "OIL_CRUDE": {"name": "Crude Oil (WTI)", "category": "Energy", "currency": "$", "base_px": 72.00, "tick": 0.01, "digits": 2, "scale": 72.0 / 2640.0, "half_sp": 0.03, "fallback_size": 0.20, "pip_factor": 1.0},
+    "OIL_BRENT": {"name": "Brent Crude Oil", "category": "Energy", "currency": "$", "base_px": 76.00, "tick": 0.01, "digits": 2, "scale": 76.0 / 2640.0, "half_sp": 0.03, "fallback_size": 0.20, "pip_factor": 1.0},
+    "EURUSD": {"name": "EUR / USD", "category": "Forex", "currency": "", "base_px": 1.0850, "tick": 0.0001, "digits": 4, "scale": 1.085 / 2640.0, "half_sp": 0.0001, "fallback_size": 0.0008, "pip_factor": 10000.0},
+    "GBPUSD": {"name": "GBP / USD", "category": "Forex", "currency": "", "base_px": 1.2950, "tick": 0.0001, "digits": 4, "scale": 1.295 / 2640.0, "half_sp": 0.00012, "fallback_size": 0.0010, "pip_factor": 10000.0},
+    "USDJPY": {"name": "USD / JPY", "category": "Forex", "currency": "", "base_px": 153.00, "tick": 0.01, "digits": 2, "scale": 153.0 / 2640.0, "half_sp": 0.015, "fallback_size": 0.15, "pip_factor": 100.0},
+    "AUDUSD": {"name": "AUD / USD", "category": "Forex", "currency": "", "base_px": 0.6650, "tick": 0.0001, "digits": 4, "scale": 0.665 / 2640.0, "half_sp": 0.0001, "fallback_size": 0.0006, "pip_factor": 10000.0},
+    "USDCAD": {"name": "USD / CAD", "category": "Forex", "currency": "", "base_px": 1.3850, "tick": 0.0001, "digits": 4, "scale": 1.385 / 2640.0, "half_sp": 0.0001, "fallback_size": 0.0007, "pip_factor": 10000.0},
+    "USDCHF": {"name": "USD / CHF", "category": "Forex", "currency": "", "base_px": 0.8850, "tick": 0.0001, "digits": 4, "scale": 0.885 / 2640.0, "half_sp": 0.0001, "fallback_size": 0.0007, "pip_factor": 10000.0},
+    "US500": {"name": "S&P 500 Index", "category": "Indices", "currency": "$", "base_px": 5850.0, "tick": 0.1, "digits": 1, "scale": 5850.0 / 2640.0, "half_sp": 0.35, "fallback_size": 5.0, "pip_factor": 1.0},
+    "US100": {"name": "Nasdaq 100 Index", "category": "Indices", "currency": "$", "base_px": 20800.0, "tick": 0.5, "digits": 1, "scale": 20800.0 / 2640.0, "half_sp": 1.2, "fallback_size": 25.0, "pip_factor": 1.0},
+    "US30": {"name": "Dow Jones 30", "category": "Indices", "currency": "$", "base_px": 43500.0, "tick": 1.0, "digits": 1, "scale": 43500.0 / 2640.0, "half_sp": 2.0, "fallback_size": 35.0, "pip_factor": 1.0},
+    "GER40": {"name": "DAX 40 Index", "category": "Indices", "currency": "", "base_px": 19400.0, "tick": 1.0, "digits": 1, "scale": 19400.0 / 2640.0, "half_sp": 1.5, "fallback_size": 18.0, "pip_factor": 1.0},
+    "UK100": {"name": "FTSE 100 Index", "category": "Indices", "currency": "", "base_px": 8200.0, "tick": 1.0, "digits": 1, "scale": 8200.0 / 2640.0, "half_sp": 1.0, "fallback_size": 10.0, "pip_factor": 1.0},
+    "JP225": {"name": "Nikkei 225", "category": "Indices", "currency": "", "base_px": 39000.0, "tick": 5.0, "digits": 0, "scale": 39000.0 / 2640.0, "half_sp": 5.0, "fallback_size": 50.0, "pip_factor": 1.0},
 }
 
 
@@ -196,6 +196,10 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
     p = Params.from_dict(cfg["strategy"])
     r_cfg = cfg.get("risk", {})
     tick, price = cfg["tick"], cfg.get("price", "mid")
+    epic_upper = str(cfg.get("epic", "GOLD")).upper()
+    spec = INSTRUMENT_SPECS.get(epic_upper, INSTRUMENT_SPECS.get("GOLD", {}))
+    digits = spec.get("digits", 2)
+    bs_digits = digits if digits > 0 else 0
     k_stop = float(r_cfg.get("safety_stop_bricks", 3.0))
     be_bricks = float(r_cfg.get("breakeven_after_bricks", 0.0))
     max_sp_frac = float(r_cfg.get("max_spread_frac_of_brick", 0.0))
@@ -216,18 +220,18 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
         exe_px = exe if exe is not None else px
         sz = compute_size(cfg, bs)
         trig = trig_px if trig_px is not None else px
-        overshoot = round((px - trig) * side, 2)
+        overshoot = round((px - trig) * side, digits)
         trade = {
             "side": "LONG" if side > 0 else "SHORT",
             "size": sz,
             "session": session_of(r["t"]),
             "entry_time": r["t"],
             "entry_brick_idx": eng.brick_cnt - 1,
-            "trigger_px": round(trig, 2),
-            "entry": round(px, 2),
-            "entry_exec": round(exe_px, 2),
+            "trigger_px": round(trig, digits),
+            "entry": round(px, digits),
+            "entry_exec": round(exe_px, digits),
             "overshoot": overshoot,
-            "brick_size": round(bs, 2),
+            "brick_size": round(bs, bs_digits),
             "why_in": why,
             "mfe_px": 0.0,
             "mae_px": 0.0,
@@ -245,8 +249,8 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
         trade.update(
             exit_time=r["t"],
             exit_brick_idx=eng.brick_cnt - 1,
-            exit=round(px, 2),
-            exit_exec=round(exec_px, 2),
+            exit=round(px, digits),
+            exit_exec=round(exec_px, digits),
             why_out=why,
             mfe_bricks=round(trade["mfe_px"] / bs, 2),
             mae_bricks=round(trade["mae_px"] / bs, 2),
@@ -301,7 +305,7 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
             elif not sess_allowed.get(sess, True):
                 veto = f"session_{sess}"
             elif max_sp_frac > 0 and bs > 0 and spread > max_sp_frac * bs:
-                veto = f"spread ({spread:.2f})"
+                veto = f"spread ({spread:.{digits}f})"
 
             if veto:
                 filtered_events.append({"t": t.isoformat(), "reason": veto, "c": c, "brick_idx": eng.brick_cnt - 1})

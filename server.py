@@ -389,6 +389,10 @@ def serialize_backtest(cfg: dict) -> dict:
             "bars_count": len(bars),
             "days_count": len(days),
             "digits": digits,
+            "currency": spec.get("currency", "$"),
+            "pip_factor": spec.get("pip_factor", 1.0),
+            "name": spec.get("name", cfg["epic"]),
+            "category": spec.get("category", "General"),
             "tick": cfg.get("tick", spec.get("tick", 0.01)),
             "start": bars[0]["t"].isoformat() if bars else None,
             "end": bars[-1]["t"].isoformat() if bars else None,
@@ -595,7 +599,22 @@ class Handler(BaseHTTPRequestHandler):
                 "config": cfg,
                 "bot": get_bot_status(cfg),
                 "backtest": serialize_backtest(cfg),
+                "instrument_specs": INSTRUMENT_SPECS,
             })
+            return
+
+        if u.path == "/api/scanner":
+            from scanner import get_cached_or_scan_all
+            cfg = load_config()
+            creds = check_credentials_present()
+            cap = None
+            if creds.get("connected"):
+                try:
+                    cap = Capital("live" if cfg.get("live") else "demo")
+                except Exception:
+                    pass
+            res = get_cached_or_scan_all(cfg, cap=cap)
+            self._send_json(res)
             return
 
         self._send_json({"error": "Not found"}, 404)
@@ -760,6 +779,56 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True, "message": msg, "bot": get_bot_status(cfg)})
                 return
 
+            if u.path == "/api/scanner":
+                from scanner import get_cached_or_scan_all
+                force = bool(body.get("force", False))
+                creds = check_credentials_present()
+                cap = None
+                if creds.get("connected"):
+                    try:
+                        cap = Capital("live" if cfg.get("live") else "demo")
+                    except Exception:
+                        pass
+                res = get_cached_or_scan_all(cfg, cap=cap, force=force)
+                self._send_json(res)
+                return
+
+            if u.path == "/api/switch-instrument":
+                target_epic = str(body.get("epic", "GOLD")).upper()
+                cfg["epic"] = target_epic
+                if target_epic in INSTRUMENT_SPECS:
+                    spec = INSTRUMENT_SPECS[target_epic]
+                    cfg["tick"] = spec["tick"]
+                    cfg["strategy"]["fallback_size"] = spec["fallback_size"]
+                save_config(cfg)
+
+                creds = check_credentials_present()
+                if creds.get("connected"):
+                    try:
+                        cap = Capital("live" if cfg.get("live") else "demo")
+                        end = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+                        start = end - timedelta(days=15)
+                        matched, bars = fetch_candles_with_fallback(cap, target_epic, cfg["resolution"], start, end)
+                        if matched != target_epic:
+                            cfg["epic"] = matched
+                            save_config(cfg)
+                        _, day_bars = fetch_candles_with_fallback(cap, cfg["epic"], "DAY", start - timedelta(days=35), end)
+                        if bars:
+                            save_bars(data_path(cfg["epic"], cfg["resolution"]), bars)
+                        if day_bars:
+                            save_bars(data_path(cfg["epic"], "DAY"), day_bars)
+                    except Exception:
+                        pass
+
+                self._send_json({
+                    "ok": True,
+                    "config": cfg,
+                    "bot": get_bot_status(cfg),
+                    "backtest": serialize_backtest(cfg),
+                    "instrument_specs": INSTRUMENT_SPECS,
+                })
+                return
+
             if u.path == "/api/config":
                 old_epic = str(cfg.get("epic", "GOLD")).upper()
                 for k in ("epic", "resolution", "price", "tick", "size", "sizing_mode", "risk_per_trade_usd", "mode", "live"):
@@ -785,6 +854,7 @@ class Handler(BaseHTTPRequestHandler):
                     "config": cfg,
                     "bot": get_bot_status(cfg),
                     "backtest": serialize_backtest(cfg),
+                    "instrument_specs": INSTRUMENT_SPECS,
                 })
                 return
 
