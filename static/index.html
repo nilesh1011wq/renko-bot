@@ -695,7 +695,6 @@
         <select id="in-epic" onchange="switchInstrument(this.value)" style="background: transparent; color: #f8fafc; font-weight: 700; font-size: 11.5px; font-family: var(--font-mono); border: none; outline: none; cursor: pointer; padding: 2px 4px;">
           <optgroup label="Metals" style="background: #0f172a; color: #f8fafc;">
             <option value="GOLD">GOLD (XAU/USD)</option>
-            <option value="XAUUSD">XAUUSD (Gold CFD)</option>
             <option value="SILVER">SILVER (XAG/USD)</option>
           </optgroup>
           <optgroup label="Energy &amp; Oil" style="background: #0f172a; color: #f8fafc;">
@@ -1360,7 +1359,8 @@
 
     async function switchInstrument(newEpic) {
       if (!newEpic) return;
-      const cleanEpic = newEpic.toUpperCase();
+      let cleanEpic = newEpic.toUpperCase();
+      if (cleanEpic === 'XAUUSD') cleanEpic = 'GOLD';
 
       const elTitle = document.getElementById('chart-title-epic');
       if (elTitle) elTitle.textContent = cleanEpic;
@@ -1859,9 +1859,11 @@
       document.getElementById('in-mode').value = cfg.mode ?? 'semi-auto';
 
       const elEpic = document.getElementById('in-epic');
-      if (elEpic && cfg.epic) elEpic.value = cfg.epic.toUpperCase();
+      const epicUpper = (cfg.epic || 'GOLD').toUpperCase();
+      const normEpic = (epicUpper === 'XAUUSD') ? 'GOLD' : epicUpper;
+      if (elEpic) elEpic.value = normEpic;
       const elLeftBadge = document.getElementById('left-active-epic');
-      if (elLeftBadge && cfg.epic) elLeftBadge.textContent = cfg.epic.toUpperCase();
+      if (elLeftBadge) elLeftBadge.textContent = normEpic;
       document.getElementById('in-sess_asian').checked = sess.asian !== false;
       document.getElementById('in-sess_london').checked = sess.london !== false;
       document.getElementById('in-sess_ny').checked = sess.new_york !== false;

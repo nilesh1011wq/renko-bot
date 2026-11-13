@@ -843,6 +843,8 @@ class Handler(BaseHTTPRequestHandler):
 
             if u.path == "/api/switch-instrument":
                 target_epic = str(body.get("epic", "GOLD")).upper()
+                if target_epic == "XAUUSD":
+                    target_epic = "GOLD"
                 cfg["epic"] = target_epic
                 if target_epic in INSTRUMENT_SPECS:
                     spec = INSTRUMENT_SPECS[target_epic]
@@ -883,6 +885,8 @@ class Handler(BaseHTTPRequestHandler):
                 for k in ("epic", "resolution", "price", "tick", "size", "sizing_mode", "risk_per_trade_usd", "mode", "live"):
                     if k in body:
                         cfg[k] = body[k]
+                if cfg.get("epic", "").upper() == "XAUUSD":
+                    cfg["epic"] = "GOLD"
                 new_epic = str(cfg.get("epic", "GOLD")).upper()
                 if new_epic != old_epic and new_epic in INSTRUMENT_SPECS:
                     spec = INSTRUMENT_SPECS[new_epic]
