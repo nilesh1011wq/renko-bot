@@ -69,6 +69,12 @@ def resolve_epic_alias(epic: str) -> list[str]:
     return [epic]
 
 
+_DAYS_CACHE: dict[str, tuple[float, list]] = {}
+_DAYS_CACHE_TTL = 3600.0  # 1 hour TTL for daily ATR candles
+_RECENT_ENTRIES: dict[str, float] = {}
+ENTRY_DEBOUNCE_SECONDS = 120.0  # Prevent duplicate order submissions within 2 minutes
+
+
 def warmup_engine(cap: Capital, cfg: dict):
     """Fetch recent history to warm up DailyAtr and RenkoEngine without repainting."""
     epic = cfg["epic"]
@@ -79,16 +85,24 @@ def warmup_engine(cap: Capital, cfg: dict):
     end = datetime.now(timezone.utc)
     bars = []
     days = []
+
+    now_ts = time.time()
+    if epic in _DAYS_CACHE and now_ts - _DAYS_CACHE[epic][0] < _DAYS_CACHE_TTL:
+        days = _DAYS_CACHE[epic][1]
+
     for cand in resolve_epic_alias(epic):
         try:
             b_try = cap.prices(cand, res, end - timedelta(days=5), end)
             if b_try:
                 bars = b_try
                 cfg["epic"] = cand
-                try:
-                    days = cap.prices(cand, "DAY", end - timedelta(days=35), end)
-                except Exception:
-                    pass
+                if not days:
+                    try:
+                        days = cap.prices(cand, "DAY", end - timedelta(days=35), end)
+                        if days:
+                            _DAYS_CACHE[epic] = (now_ts, days)
+                    except Exception:
+                        pass
                 break
         except Exception:
             continue
@@ -96,7 +110,9 @@ def warmup_engine(cap: Capital, cfg: dict):
     if not bars:
         try:
             from backtest import ensure_data
-            bars, _ = ensure_data(cfg)
+            bars, fallback_days = ensure_data(cfg)
+            if not days:
+                days = fallback_days
         except Exception:
             bars = []
 
@@ -395,6 +411,11 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 if pos_dir != 0 and not d.reverse:
                     continue
 
+                # Debounce to prevent duplicate submissions while broker registers position
+                now_epoch = time.time()
+                if now_epoch - _RECENT_ENTRIES.get(epic, 0) < ENTRY_DEBOUNCE_SECONDS:
+                    continue
+
                 # Portfolio-level risk cap
                 if pos_dir == 0 and total_open_count >= max_portfolio:
                     print(f"[{epic}] Entry blocked: portfolio max open positions reached ({total_open_count}/{max_portfolio})")
@@ -421,6 +442,7 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                     continue
 
                 if inst_cfg.get("mode", "semi-auto") == "semi-auto":
+                    _RECENT_ENTRIES[epic] = now_epoch
                     side = 1 if d.action == "BUY" else (-1 if d.action == "SELL" else 0)
                     stop = safety_stop_level(side, eng.last_close, bs, inst_cfg) if side else None
                     ttl = int(inst_cfg.get("risk", {}).get("ticket_ttl_seconds", 180))
@@ -448,6 +470,7 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                     actions_taken.append({"epic": epic, "action": "TICKET_CREATED", "ticket": ticket})
                 else:
                     # Full Auto execution
+                    _RECENT_ENTRIES[epic] = now_epoch
                     execute_decision(cap, inst_cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz)
                     total_open_count += 1
                     actions_taken.append({"epic": epic, "action": d.action, "size": sz})
