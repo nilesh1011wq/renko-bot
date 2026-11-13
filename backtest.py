@@ -203,6 +203,7 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
     k_stop = float(r_cfg.get("safety_stop_bricks", 3.0))
     be_bricks = float(r_cfg.get("breakeven_after_bricks", 0.0))
     max_sp_frac = float(r_cfg.get("max_spread_frac_of_brick", 0.0))
+    max_slip_frac = float(r_cfg.get("max_slippage_bricks", 0.0))
     rollover_blk = bool(r_cfg.get("rollover_blackout", False))
     sess_allowed = r_cfg.get("sessions", {"asian": True, "london": True, "new_york": True})
 
@@ -292,9 +293,21 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
 
         d = eng.decide(pos, n, bar_close=c, brick_size=bs)
         if d.filtered_reason:
-            filtered_events.append({"t": t.isoformat(), "reason": d.filtered_reason, "c": c, "brick_idx": eng.brick_cnt - 1})
+            sess = session_of(t)
+            side_str = "LONG" if d.filtered_action == "BUY" else ("SHORT" if d.filtered_action == "SELL" else "")
+            filtered_events.append({
+                "t": t.isoformat(),
+                "session": sess,
+                "side": side_str,
+                "action": d.filtered_action,
+                "reason": d.filtered_reason,
+                "trigger_px": round(d.trigger_brick_px, digits) if d.trigger_brick_px is not None else round(c, digits),
+                "c": round(c, digits),
+                "brick_size": round(bs, bs_digits),
+                "brick_idx": eng.brick_cnt - 1
+            })
 
-        # Check session / rollover / spread filters on new entries (BUY / SELL)
+        # Check session / rollover / spread / slippage filters on new entries (BUY / SELL)
         if d.action in ("BUY", "SELL"):
             sess = session_of(t)
             bid_c, ask_c = r.get("c_bid"), r.get("c_ask")
@@ -306,9 +319,24 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
                 veto = f"session_{sess}"
             elif max_sp_frac > 0 and bs > 0 and spread > max_sp_frac * bs:
                 veto = f"spread ({spread:.{digits}f})"
+            elif max_slip_frac > 0 and bs > 0 and d.trigger_brick_px is not None:
+                side_mult = 1 if d.action == "BUY" else -1
+                slip = (c - d.trigger_brick_px) * side_mult
+                if slip > max_slip_frac * bs:
+                    veto = f"slippage ({slip/bs:.2f} brk)"
 
             if veto:
-                filtered_events.append({"t": t.isoformat(), "reason": veto, "c": c, "brick_idx": eng.brick_cnt - 1})
+                filtered_events.append({
+                    "t": t.isoformat(),
+                    "session": sess,
+                    "side": "LONG" if d.action == "BUY" else "SHORT",
+                    "action": d.action,
+                    "reason": veto,
+                    "trigger_px": round(d.trigger_brick_px, digits) if d.trigger_brick_px is not None else round(c, digits),
+                    "c": round(c, digits),
+                    "brick_size": round(bs, bs_digits),
+                    "brick_idx": eng.brick_cnt - 1
+                })
                 # If we were reversing an open trade, still close the open trade!
                 if pos > 0 and d.action == "SELL":
                     d.action = "EXIT"

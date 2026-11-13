@@ -534,6 +534,27 @@
     .dock-pane { display: none; height: 100%; width: 100%; }
     .dock-pane.active { display: block; height: 100%; width: 100%; }
 
+    .journal-filter-btn {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      color: var(--text-1);
+      font-family: var(--font-mono);
+      transition: all 0.15s ease;
+    }
+    .journal-filter-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-0); }
+    .journal-filter-btn.active {
+      background: var(--blue) !important;
+      color: #fff !important;
+      border-color: var(--blue) !important;
+      font-weight: 700;
+    }
+    .journal-filter-btn.flt-active {
+      background: #f59e0b !important;
+      color: #000 !important;
+      border-color: #f59e0b !important;
+      font-weight: 700;
+    }
+
     /* Tables */
     .table-wrap {
       overflow-x: auto;
@@ -1113,7 +1134,20 @@
         <div class="dock-content">
           <!-- Tab 1: Trade Journal -->
           <div id="tab-journal" class="dock-pane active">
-            <div class="table-wrap" style="max-height:100%;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+              <div style="display:flex; gap:6px; align-items:center;">
+                <span style="font-size:11px; color:var(--text-1); font-family:var(--font-mono); font-weight:600;">JOURNAL:</span>
+                <button id="btn-journal-all" onclick="setJournalFilter('all')" class="journal-filter-btn active" style="font-size:11px; padding:2px 8px; border-radius:3px; cursor:pointer;">All Entries (<span id="cnt-j-all">0</span>)</button>
+                <button id="btn-journal-exec" onclick="setJournalFilter('executed')" class="journal-filter-btn" style="font-size:11px; padding:2px 8px; border-radius:3px; cursor:pointer;">Executed (<span id="cnt-j-exec">0</span>)</button>
+                <button id="btn-journal-flt" onclick="setJournalFilter('filtered')" class="journal-filter-btn" style="font-size:11px; padding:2px 8px; border-radius:3px; cursor:pointer; background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid #f59e0b;">⚠️ Slippage &amp; Filtered (<span id="cnt-j-flt">0</span>)</button>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <span style="font-size:10.5px; color:#38bdf8; font-family:var(--font-mono); background:rgba(56,189,248,0.12); padding:2px 8px; border-radius:3px; border:1px solid rgba(56,189,248,0.3);">
+                  🛡️ Pre-Execution Guard: ≤0.35 Brk Slippage | Candle Sync: :01s
+                </span>
+              </div>
+            </div>
+            <div class="table-wrap" style="max-height:calc(100% - 32px);">
               <table>
                 <thead>
                   <tr>
@@ -2125,6 +2159,113 @@
       }
     }
 
+    let CURRENT_JOURNAL_FILTER = 'all'; // 'all', 'executed', 'filtered'
+
+    function setJournalFilter(filter) {
+      CURRENT_JOURNAL_FILTER = filter;
+      const btnAll = document.getElementById('btn-journal-all');
+      const btnExec = document.getElementById('btn-journal-exec');
+      const btnFlt = document.getElementById('btn-journal-flt');
+      if (btnAll) btnAll.classList.remove('active', 'flt-active');
+      if (btnExec) btnExec.classList.remove('active', 'flt-active');
+      if (btnFlt) btnFlt.classList.remove('active', 'flt-active');
+
+      if (filter === 'filtered' && btnFlt) btnFlt.classList.add('flt-active');
+      else if (filter === 'executed' && btnExec) btnExec.classList.add('active');
+      else if (btnAll) btnAll.classList.add('active');
+
+      if (STATE && STATE.backtest) {
+        renderJournalTable(STATE.backtest, STATE.bot);
+      }
+    }
+
+    function renderJournalTable(bt, bot) {
+      const tbody = document.getElementById('trades-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const execTrades = (bt && bt.trades) ? bt.trades : [];
+      const filteredEvents = (bt && bt.filtered_events) ? bt.filtered_events : [];
+      const activeEpic = (STATE && STATE.config && STATE.config.epic) ? STATE.config.epic : 'GOLD';
+
+      const cntAll = document.getElementById('cnt-j-all');
+      const cntExec = document.getElementById('cnt-j-exec');
+      const cntFlt = document.getElementById('cnt-j-flt');
+      const dockTradeCnt = document.getElementById('dock-trade-cnt');
+
+      if (cntAll) cntAll.textContent = execTrades.length + filteredEvents.length;
+      if (cntExec) cntExec.textContent = execTrades.length;
+      if (cntFlt) cntFlt.textContent = filteredEvents.length;
+      if (dockTradeCnt) {
+        dockTradeCnt.textContent = filteredEvents.length > 0
+          ? `${execTrades.length} / ${filteredEvents.length} flt`
+          : `${execTrades.length}`;
+      }
+
+      let rows = [];
+      if (CURRENT_JOURNAL_FILTER === 'executed') {
+        rows = execTrades.map(t => ({ ...t, is_filtered: false, sort_time: t.entry_time }));
+        rows.reverse();
+      } else if (CURRENT_JOURNAL_FILTER === 'filtered') {
+        rows = filteredEvents.map((f, i) => ({ ...f, is_filtered: true, flt_idx: i + 1, sort_time: f.t }));
+        rows.reverse();
+      } else {
+        const all = [
+          ...execTrades.map(t => ({ ...t, is_filtered: false, sort_time: t.entry_time })),
+          ...filteredEvents.map((f, i) => ({ ...f, is_filtered: true, flt_idx: i + 1, sort_time: f.t }))
+        ];
+        all.sort((a, b) => (b.sort_time || '').localeCompare(a.sort_time || ''));
+        rows = all;
+      }
+
+      for (const item of rows) {
+        const tr = document.createElement('tr');
+        if (item.is_filtered) {
+          tr.style.background = 'rgba(245, 158, 11, 0.08)';
+          tr.style.borderLeft = '3px solid #f59e0b';
+          const sideStr = item.side || item.action || 'SIGNAL';
+          const sideBadge = `<span class="badge" style="background:rgba(245, 158, 11, 0.22); color:#f59e0b; border:1px solid #f59e0b; font-weight:700;">⚠️ ${sideStr}</span>`;
+          const entryTime = (item.t || item.sort_time || '').slice(5, 16).replace('T', ' ');
+          const trigPx = fmtPrice(item.trigger_px, activeEpic);
+          const mktPx = fmtPrice(item.c, activeEpic);
+          const reasonBadge = `<span class="badge" style="background:rgba(245, 158, 11, 0.2); color:#f59e0b; border:1px solid #f59e0b; font-size:10.5px;">⚠️ ${item.reason || 'FILTERED'}</span>`;
+          const protectedBadge = `<span class="badge" style="background:rgba(56, 189, 248, 0.15); color:#38bdf8; border:1px solid #38bdf8; font-weight:700;">PROTECTED</span>`;
+          tr.innerHTML = `
+            <td><span style="color:#f59e0b; font-weight:700;">FLT-${item.flt_idx || ''}</span></td>
+            <td>${sideBadge}</td>
+            <td>${item.session || '--'}</td>
+            <td>${entryTime}</td>
+            <td>${trigPx}</td>
+            <td><span style="text-decoration:line-through; color:var(--text-2);" title="Market price when filter blocked">${mktPx}</span></td>
+            <td style="color:var(--text-2);">--</td>
+            <td>${reasonBadge}</td>
+            <td style="color:var(--text-2);">--</td>
+            <td style="color:var(--text-2);">$0.00</td>
+            <td>${protectedBadge}</td>
+          `;
+        } else {
+          const sideBadge = item.side === 'LONG' ? '<span class="badge buy">LONG</span>' : '<span class="badge sell">SHORT</span>';
+          const outBadge = item.why_out === 'SAFETY_STOP'
+            ? '<span class="badge stop">SAFETY_STOP</span>'
+            : (item.why_out || '--');
+          tr.innerHTML = `
+            <td>${item.num}</td>
+            <td>${sideBadge}</td>
+            <td>${item.session}</td>
+            <td>${(item.entry_time || '').slice(5, 16).replace('T', ' ')}</td>
+            <td>${fmtPrice(item.trigger_px, activeEpic)}</td>
+            <td>${fmtPrice(item.entry_exec, activeEpic)}</td>
+            <td>${fmtPrice(item.exit_exec, activeEpic)}</td>
+            <td>${outBadge}</td>
+            <td>+${item.mfe_bricks} / -${item.mae_bricks}</td>
+            <td class="${item.gross >= 0 ? 'pos' : 'neg'}">${fmtUsd(item.gross)}</td>
+            <td class="${item.net >= 0 ? 'pos' : 'neg'}" style="font-weight:700">${fmtUsd(item.net)}</td>
+          `;
+        }
+        tbody.appendChild(tr);
+      }
+    }
+
     async function closeBrokerDeal(dealId) {
       if (!confirm(`Close Capital.com deal #${dealId} now?`)) return;
       try {
@@ -2405,34 +2546,7 @@
         }
 
         // Trade List Table
-        const tbody = document.getElementById('trades-tbody');
-        const dockTradeCnt = document.getElementById('dock-trade-cnt');
-        if (dockTradeCnt) dockTradeCnt.textContent = (bt.trades || []).length;
-        if (tbody) {
-          tbody.innerHTML = '';
-          const revTrades = [...(bt.trades || [])].reverse();
-          for (const t of revTrades) {
-            const tr = document.createElement('tr');
-            const sideBadge = t.side === 'LONG' ? '<span class="badge buy">LONG</span>' : '<span class="badge sell">SHORT</span>';
-            const outBadge = t.why_out === 'SAFETY_STOP'
-              ? '<span class="badge stop">SAFETY_STOP</span>'
-              : (t.why_out || '--');
-            tr.innerHTML = `
-              <td>${t.num}</td>
-              <td>${sideBadge}</td>
-              <td>${t.session}</td>
-              <td>${(t.entry_time || '').slice(5, 16).replace('T', ' ')}</td>
-              <td>${fmtPrice(t.trigger_px, activeEpic)}</td>
-              <td>${fmtPrice(t.entry_exec, activeEpic)}</td>
-              <td>${fmtPrice(t.exit_exec, activeEpic)}</td>
-              <td>${outBadge}</td>
-              <td>+${t.mfe_bricks} / -${t.mae_bricks}</td>
-              <td class="${t.gross >= 0 ? 'pos' : 'neg'}">${fmtUsd(t.gross)}</td>
-              <td class="${t.net >= 0 ? 'pos' : 'neg'}" style="font-weight:700">${fmtUsd(t.net)}</td>
-            `;
-            tbody.appendChild(tr);
-          }
-        }
+        renderJournalTable(bt, bot);
 
         // Bot Log Table
         const logBody = document.getElementById('log-tbody');

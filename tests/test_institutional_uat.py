@@ -455,6 +455,21 @@ class TestInstitutionalUAT(unittest.TestCase):
         for elem in required_elements:
             self.assertIn(elem, html, f"Missing critical UI element: {elem}")
 
+        # Verify Slippage Filter Buttons & Protected Badges in HTML
+        journal_elements = [
+            'id="btn-journal-all"',
+            'id="btn-journal-exec"',
+            'id="btn-journal-flt"',
+            'id="cnt-j-all"',
+            'id="cnt-j-exec"',
+            'id="cnt-j-flt"',
+            'setJournalFilter',
+            'renderJournalTable',
+            'PROTECTED',
+        ]
+        for elem in journal_elements:
+            self.assertIn(elem, html, f"Missing journal element: {elem}")
+
         # Extract JS scripts and validate syntax using macOS JavaScriptCore
         scripts = re.findall(r"<script>(.*?)</script>", html, re.DOTALL)
         self.assertGreaterEqual(len(scripts), 1)
@@ -471,6 +486,68 @@ class TestInstitutionalUAT(unittest.TestCase):
             finally:
                 if Path(test_js).exists():
                     Path(test_js).unlink()
+
+    def test_19_slippage_guard_pre_execution(self):
+        """Verify Live Pre-Execution Slippage Guard prevents bad fills."""
+        import risk
+        cfg = {
+            "risk": {
+                "max_trades_per_day": 0,
+                "max_daily_loss": 0,
+                "max_spread_frac_of_brick": 0.25,
+                "max_slippage_bricks": 0.35,
+                "rollover_blackout": False,
+                "sessions": {"asian": True, "london": True, "new_york": True}
+            }
+        }
+        brick_size = 10.0
+        trig_px = 2600.0
+
+        # BUY with 0.2 brk slippage (2.0 pts): PASS
+        ok, reason = risk.check_entry_allowed(cfg, bid=2601.5, ask=2602.0, brick_size=brick_size,
+                                              trig_px=trig_px, side=1)
+        self.assertTrue(ok, f"Expected PASS for 0.2 brk slippage, got: {reason}")
+
+        # BUY with 0.5 brk slippage (5.0 pts): BLOCK (> 0.35 limit)
+        ok, reason = risk.check_entry_allowed(cfg, bid=2604.5, ask=2605.0, brick_size=brick_size,
+                                              trig_px=trig_px, side=1)
+        self.assertFalse(ok)
+        self.assertIn("Live slippage", reason)
+
+        # BUY with favorable slippage (cheaper price 2598.0): PASS
+        ok, reason = risk.check_entry_allowed(cfg, bid=2597.5, ask=2598.0, brick_size=brick_size,
+                                              trig_px=trig_px, side=1)
+        self.assertTrue(ok)
+
+        # SELL with 0.2 brk slippage (drop of 2.0 pts to 2598.0): PASS
+        ok, reason = risk.check_entry_allowed(cfg, bid=2598.0, ask=2598.5, brick_size=brick_size,
+                                              trig_px=trig_px, side=-1)
+        self.assertTrue(ok)
+
+        # SELL with 0.6 brk adverse slippage (drop of 6.0 pts to 2594.0): BLOCK (> 0.35 limit)
+        ok, reason = risk.check_entry_allowed(cfg, bid=2594.0, ask=2594.5, brick_size=brick_size,
+                                              trig_px=trig_px, side=-1)
+        self.assertFalse(ok)
+        self.assertIn("Live slippage", reason)
+
+    def test_20_filtered_trades_journal_metadata(self):
+        """Verify backtest.simulate captures full metadata for filtered trades."""
+        import backtest
+        cfg = backtest.load_config()
+        cfg["epic"] = "GOLD"
+        bars, days = backtest.ensure_data(cfg)
+        trades, eng, signals, filtered = backtest.simulate(bars, days, cfg)
+        self.assertGreater(len(trades), 0)
+        self.assertGreater(len(filtered), 0)
+        # Check first filtered event structure
+        flt = filtered[0]
+        self.assertIn("t", flt)
+        self.assertIn("session", flt)
+        self.assertIn("side", flt)
+        self.assertIn("reason", flt)
+        self.assertIn("trigger_px", flt)
+        self.assertIn("c", flt)
+        self.assertIn("brick_size", flt)
 
 
 if __name__ == "__main__":

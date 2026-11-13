@@ -88,7 +88,8 @@ def today_stats(trades_csv: Path | None = None, now: datetime | None = None) -> 
 
 
 def check_entry_allowed(cfg: dict, bid: float | None, ask: float | None, brick_size: float,
-                        trades_csv: Path | None = None, now: datetime | None = None) -> tuple[bool, str]:
+                        trades_csv: Path | None = None, now: datetime | None = None,
+                        trig_px: float | None = None, side: int | None = None) -> tuple[bool, str]:
     """Check whether a new entry (BUY or SELL) is permitted by risk rules."""
     if kill_switch_active():
         return False, "BLOCK: Kill switch (STOP file) is active"
@@ -120,5 +121,13 @@ def check_entry_allowed(cfg: dict, bid: float | None, ask: float | None, brick_s
         limit = max_spread_frac * brick_size
         if spread > limit:
             return False, f"BLOCK: Spread {spread:.2f} exceeds {max_spread_frac*100:.0f}% of brick ({limit:.2f})"
+
+    max_slippage = float(r_cfg.get("max_slippage_bricks", 0.35))
+    if max_slippage > 0 and trig_px is not None and side is not None and brick_size > 0:
+        curr_px = ask if side > 0 else bid
+        if curr_px is not None:
+            slip_dist = (curr_px - trig_px) * side
+            if slip_dist > max_slippage * brick_size:
+                return False, f"BLOCK: Live slippage {slip_dist:.2f} ({slip_dist/brick_size:.2f} brk) exceeds limit ({max_slippage:.2f} brk)"
 
     return True, "PASS"

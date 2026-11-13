@@ -128,6 +128,7 @@ class Decision:
     reverse: bool = False            # BUY that covers a short / SELL that exits a long
     filtered_reason: str = ""        # non-empty if a Pro filter vetoed an entry
     trigger_brick_px: Optional[float] = None
+    filtered_action: str = ""        # "BUY" or "SELL" that was filtered
 
 
 @dataclass
@@ -243,29 +244,30 @@ class RenkoEngine:
 
         if go_long or go_short:
             side = 1 if go_long else -1
+            act_candidate = "BUY" if go_long else "SELL"
             trig_px = self.trigger_brick_price(side)
             if p.one_trade_per_run and self.last_traded_run_id == self.run_id:
                 if position < 0 and short_exit:
-                    return Decision("COVER", filtered_reason="one_trade_per_run")
+                    return Decision("COVER", filtered_reason="one_trade_per_run", trigger_brick_px=trig_px, filtered_action=act_candidate)
                 if position > 0 and long_exit:
-                    return Decision("EXIT", filtered_reason="one_trade_per_run")
-                return Decision("", filtered_reason="one_trade_per_run")
+                    return Decision("EXIT", filtered_reason="one_trade_per_run", trigger_brick_px=trig_px, filtered_action=act_candidate)
+                return Decision("", filtered_reason="one_trade_per_run", trigger_brick_px=trig_px, filtered_action=act_candidate)
 
             if p.max_bricks_on_entry_bar > 0 and new_bricks > p.max_bricks_on_entry_bar:
                 if position < 0 and short_exit:
-                    return Decision("COVER", filtered_reason=f"news_spike ({new_bricks} bricks)")
+                    return Decision("COVER", filtered_reason=f"news_spike ({new_bricks} bricks)", trigger_brick_px=trig_px, filtered_action=act_candidate)
                 if position > 0 and long_exit:
-                    return Decision("EXIT", filtered_reason=f"news_spike ({new_bricks} bricks)")
-                return Decision("", filtered_reason=f"news_spike ({new_bricks} bricks)")
+                    return Decision("EXIT", filtered_reason=f"news_spike ({new_bricks} bricks)", trigger_brick_px=trig_px, filtered_action=act_candidate)
+                return Decision("", filtered_reason=f"news_spike ({new_bricks} bricks)", trigger_brick_px=trig_px, filtered_action=act_candidate)
 
             if p.max_overshoot_bricks > 0 and bar_close is not None and trig_px is not None and brick_size > 0:
                 overshoot = (bar_close - trig_px) * side / brick_size
                 if overshoot > p.max_overshoot_bricks:
                     if position < 0 and short_exit:
-                        return Decision("COVER", filtered_reason=f"overshoot ({overshoot:.2f} bricks)")
+                        return Decision("COVER", filtered_reason=f"overshoot ({overshoot:.2f} bricks)", trigger_brick_px=trig_px, filtered_action=act_candidate)
                     if position > 0 and long_exit:
-                        return Decision("EXIT", filtered_reason=f"overshoot ({overshoot:.2f} bricks)")
-                    return Decision("", filtered_reason=f"overshoot ({overshoot:.2f} bricks)")
+                        return Decision("EXIT", filtered_reason=f"overshoot ({overshoot:.2f} bricks)", trigger_brick_px=trig_px, filtered_action=act_candidate)
+                    return Decision("", filtered_reason=f"overshoot ({overshoot:.2f} bricks)", trigger_brick_px=trig_px, filtered_action=act_candidate)
 
             if go_long:
                 return Decision("BUY", reverse=position < 0, trigger_brick_px=trig_px)

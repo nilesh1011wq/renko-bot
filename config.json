@@ -36,6 +36,8 @@
     "max_daily_loss": 250.0,
     "max_trades_per_day": 20,
     "max_spread_frac_of_brick": 0.25,
+    "max_slippage_bricks": 0.35,
+    "max_portfolio_positions": 5,
     "rollover_blackout": true,
     "ticket_ttl_seconds": 180,
     "sessions": {

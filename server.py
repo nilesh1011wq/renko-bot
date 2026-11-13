@@ -167,15 +167,30 @@ class BackgroundWatcher:
                 if self.running and not kill_switch_active():
                     self.run_single_step()
                     cfg = load_config()
-                    wait_s = max(15, RES_MINUTES.get(cfg.get("resolution", "MINUTE"), 1) * 60 // 2)
+                    res_m = RES_MINUTES.get(cfg.get("resolution", "MINUTE"), 1)
+                    now_utc = datetime.now(timezone.utc)
+                    sec_in_candle = (now_utc.minute % res_m) * 60 + now_utc.second + (now_utc.microsecond / 1_000_000.0)
+                    total_candle_sec = res_m * 60.0
+                    half_sec = total_candle_sec / 2.0
+                    # Target 1: mid-candle check; Target 2: right after candle close (1.0s past :00)
+                    if sec_in_candle < 1.0:
+                        wait_s = 1.0 - sec_in_candle
+                    elif sec_in_candle < half_sec:
+                        wait_s = half_sec - sec_in_candle
+                    elif sec_in_candle < (total_candle_sec + 1.0):
+                        wait_s = (total_candle_sec + 1.0) - sec_in_candle
+                    else:
+                        wait_s = 15.0
+                    wait_s = max(2.0, min(wait_s, 60.0))
                 else:
-                    wait_s = 3
+                    wait_s = 3.0
             except Exception:
-                wait_s = 10
-            for _ in range(int(wait_s)):
+                wait_s = 10.0
+            end_t = time.time() + float(wait_s)
+            while time.time() < end_t:
                 if not self.running:
                     break
-                time.sleep(1)
+                time.sleep(min(0.5, max(0.05, end_t - time.time())))
 
     def state(self) -> dict:
         return {

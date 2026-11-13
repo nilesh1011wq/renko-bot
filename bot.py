@@ -263,7 +263,8 @@ def step_once(cap: Capital, cfg: dict):
 
     sz = compute_size(cfg, bs)
     if d.action in ("BUY", "SELL"):
-        ok, reason = check_entry_allowed(cfg, bid, ask, bs)
+        side_val = 1 if d.action == "BUY" else (-1 if d.action == "SELL" else 0)
+        ok, reason = check_entry_allowed(cfg, bid, ask, bs, trig_px=d.trigger_brick_px, side=side_val)
         if not ok:
             print(reason)
             log_event("BLOCKED", d.action, sz, bid if d.action == "SELL" else ask, None, note=reason)
@@ -434,7 +435,8 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 bid, ask = mkt.get("bid"), mkt.get("offer")
 
                 sz = compute_size(inst_cfg, bs)
-                ok, reason = check_entry_allowed(inst_cfg, bid, ask, bs)
+                side_val = 1 if d.action == "BUY" else (-1 if d.action == "SELL" else 0)
+                ok, reason = check_entry_allowed(inst_cfg, bid, ask, bs, trig_px=d.trigger_brick_px, side=side_val)
                 if not ok:
                     print(f"[{epic}] Entry blocked: {reason}")
                     if d.action:
