@@ -37,7 +37,7 @@ from urllib.parse import urlparse
 from backtest import (DATA, JOURNAL, INSTRUMENT_SPECS, data_path, ensure_data, generate_sample_gold_data,
                       load_config, save_bars, save_config, session_breakdown,
                       simulate, stats, write_trades)
-from bot import LIVE_TRADES, PENDING_FILE, resolve_epic_alias, step_once
+from bot import LIVE_TRADES, PENDING_FILE, resolve_epic_alias, step_once, step_multi_market
 from capital_api import Capital, CapitalError, RES_MINUTES, SSL_CTX, load_env
 from montecarlo import run_montecarlo
 from risk import kill_switch_active, set_kill_switch, today_stats
@@ -141,11 +141,13 @@ class BackgroundWatcher:
         try:
             had_pending = PENDING_FILE.exists()
             cap = Capital("live" if cfg.get("live") else "demo")
-            step_once(cap, cfg)
+            summary = step_multi_market(cap, cfg)
             self.checks_count += 1
             self.last_check = datetime.now(timezone.utc).isoformat()
             self.last_error = None
-            self.last_status = f"OK ({cap.env.upper()}) — check #{self.checks_count}"
+            monitored = summary.get("monitored", 16)
+            open_deals = summary.get("open_deals", 0)
+            self.last_status = f"OK ({cap.env.upper()}) — monitored {monitored} mkts | {open_deals} open deals | check #{self.checks_count}"
             if not had_pending and PENDING_FILE.exists():
                 t = json.loads(PENDING_FILE.read_text())
                 send_telegram(
@@ -1094,12 +1096,22 @@ class Handler(BaseHTTPRequestHandler):
                     creds = check_credentials_present()
                     if creds["api_key"] and creds["identifier"] and creds["password"]:
                         try:
-                            from bot import broker_position, log_event
+                            from bot import log_event
                             cap = Capital("live" if cfg.get("live") else "demo")
-                            _, deal_ids, _, sz = broker_position(cap, cfg["epic"])
-                            for did in deal_ids:
-                                conf = cap.close_position(did)
-                                log_event("FLATTEN", "CLOSE", sz, conf.get("level"), None, did, note="KILL_SWITCH")
+                            raw_pos = cap.positions()
+                            closed_count = 0
+                            for p in raw_pos:
+                                did = p.get("position", {}).get("dealId")
+                                sz = float(p.get("position", {}).get("size", 0.0))
+                                ep = p.get("market", {}).get("epic", "")
+                                if did:
+                                    try:
+                                        conf = cap.close_position(did)
+                                        log_event("FLATTEN", "CLOSE", sz, conf.get("level"), None, did, note=f"[{ep}] KILL_SWITCH")
+                                        closed_count += 1
+                                    except Exception as ce:
+                                        print(f"Error closing {did}: {ce}")
+                            msg += f" (Closed {closed_count} open deals across account)"
                         except Exception as e:
                             msg += f" (Broker flatten note: {e})"
                 self._send_json({"ok": True, "message": msg, "bot": get_bot_status(cfg)})

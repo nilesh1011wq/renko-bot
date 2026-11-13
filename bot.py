@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import json
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from backtest import load_config, pick
+from backtest import load_config, pick, INSTRUMENT_SPECS
 from capital_api import Capital, CapitalError, RES_MINUTES
 from renko import DailyAtr, Params, RenkoEngine, brick_size_from_atr
 from risk import (check_entry_allowed, compute_size, kill_switch_active,
@@ -142,11 +143,11 @@ def execute_decision(cap: Capital, cfg: dict, action: str, reverse: bool,
             try:
                 conf = cap.close_position(did)
                 log_event("CLOSE", action, sz, conf.get("level"), None, did,
-                          realized_pnl=conf.get("profit", 0.0), note=conf.get("dealStatus", ""))
-                print(f"Closed deal {did}: status={conf.get('dealStatus')} level={conf.get('level')}")
+                          realized_pnl=conf.get("profit", 0.0), note=f"[{epic}] {conf.get('dealStatus', '')}")
+                print(f"[{epic}] Closed deal {did}: status={conf.get('dealStatus')} level={conf.get('level')}")
             except Exception as e:
-                print(f"Error closing deal {did}: {e}")
-                log_event("ERROR", action, sz, None, None, did, note=str(e))
+                print(f"[{epic}] Error closing deal {did}: {e}")
+                log_event("ERROR", action, sz, None, None, did, note=f"[{epic}] {e}")
         if action in ("EXIT", "COVER"):
             return
 
@@ -166,12 +167,12 @@ def execute_decision(cap: Capital, cfg: dict, action: str, reverse: bool,
         if conf:
             did = conf.get("dealId", "")
             evt = "REVERSE_OPEN" if reverse else "OPEN"
-            log_event(evt, action, sz, conf.get("level"), stop, did, note=conf.get("dealStatus", ""))
-            print(f"Opened {action} {sz} {cfg['epic']}: dealId={did} status={conf.get('dealStatus')} "
+            log_event(evt, action, sz, conf.get("level"), stop, did, note=f"[{epic}] {conf.get('dealStatus', '')}")
+            print(f"[{epic}] Opened {action} {sz} {cfg['epic']}: dealId={did} status={conf.get('dealStatus')} "
                   f"level={conf.get('level')} stop={stop}")
         else:
-            log_event("ERROR", action, sz, None, stop, note=f"Order failed: {last_err}")
-            print(f"Failed to open {action}: {last_err}")
+            log_event("ERROR", action, sz, None, stop, note=f"[{epic}] Order failed: {last_err}")
+            print(f"[{epic}] Failed to open {action}: {last_err}")
 
 
 def cmd_status(a, cfg):
@@ -282,6 +283,185 @@ def step_once(cap: Capital, cfg: dict):
         execute_decision(cap, cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz)
 
 
+def match_position_to_epic(pos_epic: str, all_epics: list[str]) -> str:
+    """Resolve a broker deal's epic to the canonical instrument name."""
+    up = pos_epic.upper().replace("/", "")
+    for e in all_epics:
+        aliases = [a.upper().replace("/", "") for a in resolve_epic_alias(e)]
+        if up in aliases:
+            return e
+    return pos_epic.upper()
+
+
+def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -> dict:
+    """
+    Evaluate all instruments round-the-clock and execute orders / manage stops independently.
+    Runs 24/7 in the background regardless of which chart is being viewed in the cockpit.
+    """
+    from scanner import ALL_SCAN_EPICS
+
+    target_epics = epics or cfg.get("monitored_epics") or ALL_SCAN_EPICS
+
+    # 1. Fetch all currently open positions from Capital.com in one call
+    try:
+        raw_pos = cap.positions()
+    except Exception as e:
+        print(f"Error fetching open positions from broker: {e}")
+        raw_pos = []
+
+    positions_by_epic: dict[str, list[dict]] = {}
+    for p in raw_pos:
+        pe = p.get("market", {}).get("epic", "")
+        matched = match_position_to_epic(pe, target_epics)
+        positions_by_epic.setdefault(matched, []).append(p)
+
+    total_open_count = len(raw_pos)
+    max_portfolio = int(cfg.get("risk", {}).get("max_portfolio_positions", 5))
+
+    actions_taken: list[dict] = []
+    active_ui_epic = cfg.get("epic", "GOLD").upper()
+
+    for epic in target_epics:
+        try:
+            # Build isolated config for this specific instrument
+            inst_cfg = copy.deepcopy(cfg)
+            inst_cfg["epic"] = epic
+            if epic in INSTRUMENT_SPECS:
+                inst_cfg["tick"] = INSTRUMENT_SPECS[epic]["tick"]
+                inst_cfg["strategy"]["fallback_size"] = INSTRUMENT_SPECS[epic]["fallback_size"]
+
+            epic_positions = positions_by_epic.get(epic, [])
+            if epic_positions:
+                direction = epic_positions[0].get("position", {}).get("direction", "BUY")
+                pos_dir = 1 if direction == "BUY" else -1
+                deal_ids = [p["position"]["dealId"] for p in epic_positions]
+                current_stop = epic_positions[0]["position"].get("stopLevel")
+                total_sz = sum(float(p["position"].get("size", 0)) for p in epic_positions)
+            else:
+                pos_dir, deal_ids, current_stop, total_sz = 0, [], None, 0.0
+
+            eng, _, closed_bars, last_n, bs = warmup_engine(cap, inst_cfg)
+            if not closed_bars:
+                continue
+
+            # Trailing safety stop for existing deals on this instrument
+            if pos_dir != 0 and deal_ids and eng.last_close is not None:
+                new_stop = safety_stop_level(pos_dir, eng.last_close, bs, inst_cfg)
+                if should_trail_stop(pos_dir, current_stop, new_stop, inst_cfg["tick"]):
+                    for did in deal_ids:
+                        try:
+                            cap.update_stop(did, new_stop)
+                            print(f"[{epic}] Trailed safety stop on {did} -> {new_stop}")
+                            actions_taken.append({"epic": epic, "action": "TRAIL_STOP", "deal_id": did, "new_stop": new_stop})
+                        except Exception as e:
+                            print(f"[{epic}] Error trailing stop: {e}")
+
+            # Strategy decision on the confirmed candle
+            last_c = closed_bars[-1]["c"]
+            d = eng.decide(pos_dir, last_n, bar_close=last_c, brick_size=bs)
+            last_bar_t = closed_bars[-1]["t"].isoformat()
+            st_label = "BULL" if eng.st_dir == 1 else "BEAR"
+
+            # Heartbeat pulse log for the active market shown in the cockpit
+            if epic == active_ui_epic:
+                need_scan_log = False
+                if not LIVE_TRADES.exists() or LIVE_TRADES.stat().st_size < 120:
+                    need_scan_log = True
+                elif last_n > 0:
+                    need_scan_log = True
+                if need_scan_log:
+                    status_note = f"[{epic}] G:{eng.green_run} R:{eng.red_run} | ST:{st_label} | Brick:${bs:.2f} | Sig:{d.action or 'Waiting'}"
+                    log_event("SCAN", st_label, 0.0, eng.last_close, None, "", note=status_note)
+
+            # Handle EXIT / COVER of active positions
+            if pos_dir != 0 and (d.action in ("EXIT", "COVER") or (d.reverse and d.action in ("BUY", "SELL"))):
+                for did in deal_ids:
+                    try:
+                        conf = cap.close_position(did)
+                        log_event("CLOSE", d.action or "REVERSE_CLOSE", total_sz, conf.get("level"), None, did,
+                                  realized_pnl=conf.get("profit", 0.0), note=f"[{epic}] {conf.get('dealStatus', '')}")
+                        print(f"[{epic}] Closed deal {did}: status={conf.get('dealStatus')} level={conf.get('level')}")
+                        actions_taken.append({"epic": epic, "action": d.action or "CLOSE", "deal_id": did})
+                        total_open_count = max(0, total_open_count - 1)
+                    except Exception as e:
+                        print(f"[{epic}] Error closing deal {did}: {e}")
+                        log_event("ERROR", d.action or "CLOSE", total_sz, None, None, did, note=f"[{epic}] {e}")
+                if d.action in ("EXIT", "COVER"):
+                    continue
+
+            # Handle BUY / SELL Entries
+            if d.action in ("BUY", "SELL"):
+                # Avoid duplicate positions on the same market
+                if pos_dir != 0 and not d.reverse:
+                    continue
+
+                # Portfolio-level risk cap
+                if pos_dir == 0 and total_open_count >= max_portfolio:
+                    print(f"[{epic}] Entry blocked: portfolio max open positions reached ({total_open_count}/{max_portfolio})")
+                    continue
+
+                mkt = {}
+                for cand in resolve_epic_alias(epic):
+                    try:
+                        res = cap.market(cand)
+                        if res and res.get("snapshot"):
+                            mkt = res.get("snapshot", {})
+                            inst_cfg["epic"] = cand
+                            break
+                    except Exception:
+                        continue
+                bid, ask = mkt.get("bid"), mkt.get("offer")
+
+                sz = compute_size(inst_cfg, bs)
+                ok, reason = check_entry_allowed(inst_cfg, bid, ask, bs)
+                if not ok:
+                    print(f"[{epic}] Entry blocked: {reason}")
+                    if d.action:
+                        log_event("BLOCKED", d.action, sz, bid if d.action == "SELL" else ask, None, note=f"[{epic}] {reason}")
+                    continue
+
+                if inst_cfg.get("mode", "semi-auto") == "semi-auto":
+                    side = 1 if d.action == "BUY" else (-1 if d.action == "SELL" else 0)
+                    stop = safety_stop_level(side, eng.last_close, bs, inst_cfg) if side else None
+                    ttl = int(inst_cfg.get("risk", {}).get("ticket_ttl_seconds", 180))
+                    now_utc = datetime.now(timezone.utc)
+                    ticket = {
+                        "created_at": now_utc.isoformat(),
+                        "expires_at": (now_utc + timedelta(seconds=ttl)).isoformat(),
+                        "bar_time": last_bar_t,
+                        "epic": epic,
+                        "action": d.action,
+                        "reverse": d.reverse,
+                        "size": sz,
+                        "trigger_brick_px": d.trigger_brick_px,
+                        "last_brick_close": eng.last_close,
+                        "brick_size": bs,
+                        "safety_stop": stop,
+                        "bid": bid,
+                        "ask": ask,
+                        "deal_ids": deal_ids,
+                    }
+                    JOURNAL.mkdir(parents=True, exist_ok=True)
+                    PENDING_FILE.write_text(json.dumps(ticket, indent=2))
+                    print(f"\n=== [{epic}] SEMI-AUTO TICKET READY ===")
+                    print(json.dumps(ticket, indent=2))
+                    actions_taken.append({"epic": epic, "action": "TICKET_CREATED", "ticket": ticket})
+                else:
+                    # Full Auto execution
+                    execute_decision(cap, inst_cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz)
+                    total_open_count += 1
+                    actions_taken.append({"epic": epic, "action": d.action, "size": sz})
+        except Exception as inst_err:
+            print(f"[{epic}] Background scan error: {inst_err}")
+            continue
+
+    return {
+        "monitored": len(target_epics),
+        "open_deals": total_open_count,
+        "actions": actions_taken,
+    }
+
+
 def cmd_watch(a, cfg):
     if cfg.get("live") and not a.confirm_live:
         raise SystemExit("Refusing to run with live=true without --confirm-live.")
@@ -325,12 +505,24 @@ def cmd_reject(a, cfg):
 def cmd_flatten(a, cfg):
     set_kill_switch(True)
     cap = Capital("live" if cfg.get("live") else "demo")
-    _, deal_ids, _, size = broker_position(cap, cfg["epic"])
-    for did in deal_ids:
-        conf = cap.close_position(did)
-        log_event("FLATTEN", "CLOSE", size, conf.get("level"), None, did, note="KILL_SWITCH")
-        print(f"Emergency closed {did}: {conf.get('dealStatus')}")
-    print("STOP kill switch engaged. All positions closed.")
+    try:
+        raw_pos = cap.positions()
+    except Exception:
+        raw_pos = []
+    closed_cnt = 0
+    for p in raw_pos:
+        did = p.get("position", {}).get("dealId")
+        sz = float(p.get("position", {}).get("size", 0.0))
+        ep = p.get("market", {}).get("epic", "")
+        if did:
+            try:
+                conf = cap.close_position(did)
+                log_event("FLATTEN", "CLOSE", sz, conf.get("level"), None, did, note=f"[{ep}] KILL_SWITCH")
+                print(f"Emergency closed {ep} ({did}): {conf.get('dealStatus')}")
+                closed_cnt += 1
+            except Exception as e:
+                print(f"Error emergency closing {did}: {e}")
+    print(f"STOP kill switch engaged. Closed {closed_cnt} account positions.")
 
 
 def cmd_resume(a, cfg):

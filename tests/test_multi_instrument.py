@@ -126,6 +126,39 @@ class TestMultiInstrument(unittest.TestCase):
             elif it["epic"] in ("GOLD", "SILVER", "OIL_CRUDE", "OIL_BRENT"):
                 self.assertEqual(it["currency"], "$")
 
+    def test_step_multi_market_execution(self):
+        """Verify step_multi_market runs across all instruments independently without blocking."""
+        from bot import step_multi_market
+
+        class MockCapital:
+            def __init__(self):
+                self.env = "demo"
+                self.opened_positions = []
+                self.closed_positions = []
+                self.updated_stops = []
+            def positions(self):
+                return []
+            def market(self, epic):
+                return {"snapshot": {"bid": 100.0, "offer": 100.1, "marketStatus": "TRADEABLE"}}
+            def prices(self, epic, res, start, end):
+                return []
+            def open_position(self, epic, direction, size, stop_level=None):
+                deal = {"dealId": f"mock-{epic}", "dealStatus": "ACCEPTED", "level": 100.0}
+                self.opened_positions.append((epic, direction, size, stop_level))
+                return deal
+            def close_position(self, deal_id):
+                self.closed_positions.append(deal_id)
+                return {"dealId": deal_id, "dealStatus": "CLOSED", "profit": 10.0, "level": 100.0}
+            def update_stop(self, deal_id, stop_level):
+                self.updated_stops.append((deal_id, stop_level))
+                return {"dealId": deal_id, "status": "ACCEPTED"}
+
+        mock_cap = MockCapital()
+        cfg = load_config()
+        test_epics = ["GOLD", "OIL_CRUDE", "EURUSD"]
+        summary = step_multi_market(mock_cap, cfg, epics=test_epics)
+        self.assertIn("monitored", summary)
+        self.assertEqual(summary["monitored"], 3)
 
 
 if __name__ == "__main__":
