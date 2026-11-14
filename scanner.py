@@ -75,7 +75,11 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
     if cap:
         try:
             from bot import resolve_epic_alias
-            for cand in resolve_epic_alias(epic):
+            candidates = resolve_epic_alias(epic)
+        except Exception:
+            candidates = [epic]
+        for cand in candidates:
+            try:
                 res = cap.market(cand)
                 if res and res.get("snapshot"):
                     sn = res["snapshot"]
@@ -83,9 +87,9 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
                     if b is not None and o is not None:
                         cur_px = round((b + o) / 2, digits)
                         cur_spread = round(o - b, digits)
-                    break
-        except Exception:
-            pass
+                        break
+            except Exception:
+                continue
 
     bs = round(last_b.brick_size, max(digits, 2)) if last_b else spec["fallback_size"]
     st_val = round(eng.st_now, digits) if eng.st_now is not None else None
@@ -111,17 +115,19 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
     elif spread_veto:
         veto_reason = f"Spread Wide ({cur_spread} > {round(max_sp_frac*bs, digits)})"
 
-    # Signal logic: Brick #1 flip matching Supertrend
-    if g_run == 1 and st_dir == 1:
+    # Signal logic: Configured green_buy / red_sell brick threshold matching Supertrend
+    green_buy = max(1, int(cfg.get("strategy", {}).get("green_buy", 2)))
+    red_sell = max(1, int(cfg.get("strategy", {}).get("red_sell", 2)))
+    if g_run == green_buy and st_dir == 1:
         signal_type = "BUY"
         signal_label = "🟢 BUY SIGNAL" if not veto_reason else "⚠️ BUY (VETOED)"
-    elif r_run == 1 and st_dir == -1:
+    elif r_run == red_sell and st_dir == -1:
         signal_type = "SELL"
         signal_label = "🔴 SELL SIGNAL" if not veto_reason else "⚠️ SELL (VETOED)"
-    elif g_run > 1 and st_dir == 1:
+    elif g_run > green_buy and st_dir == 1:
         signal_type = "HOLD_LONG"
         signal_label = f"LONG RUN (G:{g_run})"
-    elif r_run > 1 and st_dir == -1:
+    elif r_run > red_sell and st_dir == -1:
         signal_type = "HOLD_SHORT"
         signal_label = f"SHORT RUN (R:{r_run})"
     else:
@@ -196,12 +202,17 @@ def scan_all_instruments(base_cfg: dict, cap: Optional[Capital] = None) -> Dict[
                 "time": datetime.now(timezone.utc).isoformat(),
             })
 
+    veto_count = sum(1 for r in items if r.get("veto"))
+    ready_count = len(items) - veto_count
+
     return {
         "scanned_at": datetime.now(timezone.utc).isoformat(),
         "total_instruments": len(items),
         "active_buy_signals": buy_signals,
         "active_sell_signals": sell_signals,
         "total_active_signals": buy_signals + sell_signals,
+        "veto_count": veto_count,
+        "ready_count": ready_count,
         "items": items,
     }
 

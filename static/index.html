@@ -1479,6 +1479,8 @@
       }
 
       const activeTotal = data.total_active_signals || 0;
+      const vetoCount = (data.items || []).filter(it => !!it.veto).length;
+      const readyCount = (data.items || []).length - vetoCount;
       if (badgeCnt) {
         badgeCnt.textContent = activeTotal > 0 ? `${activeTotal} SIG` : data.items.length;
         badgeCnt.style.background = activeTotal > 0 ? '#10b981' : '#334155';
@@ -1496,10 +1498,15 @@
       if (pill) {
         if (activeTotal > 0) {
           pill.style.background = '#10b981';
-          pill.textContent = `⚡ ${activeTotal} ACTIVE SIGNALS`;
+          pill.textContent = vetoCount > 0
+            ? `⚡ ${activeTotal} ACTIVE SIGNALS (${readyCount} READY / ${vetoCount} VETOED)`
+            : `⚡ ${activeTotal} ACTIVE SIGNALS (ALL ${readyCount} READY)`;
+        } else if (vetoCount > 0) {
+          pill.style.background = '#d97706';
+          pill.textContent = `⚠️ ${data.items.length} MARKETS SCANNED (${readyCount} READY / ${vetoCount} VETOED)`;
         } else {
           pill.style.background = '#0284c7';
-          pill.textContent = `✓ 16 MARKETS SCANNED (NO ACTIVE VETO)`;
+          pill.textContent = `✓ ${data.items.length} MARKETS SCANNED (ALL READY)`;
         }
       }
 

@@ -741,6 +741,59 @@ class TestInstitutionalUAT(unittest.TestCase):
         for marker in ("drawLevelLine", "RUN +1B", "TP 3B", "5m Confirm", "Calmar:"):
             self.assertIn(marker, html)
 
+    def test_24_scanner_alias_fallback_and_configured_signal_thresholds(self):
+        """Scanner: alias loop continues past first 404 and respects green_buy/red_sell config."""
+        from types import SimpleNamespace
+        import copy
+        import backtest
+        import scanner
+
+        cfg = copy.deepcopy(backtest.load_config())
+        cfg["strategy"]["green_buy"] = 2
+        cfg["strategy"]["red_sell"] = 2
+
+        calls = []
+
+        class MockCap:
+            def market(self, epic):
+                calls.append(epic)
+                if epic == "OIL_BRENT":
+                    raise RuntimeError("404 not found")
+                return {"snapshot": {"bid": 94.80, "offer": 94.84}}
+
+        res = scanner.scan_single_instrument("OIL_BRENT", cfg, cap=MockCap())
+        self.assertGreaterEqual(len(calls), 2, f"Expected alias fallback attempts, got {calls}")
+        self.assertEqual(res["price"], 94.82)
+        self.assertEqual(res["spread"], 0.04)
+
+        # Verify signal classification uses configured green_buy / red_sell (2) rather than hardcoded 1
+        orig_simulate = scanner.simulate
+        orig_ensure = scanner.ensure_data
+        try:
+            scanner.ensure_data = lambda *a, **kw: (
+                [{"t": "2026-11-14T10:00:00Z", "o": 100.0, "h": 100.5, "l": 99.5, "c": 100.0}],
+                {},
+            )
+
+            def fake_sim_r1(*a, **kw):
+                eng = SimpleNamespace(bricks=[], st_now=102.0, st_dir=-1, green_run=0, red_run=1, brick_cnt=10)
+                return [], eng, [], []
+
+            scanner.simulate = fake_sim_r1
+            r1 = scanner.scan_single_instrument("EURUSD", cfg, cap=None)
+            self.assertEqual(r1["signal_type"], "NEUTRAL")
+
+            def fake_sim_r2(*a, **kw):
+                eng = SimpleNamespace(bricks=[], st_now=102.0, st_dir=-1, green_run=0, red_run=2, brick_cnt=11)
+                return [], eng, [], []
+
+            scanner.simulate = fake_sim_r2
+            r2 = scanner.scan_single_instrument("EURUSD", cfg, cap=None)
+            self.assertEqual(r2["signal_type"], "SELL")
+        finally:
+            scanner.simulate = orig_simulate
+            scanner.ensure_data = orig_ensure
+
 
 if __name__ == "__main__":
     unittest.main()
