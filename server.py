@@ -896,6 +896,34 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(raw)
             return
 
+        if u.path == "/api/stream":
+            cnt, pnl = today_stats()
+            pending_ticket = None
+            if PENDING_FILE.exists():
+                try:
+                    pending_ticket = json.loads(PENDING_FILE.read_text())
+                except Exception:
+                    pending_ticket = None
+            pulse = {
+                "ok": True,
+                "ts": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "watcher": WATCHER.state(),
+                "kill_switch": kill_switch_active(),
+                "today_trades": cnt,
+                "today_pnl": pnl,
+                "pending_ticket": pending_ticket,
+                "pending_confirm": dict(_PENDING_CONFIRM),
+                "pending_runners": dict(_PENDING_RUNNERS),
+            }
+            body = f"retry: 5000\nevent: pulse\ndata: {json.dumps(pulse)}\n\n".encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         if u.path == "/api/scanner":
             from scanner import get_cached_or_scan_all
             cfg = load_config()

@@ -39,6 +39,12 @@ def in_rollover_blackout(t: datetime) -> bool:
     return (20 * 60 + 45) <= hm <= (22 * 60 + 15)
 
 
+def in_macro_blackout(t: datetime) -> bool:
+    """Tier-1 US Macro Release Blackout (13:25-13:35 UTC CPI/NFP, 18:55-19:10 UTC FOMC)."""
+    hm = t.hour * 60 + t.minute
+    return (13 * 60 + 25) <= hm <= (13 * 60 + 35) or (18 * 60 + 55) <= hm <= (19 * 60 + 10)
+
+
 def compute_size(cfg: dict, brick_size: float) -> float:
     """Compute position size in oz/units: either fixed or risk_usd / (2 * brick_size)."""
     if cfg.get("sizing_mode", "fixed") == "risk_usd" and brick_size > 0:
@@ -99,6 +105,9 @@ def check_entry_allowed(cfg: dict, bid: float | None, ask: float | None, brick_s
 
     if r_cfg.get("rollover_blackout") and in_rollover_blackout(t_now):
         return False, "BLOCK: Daily Gold rollover blackout window (20:45-22:15 UTC)"
+
+    if r_cfg.get("macro_blackout", False) and in_macro_blackout(t_now):
+        return False, "BLOCK: US Macro News Blackout window (13:25-13:35 / 18:55-19:10 UTC)"
 
     sessions = r_cfg.get("sessions", {"asian": True, "london": True, "new_york": True})
     sess = session_of(t_now)

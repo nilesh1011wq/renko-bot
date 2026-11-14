@@ -5,12 +5,15 @@ import argparse
 import copy
 import csv
 import json
+import os
 import time
+import urllib.parse
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from backtest import load_config, pick, INSTRUMENT_SPECS
-from capital_api import Capital, CapitalError, RES_MINUTES
+from capital_api import Capital, CapitalError, RES_MINUTES, SSL_CTX
 from renko import DailyAtr, Params, RenkoEngine, brick_size_from_atr, round_to_tick
 from risk import (check_correlation_allowed, check_entry_allowed, compute_size, kill_switch_active,
                   safety_stop_level, set_kill_switch, should_trail_stop, today_stats)
@@ -19,6 +22,33 @@ ROOT = Path(__file__).parent
 JOURNAL = ROOT / "journal"
 PENDING_FILE = JOURNAL / "pending_ticket.json"
 LIVE_TRADES = JOURNAL / "live_trades.csv"
+
+
+def send_bot_telegram(event: str, detail: dict):
+    """Send live trade execution alerts via Telegram when TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID are set."""
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+    if not token or not chat_id:
+        return
+    try:
+        side = detail.get("side", "")
+        size = detail.get("size", "")
+        price = detail.get("price", "")
+        stop = detail.get("stop", "")
+        note = detail.get("note", "")
+        pnl = detail.get("realized_pnl", "")
+        msg = f"[RENKO BOT] {event} {side} sz={size} px={price}"
+        if stop:
+            msg += f" sl={stop}"
+        if pnl:
+            msg += f" pnl={pnl}"
+        if note:
+            msg += f" | {note}"
+        data = urllib.parse.urlencode({"chat_id": chat_id, "text": msg}).encode("utf-8")
+        req = urllib.request.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data)
+        urllib.request.urlopen(req, timeout=4, context=SSL_CTX)
+    except Exception:
+        pass
 
 
 def log_event(event: str, side: str, size: float, price: float | None, stop: float | None,
@@ -34,6 +64,11 @@ def log_event(event: str, side: str, size: float, price: float | None, stop: flo
             event, side, size, price if price is not None else "",
             stop if stop is not None else "", deal_id, realized_pnl or "", note
         ])
+    if event in ("OPEN", "REVERSE_OPEN", "WORKING_ORDER", "RUNNER_FILLED", "FLATTEN", "BREAKEVEN_LOCK"):
+        send_bot_telegram(event, {
+            "side": side, "size": size, "price": price, "stop": stop,
+            "deal_id": deal_id, "realized_pnl": realized_pnl, "note": note,
+        })
 
 
 EPIC_ALIASES = {
@@ -644,8 +679,18 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
             inst_cfg = copy.deepcopy(cfg)
             inst_cfg["epic"] = epic
             if epic in INSTRUMENT_SPECS:
-                inst_cfg["tick"] = INSTRUMENT_SPECS[epic]["tick"]
-                inst_cfg["strategy"]["fallback_size"] = INSTRUMENT_SPECS[epic]["fallback_size"]
+                spec = INSTRUMENT_SPECS[epic]
+                inst_cfg["tick"] = spec["tick"]
+                inst_cfg["strategy"]["fallback_size"] = spec["fallback_size"]
+                r_cfg = inst_cfg.get("risk", {})
+                cat_prof = (r_cfg.get("category_profiles") or {}).get(spec.get("category", ""), {})
+                if r_cfg.get("use_category_profiles", False) and isinstance(cat_prof, dict):
+                    if "atr_div" in cat_prof:
+                        inst_cfg["strategy"]["atr_div"] = float(cat_prof["atr_div"])
+                    if "st_factor" in cat_prof:
+                        inst_cfg["strategy"]["st_factor"] = float(cat_prof["st_factor"])
+                    if "max_spread_frac_of_brick" in cat_prof:
+                        inst_cfg["risk"]["max_spread_frac_of_brick"] = float(cat_prof["max_spread_frac_of_brick"])
 
             epic_positions = positions_by_epic.get(epic, [])
             if epic_positions:

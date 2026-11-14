@@ -938,6 +938,87 @@ class TestInstitutionalUAT(unittest.TestCase):
         self.assertIn("tab-tca", html_src)
         self.assertIn("renderTcaTab", html_src)
 
+    def test_27_phase4_htf_filter_macro_blackout_and_sse_stream(self):
+        """Phase 4: HTF trend filter, US Macro News blackout, category profiles, and SSE /api/stream."""
+        import copy
+        import io
+        import json
+        from datetime import datetime, timedelta, timezone
+        from pathlib import Path
+        from unittest.mock import MagicMock
+        import backtest
+        import bot
+        import renko
+        import risk
+        import scanner
+        import server
+
+        # 1. HTF 8-brick slope filter blocks counter-trend reversal before macro trend turns
+        p_raw = renko.Params(green_buy=2, red_sell=2, use_st=False, use_htf_filter=False, htf_bricks=8)
+        p_htf = renko.Params(green_buy=2, red_sell=2, use_st=False, use_htf_filter=True, htf_bricks=8)
+        e_raw = renko.RenkoEngine(p_raw)
+        e_htf = renko.RenkoEngine(p_htf)
+        t0 = datetime(2026, 11, 12, 10, 0, tzinfo=timezone.utc)
+        # Drop 12 bricks to 2580, then bounce to 2610 (+30 -> reversal prints 2 green bricks, still below ref close[-9])
+        prices = [2700.0 - i * 10.0 for i in range(13)] + [2600.0, 2610.0]
+        last_n_htf = 0
+        for idx, px in enumerate(prices):
+            t_cur = t0 + timedelta(minutes=idx)
+            e_raw.on_bar(t_cur, px, px, px, 10.0)
+            last_n_htf = e_htf.on_bar(t_cur, px, px, px, 10.0)
+        d_raw = e_raw.decide(0, last_n_htf, bar_close=prices[-1], brick_size=10.0)
+        d_htf = e_htf.decide(0, last_n_htf, bar_close=prices[-1], brick_size=10.0)
+        self.assertEqual(d_raw.action, "BUY")
+        self.assertEqual(d_htf.action, "")
+        self.assertTrue(d_htf.filtered_reason.startswith("htf_trend"))
+
+        # 2. Macro blackout guard (13:25-13:35 & 18:55-19:10 UTC)
+        self.assertTrue(risk.in_macro_blackout(datetime(2026, 11, 12, 13, 30, tzinfo=timezone.utc)))
+        self.assertTrue(risk.in_macro_blackout(datetime(2026, 11, 12, 19, 0, tzinfo=timezone.utc)))
+        self.assertFalse(risk.in_macro_blackout(datetime(2026, 11, 12, 14, 0, tzinfo=timezone.utc)))
+
+        cfg = copy.deepcopy(backtest.load_config())
+        cfg["risk"]["macro_blackout"] = True
+        cfg["risk"]["rollover_blackout"] = False
+        cfg["risk"]["sessions"] = {"asian": True, "london": True, "new_york": True}
+        ok_blk, reason_blk = risk.check_entry_allowed(
+            cfg, 2600.0, 2600.2, 5.0, now=datetime(2026, 11, 12, 13, 30, tzinfo=timezone.utc)
+        )
+        self.assertFalse(ok_blk)
+        self.assertIn("Macro News Blackout", reason_blk)
+
+        # 3. Category profiles in config & scanner output
+        for cat in ("Metals", "Energy", "Forex", "Indices"):
+            self.assertIn(cat, cfg["risk"]["category_profiles"])
+        scan_row = scanner.scan_single_instrument("EURUSD", cfg, cap=None)
+        self.assertEqual(scan_row["category_profile"]["atr_div"], cfg["risk"]["category_profiles"]["Forex"]["atr_div"])
+
+        # 4. Real-time SSE /api/stream endpoint returns valid event: pulse frame without blocking
+        handler = server.Handler.__new__(server.Handler)
+        handler.headers = {}
+        handler.wfile = io.BytesIO()
+        handler.rfile = io.BytesIO()
+        handler.path = "/api/stream"
+        handler.send_response = MagicMock()
+        handler.send_header = MagicMock()
+        handler.end_headers = MagicMock()
+        handler.do_GET()
+        handler.send_response.assert_called_with(200)
+        handler.send_header.assert_any_call("Content-Type", "text/event-stream; charset=utf-8")
+        body = handler.wfile.getvalue().decode("utf-8")
+        self.assertIn("event: pulse", body)
+        data_line = next(line for line in body.splitlines() if line.startswith("data: "))
+        pulse = json.loads(data_line[6:])
+        self.assertTrue(pulse["ok"])
+        self.assertIn("watcher", pulse)
+        self.assertIn("pending_confirm", pulse)
+        self.assertTrue(callable(bot.send_bot_telegram))
+
+        # 5. UI markers for Phase 4
+        html_src = (Path(backtest.ROOT) / "static" / "index.html").read_text(encoding="utf-8")
+        for marker in ("in-use_htf_filter", "in-macro_blackout", "applyCategoryProfile", "EventSource('/api/stream')"):
+            self.assertIn(marker, html_src)
+
 
 if __name__ == "__main__":
     unittest.main()

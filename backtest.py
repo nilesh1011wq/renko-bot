@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from renko import DailyAtr, Params, RenkoEngine, brick_size_from_atr
-from risk import compute_size, in_rollover_blackout, session_of
+from risk import compute_size, in_macro_blackout, in_rollover_blackout, session_of
 
 ROOT = Path(__file__).parent
 DATA = ROOT / "data"
@@ -210,6 +210,7 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
     max_sp_frac = float(r_cfg.get("max_spread_frac_of_brick", 0.0))
     max_slip_frac = float(r_cfg.get("max_slippage_bricks", 0.0))
     rollover_blk = bool(r_cfg.get("rollover_blackout", False))
+    macro_blk = bool(r_cfg.get("macro_blackout", False))
     sess_allowed = r_cfg.get("sessions", {"asian": True, "london": True, "new_york": True})
 
     datr = DailyAtr([d["t"] for d in days], [pick(d, "h", price) for d in days],
@@ -468,6 +469,8 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
             slip_ref = ready_entry.get("slip_ref_px")
             if rollover_blk and in_rollover_blackout(t):
                 veto = "rollover_blackout"
+            elif macro_blk and in_macro_blackout(t):
+                veto = "macro_blackout"
             elif not sess_allowed.get(sess, True):
                 veto = f"session_{sess}"
             elif max_sp_frac > 0 and bs > 0 and spread > max_sp_frac * bs:

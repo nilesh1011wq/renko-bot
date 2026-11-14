@@ -844,6 +844,12 @@
             <button type="button" class="btn-xs" style="flex:1;" onclick="setBrickDivisor(10.0, this)" title="Standard balanced intraday (~$5.00 brick)">⚖ Medium ~$5</button>
             <button type="button" class="btn-xs" style="flex:1;" onclick="setBrickDivisor(5.0, this)" title="Swing trend-following (~$10.00 brick)">🌊 Swing ~$10</button>
           </div>
+          <div class="field full" style="display:flex; gap:4px; margin-top:-2px; margin-bottom:2px;" title="Asset-Class Optimal Strategy Profile">
+            <button type="button" class="btn-xs" style="flex:1;" onclick="applyCategoryProfile('Metals', this)">🥇 Metals</button>
+            <button type="button" class="btn-xs" style="flex:1;" onclick="applyCategoryProfile('Energy', this)">🛢 Energy</button>
+            <button type="button" class="btn-xs" style="flex:1;" onclick="applyCategoryProfile('Forex', this)">💱 Forex</button>
+            <button type="button" class="btn-xs" style="flex:1;" onclick="applyCategoryProfile('Indices', this)">📊 Indices</button>
+          </div>
           <div class="field">
             <label>Green Bricks → BUY</label>
             <input type="number" id="in-green_buy" value="2" min="1" max="10">
@@ -895,6 +901,10 @@
             <span>Also Exit on Supertrend Flip</span>
             <input type="checkbox" id="in-exit_on_st">
           </div>
+          <div class="check-row" title="Higher-Timeframe trend filter: requires 8-brick macro slope to agree with entry">
+            <span>Use HTF Trend Filter (8-Brk)</span>
+            <input type="checkbox" id="in-use_htf_filter">
+          </div>
         </div>
       </div>
 
@@ -915,6 +925,10 @@
         <div class="check-row" title="Blocks new entries during 20:45-22:15 UTC daily rollover spread spike">
           <span>Gold Rollover Blackout (21:00 UTC)</span>
           <input type="checkbox" id="in-rollover_blackout" checked>
+        </div>
+        <div class="check-row" title="Blocks new entries during Tier-1 US Macro Releases (13:25-13:35 & 18:55-19:10 UTC)">
+          <span>US Macro News Blackout (13:30 UTC)</span>
+          <input type="checkbox" id="in-macro_blackout">
         </div>
         <div class="check-row" title="Include the 3-brick broker safety stop in the backtest simulation">
           <span>Broker Safety Stop in Backtest</span>
@@ -952,6 +966,14 @@
           <div class="field" title="Move safety stop to entry price after +N bricks MFE (0=off)">
             <label>Breakeven Lock (Brk)</label>
             <input type="number" id="in-breakeven_after_bricks" value="0.0" step="0.5" min="0">
+          </div>
+          <div class="field" title="Maximum spread allowed as fraction of Renko brick size">
+            <label>Max Spread (Frac)</label>
+            <input type="number" id="in-max_spread_frac_of_brick" value="0.25" step="0.05" min="0.05" max="1.0">
+          </div>
+          <div class="field" title="Maximum simultaneous same-direction positions in correlated asset blocs">
+            <label>Max Correlated Pos</label>
+            <input type="number" id="in-max_correlated_positions" value="2" step="1" min="1" max="10">
           </div>
         </div>
       </div>
@@ -1970,6 +1992,8 @@
       document.getElementById('in-use_hl').checked = !!s.use_hl;
       document.getElementById('in-use_st').checked = !!s.use_st;
       document.getElementById('in-exit_on_st').checked = !!s.exit_on_st;
+      const elUseHtf = document.getElementById('in-use_htf_filter');
+      if (elUseHtf) elUseHtf.checked = !!s.use_htf_filter;
 
       document.getElementById('in-one_trade_per_run').checked = !!s.one_trade_per_run;
       document.getElementById('in-grid_anchor').checked = !!s.grid_anchor;
@@ -1981,9 +2005,15 @@
       document.getElementById('in-max_overshoot_bricks').value = s.max_overshoot_bricks ?? 0;
 
       document.getElementById('in-rollover_blackout').checked = !!r.rollover_blackout;
+      const elMacroBlk = document.getElementById('in-macro_blackout');
+      if (elMacroBlk) elMacroBlk.checked = !!r.macro_blackout;
       document.getElementById('in-safety_stop_in_backtest').checked = !!r.safety_stop_in_backtest;
       document.getElementById('in-safety_stop_bricks').value = r.safety_stop_bricks ?? 3.0;
       document.getElementById('in-breakeven_after_bricks').value = r.breakeven_after_bricks ?? 0.0;
+      const elMaxSp = document.getElementById('in-max_spread_frac_of_brick');
+      if (elMaxSp) elMaxSp.value = r.max_spread_frac_of_brick ?? 0.25;
+      const elMaxCorr = document.getElementById('in-max_correlated_positions');
+      if (elMaxCorr) elMaxCorr.value = r.max_correlated_positions ?? 2;
 
       document.getElementById('in-sizing_mode').value = cfg.sizing_mode ?? 'fixed';
       document.getElementById('in-size').value = cfg.size ?? 1.0;
@@ -2022,6 +2052,7 @@
           use_hl: document.getElementById('in-use_hl').checked,
           use_st: document.getElementById('in-use_st').checked,
           exit_on_st: document.getElementById('in-exit_on_st').checked,
+          use_htf_filter: document.getElementById('in-use_htf_filter')?.checked || false,
           one_trade_per_run: document.getElementById('in-one_trade_per_run').checked,
           grid_anchor: document.getElementById('in-grid_anchor').checked,
           confirm_minutes: parseInt(document.getElementById('in-confirm_minutes').value, 10) || 0,
@@ -2033,9 +2064,12 @@
         },
         risk: {
           rollover_blackout: document.getElementById('in-rollover_blackout').checked,
+          macro_blackout: document.getElementById('in-macro_blackout')?.checked || false,
           safety_stop_in_backtest: document.getElementById('in-safety_stop_in_backtest').checked,
           safety_stop_bricks: parseFloat(document.getElementById('in-safety_stop_bricks').value),
           breakeven_after_bricks: parseFloat(document.getElementById('in-breakeven_after_bricks').value),
+          max_spread_frac_of_brick: parseFloat(document.getElementById('in-max_spread_frac_of_brick')?.value || '0.25'),
+          max_correlated_positions: parseInt(document.getElementById('in-max_correlated_positions')?.value || '2', 10) || 2,
           sessions: {
             asian: document.getElementById('in-sess_asian').checked,
             london: document.getElementById('in-sess_london').checked,
@@ -2050,6 +2084,8 @@
         document.getElementById('in-one_trade_per_run').checked = false;
         document.getElementById('in-grid_anchor').checked = false;
         document.getElementById('in-rollover_blackout').checked = false;
+        if (document.getElementById('in-macro_blackout')) document.getElementById('in-macro_blackout').checked = false;
+        if (document.getElementById('in-use_htf_filter')) document.getElementById('in-use_htf_filter').checked = false;
         document.getElementById('in-safety_stop_in_backtest').checked = false;
         document.getElementById('in-dual_order_mode').checked = false;
         document.getElementById('in-confirm_minutes').value = 0;
@@ -2162,7 +2198,28 @@
       if (el) el.value = divVal;
       document.querySelectorAll('.panel .btn-xs').forEach(b => b.classList.remove('active'));
       if (btn) btn.classList.add('active');
-      applyConfigAndRun();
+      saveAndRun();
+    }
+
+    async function applyCategoryProfile(cat, btn) {
+      const defaults = {
+        Metals:  { atr_div: 11.0, st_factor: 2.1, max_spread_frac_of_brick: 0.35 },
+        Energy:  { atr_div: 12.0, st_factor: 2.0, max_spread_frac_of_brick: 0.38 },
+        Forex:   { atr_div: 14.0, st_factor: 2.2, max_spread_frac_of_brick: 0.42 },
+        Indices: { atr_div: 10.0, st_factor: 1.9, max_spread_frac_of_brick: 0.35 }
+      };
+      const cfgProfiles = STATE?.config?.risk?.category_profiles || {};
+      const prof = cfgProfiles[cat] || defaults[cat];
+      if (!prof) return;
+      if (document.getElementById('in-atr_div')) document.getElementById('in-atr_div').value = prof.atr_div;
+      if (document.getElementById('in-st_factor')) document.getElementById('in-st_factor').value = prof.st_factor;
+      if (document.getElementById('in-max_spread_frac_of_brick')) {
+        document.getElementById('in-max_spread_frac_of_brick').value = prof.max_spread_frac_of_brick;
+      }
+      document.querySelectorAll('.panel .btn-xs').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      await saveAndRun();
+      showToast(`Applied ${cat} Asset-Class Profile (ATR Div ${prof.atr_div}, ST ${prof.st_factor})`);
     }
 
     async function uploadCsv(input) {
@@ -3578,8 +3635,43 @@
       });
     }
 
+    let _sseSource = null;
+    function initLiveSsePulse() {
+      if (typeof EventSource === 'undefined' || _sseSource) return;
+      try {
+        _sseSource = new EventSource('/api/stream');
+        _sseSource.addEventListener('pulse', (ev) => {
+          try {
+            const p = JSON.parse(ev.data || '{}');
+            if (!STATE || !STATE.bot) return;
+            if (p.watcher) STATE.bot.watcher = p.watcher;
+            if (p.kill_switch !== undefined) STATE.bot.kill_switch = p.kill_switch;
+            if (p.pending_confirm) STATE.bot.pending_confirm = p.pending_confirm;
+            if (p.pending_runners) STATE.bot.pending_runners = p.pending_runners;
+            if (p.pending_ticket !== undefined) STATE.bot.pending_ticket = p.pending_ticket;
+            if (p.today_trades !== undefined) STATE.bot.today_trades = p.today_trades;
+            if (p.today_pnl !== undefined) STATE.bot.today_pnl = p.today_pnl;
+
+            const w = STATE.bot.watcher || {};
+            const wDot = document.getElementById('hdr-watch-dot');
+            const wVal = document.getElementById('hdr-watch');
+            const wSub = document.getElementById('watcher-sub-badge');
+            const wTxt = document.getElementById('watcher-status-text');
+            if (wDot && wVal && wSub && wTxt) {
+              wDot.className = w.running ? 'dot green' : 'dot amber';
+              wVal.textContent = w.running ? 'RUNNING' : 'PAUSED';
+              wSub.textContent = w.running ? 'ACTIVE' : 'PAUSED';
+              wSub.style.color = w.running ? 'var(--green-bright)' : 'var(--amber)';
+              wTxt.textContent = `${w.last_status || 'Idle'} | Last: ${w.last_check ? w.last_check.slice(11, 19) + ' UTC' : 'never'}`;
+            }
+          } catch (e) {}
+        });
+      } catch (e) {}
+    }
+
     loadState().then(() => {
       fetchScannerData();
+      initLiveSsePulse();
     });
     // Continuously scan all instruments in background every 25 seconds
     setInterval(() => {

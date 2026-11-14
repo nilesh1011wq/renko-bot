@@ -48,6 +48,8 @@ class Params:
     dual_order_mode: bool = False     # True = Model E (Order 1: +3B TP Usual + Order 2: +1B Strategy Runner)
     tp_bricks: float = 3.0            # Fixed Take Profit in bricks for Order 1 (Usual leg)
     runner_offset_bricks: float = 1.0 # Continuation offset (+N bricks ahead) for Order 2 (Runner leg)
+    use_htf_filter: bool = False      # Higher-Timeframe multi-brick slope filter
+    htf_bricks: int = 8               # Lookback bricks for HTF trend direction
 
     @classmethod
     def from_dict(cls, d: dict) -> "Params":
@@ -272,6 +274,16 @@ class RenkoEngine:
                     if position > 0 and long_exit:
                         return Decision("EXIT", filtered_reason=f"overshoot ({overshoot:.2f} bricks)", trigger_brick_px=trig_px, filtered_action=act_candidate)
                     return Decision("", filtered_reason=f"overshoot ({overshoot:.2f} bricks)", trigger_brick_px=trig_px, filtered_action=act_candidate)
+
+            if p.use_htf_filter and p.htf_bricks > 0 and len(self.bricks) > p.htf_bricks:
+                ref_close = self.bricks[-1 - p.htf_bricks].close
+                cur_b_close = self.bricks[-1].close
+                if (go_long and cur_b_close <= ref_close) or (go_short and cur_b_close >= ref_close):
+                    if position < 0 and short_exit:
+                        return Decision("COVER", filtered_reason=f"htf_trend ({p.htf_bricks}b)", trigger_brick_px=trig_px, filtered_action=act_candidate)
+                    if position > 0 and long_exit:
+                        return Decision("EXIT", filtered_reason=f"htf_trend ({p.htf_bricks}b)", trigger_brick_px=trig_px, filtered_action=act_candidate)
+                    return Decision("", filtered_reason=f"htf_trend ({p.htf_bricks}b)", trigger_brick_px=trig_px, filtered_action=act_candidate)
 
             if go_long:
                 return Decision("BUY", reverse=position < 0, trigger_brick_px=trig_px)

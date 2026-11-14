@@ -31,7 +31,9 @@
     "confirm_minutes": 5,
     "dual_order_mode": true,
     "tp_bricks": 3.0,
-    "runner_offset_bricks": 1.0
+    "runner_offset_bricks": 1.0,
+    "use_htf_filter": false,
+    "htf_bricks": 8
   },
   "risk": {
     "safety_stop_bricks": 3,
@@ -45,6 +47,29 @@
     "max_correlated_positions": 2,
     "disabled_epics": [],
     "rollover_blackout": true,
+    "macro_blackout": false,
+    "category_profiles": {
+      "Metals": {
+        "atr_div": 11.0,
+        "st_factor": 2.1,
+        "max_spread_frac_of_brick": 0.35
+      },
+      "Energy": {
+        "atr_div": 12.0,
+        "st_factor": 2.0,
+        "max_spread_frac_of_brick": 0.38
+      },
+      "Forex": {
+        "atr_div": 14.0,
+        "st_factor": 2.2,
+        "max_spread_frac_of_brick": 0.42
+      },
+      "Indices": {
+        "atr_div": 10.0,
+        "st_factor": 1.9,
+        "max_spread_frac_of_brick": 0.35
+      }
+    },
     "ticket_ttl_seconds": 180,
     "sessions": {
       "asian": true,

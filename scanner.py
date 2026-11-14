@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 
 from backtest import INSTRUMENT_SPECS, ensure_data, simulate
-from risk import in_rollover_blackout, session_of
+from risk import in_macro_blackout, in_rollover_blackout, session_of
 from capital_api import Capital
 
 logger = logging.getLogger("renko.scanner")
@@ -37,6 +37,17 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
     cfg["epic"] = epic
     cfg["tick"] = spec["tick"]
     cfg["strategy"]["fallback_size"] = spec["fallback_size"]
+
+    r_cfg = cfg.get("risk", {})
+    cat_profiles = r_cfg.get("category_profiles", {})
+    cat_prof = cat_profiles.get(category, {}) if isinstance(cat_profiles, dict) else {}
+    if r_cfg.get("use_category_profiles", False) and cat_prof:
+        if "atr_div" in cat_prof:
+            cfg["strategy"]["atr_div"] = float(cat_prof["atr_div"])
+        if "st_factor" in cat_prof:
+            cfg["strategy"]["st_factor"] = float(cat_prof["st_factor"])
+        if "max_spread_frac_of_brick" in cat_prof:
+            cfg["risk"]["max_spread_frac_of_brick"] = float(cat_prof["max_spread_frac_of_brick"])
 
     # 1. Fetch / ensure data
     bars, days = ensure_data(cfg)
@@ -105,6 +116,7 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
     session_ok = allowed_sessions.get(sess, True)
 
     in_blackout = bool(cfg.get("risk", {}).get("rollover_blackout", True)) and in_rollover_blackout(now_utc)
+    in_macro_blk = bool(cfg.get("risk", {}).get("macro_blackout", False)) and in_macro_blackout(now_utc)
     max_sp_frac = float(cfg.get("risk", {}).get("max_spread_frac_of_brick", 0.35))
     spread_veto = (max_sp_frac > 0 and bs > 0 and (cur_spread / bs) > max_sp_frac)
 
@@ -114,6 +126,8 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
     veto_reason = None
     if in_blackout:
         veto_reason = "Rollover Blackout (20:45–22:15 UTC)"
+    elif in_macro_blk:
+        veto_reason = "US Macro News Blackout"
     elif not session_ok:
         veto_reason = f"{sess.title()} Session Filtered"
     elif not auto_enabled:
@@ -161,6 +175,7 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
         "filter_status": filter_status,
         "veto": veto_reason,
         "auto_enabled": auto_enabled,
+        "category_profile": cat_prof,
         "total_bricks": eng.brick_cnt,
         "time": now_utc.isoformat(),
     }
