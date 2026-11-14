@@ -1191,6 +1191,103 @@ class TestInstitutionalUAT(unittest.TestCase):
                     os.environ.pop("TELEGRAM_CHAT_ID", None)
                 backtest.save_config(orig_cfg)
 
+    def test_30_phase6_gst_time_optimizer_telegram_commands_and_guide(self):
+        """Phase 6: UAE GST formatting, grid optimizer, 2-way Telegram commands, password lock & guide routes."""
+        import os
+        import tempfile
+        from datetime import datetime, timezone
+        from unittest.mock import MagicMock
+
+        orig_root = server.ROOT
+        orig_db = server.CLOUD_STATE_DB
+        orig_load_env = server.load_env
+        orig_pw = os.environ.get("DASHBOARD_PASSWORD")
+        orig_watch_run = server.WATCHER.running
+
+        def _make_handler(path: str, payload: dict | None = None):
+            h = server.Handler.__new__(server.Handler)
+            raw = json.dumps(payload or {}).encode("utf-8")
+            h.headers = {"Content-Length": str(len(raw))} if payload is not None else {}
+            h.rfile = io.BytesIO(raw)
+            h.wfile = io.BytesIO()
+            h.path = path
+            h.send_response = MagicMock()
+            h.send_header = MagicMock()
+            h.end_headers = MagicMock()
+            return h
+
+        # 1. UAE Gulf Standard Time (+04:00) formatting
+        self.assertEqual(
+            server.fmt_gst(datetime(2026, 11, 14, 18, 30, 5, tzinfo=timezone.utc)),
+            "2026-11-14 22:30:05 GST",
+        )
+        self.assertEqual(server.fmt_gst("2026-11-14T21:00:00Z"), "2026-11-15 01:00:00 GST")
+
+        with tempfile.TemporaryDirectory() as tmpd:
+            tmp = Path(tmpd)
+            server.ROOT = tmp
+            server.CLOUD_STATE_DB = tmp / "cloud_state.sqlite"
+            server.load_env = lambda: None
+            os.environ.pop("DASHBOARD_PASSWORD", None)
+            try:
+                # 2. Parameter Optimizer endpoint (/api/optimize)
+                h_opt = _make_handler("/api/optimize", {"atr_divisors": [15, 32], "tp_bricks": [3.0], "confirm_minutes": [0, 5]})
+                h_opt.do_POST()
+                opt_res = json.loads(h_opt.wfile.getvalue().decode("utf-8"))
+                self.assertTrue(opt_res["ok"])
+                self.assertEqual(opt_res["tested_combos"], 4)
+                self.assertIn("GST", opt_res["scanned_at_gst"])
+                self.assertGreaterEqual(opt_res["results"][0]["calmar"], opt_res["results"][-1]["calmar"])
+
+                # 3. 2-way Telegram Command Handlers
+                self.assertIn("RENKO COCKPIT STATUS", server.handle_telegram_command("/status"))
+                self.assertIn("RENKO CLOUD DAILY DIGEST", server.handle_telegram_command("/pnl"))
+                pause_reply = server.handle_telegram_command("/pause")
+                self.assertIn("PAUSED", pause_reply)
+                self.assertFalse(server.WATCHER.running)
+                resume_reply = server.handle_telegram_command("/resume")
+                self.assertIn("RESUMED", resume_reply)
+                self.assertTrue(server.WATCHER.running)
+
+                # 4. Runtime Dashboard Password Set & Clear (/api/save-password)
+                h_pw_set = _make_handler("/api/save-password", {"password": "Secret99!"})
+                h_pw_set.do_POST()
+                pw_set_res = json.loads(h_pw_set.wfile.getvalue().decode("utf-8"))
+                self.assertTrue(pw_set_res["password_protected"])
+                self.assertEqual(os.environ.get("DASHBOARD_PASSWORD"), "Secret99!")
+
+                h_pw_clr = _make_handler("/api/save-password", {"password": ""})
+                h_pw_clr.headers["Authorization"] = f"Bearer {pw_set_res['token']}"
+                h_pw_clr.do_POST()
+                pw_clr_res = json.loads(h_pw_clr.wfile.getvalue().decode("utf-8"))
+                self.assertFalse(pw_clr_res["password_protected"])
+
+                # 5. Master Guide HTML & PDF routes (/guide & /api/guide.pdf)
+                h_guide = _make_handler("/guide")
+                server.ROOT = orig_root
+                h_guide.do_GET()
+                h_guide.send_response.assert_called_with(200)
+                self.assertIn(b"McKinsey-Style Executive Manual", h_guide.wfile.getvalue())
+
+                h_pdf = _make_handler("/api/guide.pdf")
+                h_pdf.do_GET()
+                h_pdf.send_response.assert_called_with(200)
+                self.assertTrue(h_pdf.wfile.getvalue().startswith(b"%PDF-"))
+
+                # 6. UI markers for Phase 6 & UAE Clock
+                html_src = (Path(backtest.ROOT) / "static" / "index.html").read_text(encoding="utf-8")
+                for marker in ("hdr-gst-clock", "tab-optimizer", "runOptimizerGrid", "sendTelegramDigest", "saveDashboardPassword"):
+                    self.assertIn(marker, html_src)
+            finally:
+                server.ROOT = orig_root
+                server.CLOUD_STATE_DB = orig_db
+                server.load_env = orig_load_env
+                server.WATCHER.running = orig_watch_run
+                if orig_pw is not None:
+                    os.environ["DASHBOARD_PASSWORD"] = orig_pw
+                else:
+                    os.environ.pop("DASHBOARD_PASSWORD", None)
+
 
 if __name__ == "__main__":
     unittest.main()

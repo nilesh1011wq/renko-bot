@@ -22,6 +22,7 @@ ROOT = Path(__file__).parent
 JOURNAL = ROOT / "journal"
 PENDING_FILE = JOURNAL / "pending_ticket.json"
 LIVE_TRADES = JOURNAL / "live_trades.csv"
+GST_TZ = timezone(timedelta(hours=4), name="GST")
 
 
 def send_bot_telegram(event: str, detail: dict):
@@ -37,7 +38,8 @@ def send_bot_telegram(event: str, detail: dict):
         stop = detail.get("stop", "")
         note = detail.get("note", "")
         pnl = detail.get("realized_pnl", "")
-        msg = f"[RENKO BOT] {event} {side} sz={size} px={price}"
+        now_gst_str = datetime.now(GST_TZ).strftime("%H:%M:%S GST")
+        msg = f"[RENKO BOT | {now_gst_str}] {event} {side} sz={size} px={price}"
         if stop:
             msg += f" sl={stop}"
         if pnl:

@@ -6,8 +6,10 @@ from __future__ import annotations
 
 import copy
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
+
+GST_TZ = timezone(timedelta(hours=4), name="GST")
 
 from backtest import INSTRUMENT_SPECS, ensure_data, simulate
 from risk import in_macro_blackout, in_rollover_blackout, session_of
@@ -125,7 +127,7 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
 
     veto_reason = None
     if in_blackout:
-        veto_reason = "Rollover Blackout (20:45–22:15 UTC)"
+        veto_reason = "Rollover Blackout (00:45–02:15 GST)"
     elif in_macro_blk:
         veto_reason = "US Macro News Blackout"
     elif not session_ok:
@@ -227,8 +229,10 @@ def scan_all_instruments(base_cfg: dict, cap: Optional[Capital] = None) -> Dict[
     veto_count = sum(1 for r in items if r.get("veto"))
     ready_count = len(items) - veto_count
 
+    now_utc = datetime.now(timezone.utc)
     return {
-        "scanned_at": datetime.now(timezone.utc).isoformat(),
+        "scanned_at": now_utc.isoformat(),
+        "scanned_at_gst": now_utc.astimezone(GST_TZ).strftime("%Y-%m-%d %H:%M:%S GST"),
         "total_instruments": len(items),
         "active_buy_signals": buy_signals,
         "active_sell_signals": sell_signals,

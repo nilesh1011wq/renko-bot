@@ -767,6 +767,10 @@
         <span class="lbl">24/7 BOT</span>
         <span class="val" id="hdr-watch">PAUSED</span>
       </div>
+      <div class="pill" title="UAE Gulf Standard Time (Dubai / Abu Dhabi, UTC+4)">
+        <span class="lbl">🇦🇪 UAE TIME</span>
+        <span class="val" id="hdr-gst-clock" style="color:#38bdf8;">--:--:-- GST</span>
+      </div>
       <div class="pill" id="pill-mode" style="cursor:pointer;" onclick="toggleBotMode()" title="Click to switch between Full Auto (direct broker orders) and Semi-Auto (on-screen tickets)">
         <span class="lbl">MODE</span>
         <span class="val" id="hdr-mode" style="color:var(--green-bright); font-weight:700;">AUTO</span>
@@ -779,6 +783,7 @@
     </div>
 
     <div class="top-actions">
+      <a href="/guide" target="_blank" style="text-decoration:none;"><button type="button" style="background:#0284c7; color:#fff; font-weight:700;">📘 Master Guide (PDF)</button></a>
       <a href="/studio" target="_blank" style="text-decoration:none;"><button type="button" class="primary">✦ Open Studio Lab</button></a>
       <button id="btn-broker-settings" class="primary" onclick="openBrokerModal()" title="Connect Capital.com Broker API">
         <span>🔑</span> <span id="btn-broker-text">Connect Broker</span>
@@ -922,12 +927,12 @@
           <span>Grid-Anchor Brick Origin</span>
           <input type="checkbox" id="in-grid_anchor" checked>
         </div>
-        <div class="check-row" title="Blocks new entries during 20:45-22:15 UTC daily rollover spread spike">
-          <span>Gold Rollover Blackout (21:00 UTC)</span>
+        <div class="check-row" title="Blocks new entries during 00:45-02:15 GST (20:45-22:15 UTC) daily rollover spread spike">
+          <span>Gold Rollover Blackout (01:00 GST)</span>
           <input type="checkbox" id="in-rollover_blackout" checked>
         </div>
-        <div class="check-row" title="Blocks new entries during Tier-1 US Macro Releases (13:25-13:35 & 18:55-19:10 UTC)">
-          <span>US Macro News Blackout (13:30 UTC)</span>
+        <div class="check-row" title="Blocks new entries during Tier-1 US Macro Releases (17:25-17:35 &amp; 22:55-23:10 GST)">
+          <span>US Macro News Blackout (17:30 GST)</span>
           <input type="checkbox" id="in-macro_blackout">
         </div>
         <div class="check-row" title="Include the 3-brick broker safety stop in the backtest simulation">
@@ -1007,15 +1012,15 @@
         </div>
         <div style="margin-top:8px;">
           <div class="check-row">
-            <span>Asian Session (00:00–07:00 UTC)</span>
+            <span>Asian Session (04:00–11:00 GST)</span>
             <input type="checkbox" id="in-sess_asian" checked>
           </div>
           <div class="check-row">
-            <span>London Session (07:00–13:00 UTC)</span>
+            <span>London Session (11:00–17:00 GST)</span>
             <input type="checkbox" id="in-sess_london" checked>
           </div>
           <div class="check-row">
-            <span>New York Session (13:00–21:00 UTC)</span>
+            <span>New York Session (17:00–01:00 GST)</span>
             <input type="checkbox" id="in-sess_ny" checked>
           </div>
         </div>
@@ -1166,6 +1171,7 @@
           <button class="dock-tab" onclick="switchDockTab('tab-equity', this)">📈 Equity Curve (vs Raw)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-mc', this)">🎲 Monte Carlo Cone (2,500 Runs)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-tca', this)">🎯 TCA &amp; Attribution</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-optimizer', this)">🔬 Optimizer</button>
           <button class="dock-tab" onclick="switchDockTab('tab-sessions', this)">🔑 Broker Env &amp; Sessions</button>
           <button class="dock-tab" onclick="switchDockTab('tab-log', this)">📜 Bot Activity Log</button>
         </div>
@@ -1195,7 +1201,7 @@
                     <th>#</th>
                     <th>Side</th>
                     <th>Session</th>
-                    <th>Entry Time</th>
+                    <th>Entry Time (GST)</th>
                     <th>Trig Px</th>
                     <th>Fill Px</th>
                     <th>Exit Px</th>
@@ -1347,6 +1353,41 @@
             </div>
           </div>
 
+          <!-- Tab: Parameter Optimizer (Grid Search) -->
+          <div id="tab-optimizer" class="dock-pane">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:11.5px; font-weight:700; color:var(--text-1);">🔬 In-Cockpit Parameter Optimizer (ATR Divisor × Usual TP × 5m Confirm)</span>
+                <span id="opt-status-pill" style="font-size:10.5px; font-family:var(--font-mono); color:#38bdf8;">Click "Run Grid Search" to benchmark 36 setups on active market.</span>
+              </div>
+              <button id="btn-run-optimizer" class="primary" onclick="runOptimizerGrid()" style="padding:4px 12px; font-weight:700;">▶ Run Grid Search (36 Combos)</button>
+            </div>
+            <div class="table-wrap" style="max-height:calc(100% - 32px);">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>ATR Div</th>
+                    <th>Brick Size</th>
+                    <th>Usual TP (Brk)</th>
+                    <th>Confirm (m)</th>
+                    <th>Trades</th>
+                    <th>Win Rate</th>
+                    <th>PF</th>
+                    <th>Max DD</th>
+                    <th>Sharpe</th>
+                    <th>Calmar</th>
+                    <th>Net P&amp;L</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="optimizer-tbody">
+                  <tr><td colspan="13" style="text-align:center; color:var(--text-2); padding:16px;">Ready — click "Run Grid Search (36 Combos)" to rank best parameters by Calmar &amp; Net P&amp;L.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <!-- Tab 5: Sessions & Environment -->
           <div id="tab-sessions" class="dock-pane">
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; height:100%;">
@@ -1354,7 +1395,7 @@
                 <table>
                   <thead>
                     <tr>
-                      <th>Session (UTC)</th>
+                      <th>Session (UAE GST / UTC+4)</th>
                       <th>Trades</th>
                       <th>Win Rate</th>
                       <th>Profit Factor</th>
@@ -1385,9 +1426,22 @@
                   <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                     <button id="btn-save-telegram" class="primary" onclick="saveTelegramConfig()" style="font-size:10.5px; padding:3px 8px;">Save Telegram</button>
                     <button id="btn-test-telegram" class="success" onclick="testTelegramAlert()" style="font-size:10.5px; padding:3px 8px;">📲 Send Test Alert</button>
-                    <a href="https://t.me/RENKO2026BOT" target="_blank" rel="noopener noreferrer" style="font-size:10.5px; color:var(--blue-light); text-decoration:underline;">Open @RENKO2026BOT &amp; tap Start</a>
+                    <button id="btn-digest-telegram" onclick="sendTelegramDigest()" style="font-size:10.5px; padding:3px 8px; background:#0284c7; color:#fff;">📊 Send Daily Digest</button>
+                    <a href="https://t.me/RENKO2026BOT" target="_blank" rel="noopener noreferrer" style="font-size:10.5px; color:var(--blue-light); text-decoration:underline;">Open @RENKO2026BOT</a>
                   </div>
-                  <div id="tg-feedback-line" style="font-size:10.5px; color:var(--text-dim); margin-top:5px;">Alerts fire on OPEN, REVERSE, RUNNER, BREAKEVEN &amp; FLATTEN.</div>
+                  <div id="tg-feedback-line" style="font-size:10.5px; color:var(--text-dim); margin-top:5px;">2-Way Commands in Telegram: <code>/status /positions /pnl /scanner /pause /resume /flatten</code> | Auto Digest: 02:00 GST</div>
+                </div>
+
+                <div style="border-top:1px solid var(--border); padding-top:8px; margin-top:8px;">
+                  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+                    <span style="font-weight:700;">🔒 Dashboard Password Gate (<code>DASHBOARD_PASSWORD</code>)</span>
+                    <span id="pw-status-badge" class="badge amber" style="font-size:10px;">OPEN ACCESS</span>
+                  </div>
+                  <div style="display:flex; gap:6px; align-items:center;">
+                    <input type="password" id="dash-pw-input" placeholder="Set access password (blank clears lock)" style="flex:1; font-size:11px; padding:4px 6px;" />
+                    <button class="primary" onclick="saveDashboardPassword()" style="font-size:10.5px; padding:3px 8px;">🔒 Set Lock</button>
+                    <button onclick="clearDashboardPassword()" style="font-size:10.5px; padding:3px 8px;">🔓 Unlock</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1399,7 +1453,7 @@
               <table>
                 <thead>
                   <tr>
-                    <th>Time (UTC)</th>
+                    <th>Time (GST)</th>
                     <th>Event</th>
                     <th>Action</th>
                     <th>Size</th>
@@ -1423,6 +1477,40 @@
 
   <script>
     let STATE = null;
+
+    function fmtGst(isoStr, mode = 'short') {
+      let norm = isoStr;
+      if (typeof norm === 'string' && norm.trim()) {
+        const s = norm.trim();
+        if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s) && !s.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(s)) {
+          norm = s.replace(' ', 'T') + 'Z';
+        }
+      }
+      const target = norm ? new Date(norm) : new Date();
+      if (isNaN(target.getTime())) {
+        return isoStr ? String(isoStr).slice(0, 19).replace('T', ' ') : '--';
+      }
+      const gst = new Date(target.getTime() + 4 * 3600 * 1000);
+      const pad = n => String(n).padStart(2, '0');
+      const yyyy = gst.getUTCFullYear();
+      const mm = pad(gst.getUTCMonth() + 1);
+      const dd = pad(gst.getUTCDate());
+      const hh = pad(gst.getUTCHours());
+      const mi = pad(gst.getUTCMinutes());
+      const ss = pad(gst.getUTCSeconds());
+      if (mode === 'time') return `${hh}:${mi}:${ss} GST`;
+      if (mode === 'full') return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss} GST`;
+      if (mode === 'chart') return `${mm}-${dd} ${hh}:${mi}`;
+      if (mode === 'hud') return `${mm}-${dd} ${hh}:${mi}:${ss} GST`;
+      return `${mm}-${dd} ${hh}:${mi} GST`;
+    }
+
+    function tickGstClock() {
+      const el = document.getElementById('hdr-gst-clock');
+      if (el) el.textContent = fmtGst(null, 'time');
+    }
+    setInterval(tickGstClock, 1000);
+    setTimeout(tickGstClock, 0);
 
     function showToast(msg) {
       const el = document.getElementById('toast');
@@ -1579,8 +1667,10 @@
       const pill = document.getElementById('scanner-signal-pill');
       const lastSync = document.getElementById('scanner-last-sync');
 
-      if (lastSync && data.scanned_at) {
-        lastSync.textContent = `Scanned: ${data.scanned_at.slice(11, 19)} UTC`;
+      if (lastSync && (data.scanned_at_gst || data.scanned_at)) {
+        lastSync.textContent = data.scanned_at_gst
+          ? `Scanned: ${data.scanned_at_gst.slice(11)}`
+          : `Scanned: ${fmtGst(data.scanned_at, 'time')}`;
       }
 
       const activeTotal = data.total_active_signals || 0;
@@ -1839,6 +1929,127 @@
       } catch (e) {
         if (fbEl) { fbEl.style.color = 'var(--red)'; fbEl.textContent = 'Error: ' + e; }
       }
+    }
+
+    async function sendTelegramDigest() {
+      const fbEl = document.getElementById('tg-feedback-line');
+      if (fbEl) { fbEl.style.color = 'var(--text-dim)'; fbEl.textContent = 'Generating & sending Daily Digest to @RENKO2026BOT...'; }
+      try {
+        const res = await apiFetch('/api/telegram-digest', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          if (fbEl) { fbEl.style.color = 'var(--green-bright)'; fbEl.textContent = '✓ Daily Digest sent to Telegram!'; }
+          showToast('📊 Daily Telegram Digest delivered!');
+        } else {
+          const msg = data.detail || data.error || 'Digest send failed';
+          if (fbEl) { fbEl.style.color = 'var(--amber)'; fbEl.textContent = '⚠ ' + msg; }
+          showToast(msg);
+        }
+      } catch (e) {
+        if (fbEl) { fbEl.style.color = 'var(--red)'; fbEl.textContent = 'Error: ' + e; }
+      }
+    }
+
+    async function saveDashboardPassword() {
+      const inp = document.getElementById('dash-pw-input');
+      const pw = inp ? inp.value.trim() : '';
+      if (!pw) {
+        showToast('Enter a password or click Unlock to clear');
+        return;
+      }
+      const res = await apiFetch('/api/save-password', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ password: pw })
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        if (inp) inp.value = '';
+        if (data.bot) STATE.bot = data.bot;
+        renderAll();
+        showToast('🔒 ' + (data.message || 'Password protection active'));
+      } else {
+        showToast(data.error || 'Failed to save password');
+      }
+    }
+
+    async function clearDashboardPassword() {
+      const res = await apiFetch('/api/save-password', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ password: '' })
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        if (data.bot) STATE.bot = data.bot;
+        renderAll();
+        showToast('🔓 ' + (data.message || 'Password lock cleared'));
+      }
+    }
+
+    async function runOptimizerGrid() {
+      const btn = document.getElementById('btn-run-optimizer');
+      const pill = document.getElementById('opt-status-pill');
+      const tbody = document.getElementById('optimizer-tbody');
+      if (btn) { btn.disabled = true; btn.textContent = 'Running 36 Combos...'; }
+      if (pill) pill.textContent = 'Running parameter sweep across active market candles...';
+      try {
+        const res = await apiFetch('/api/optimize', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          if (pill) pill.textContent = data.error || 'Optimizer failed';
+          return;
+        }
+        if (pill) {
+          pill.textContent = `${data.epic}: Ranked ${data.tested_combos} combos by Calmar & Net P&L (${data.scanned_at_gst || fmtGst()})`;
+        }
+        if (tbody) {
+          tbody.innerHTML = '';
+          for (const r of (data.results || [])) {
+            const cls = r.net >= 0 ? 'pos' : 'neg';
+            const tr = document.createElement('tr');
+            if (r.rank === 1) tr.style.background = 'rgba(16, 185, 129, 0.08)';
+            tr.innerHTML = `
+              <td><b>#${r.rank}</b></td>
+              <td>/${r.atr_div}</td>
+              <td>${r.brick_size}</td>
+              <td>${r.tp_bricks}B</td>
+              <td>${r.confirm_minutes}m</td>
+              <td>${r.trades}</td>
+              <td>${r.win_rate}%</td>
+              <td>${r.profit_factor}</td>
+              <td class="neg">-$${Number(r.max_dd || 0).toFixed(2)}</td>
+              <td>${r.sharpe}</td>
+              <td><b>${r.calmar}</b></td>
+              <td class="${cls}" style="font-weight:700;">${fmtUsd(r.net)}</td>
+              <td><button class="success" style="padding:2px 8px; font-size:10px;" onclick="applyOptimizerCombo(${r.atr_div}, ${r.tp_bricks}, ${r.confirm_minutes})">⚡ Apply</button></td>
+            `;
+            tbody.appendChild(tr);
+          }
+        }
+        showToast(`🔬 Optimizer ranked ${data.tested_combos} combos for ${data.epic}`);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '▶ Run Grid Search (36 Combos)'; }
+      }
+    }
+
+    async function applyOptimizerCombo(div, tp, conf) {
+      const elDiv = document.getElementById('in-atr_div');
+      const elTp = document.getElementById('in-tp_bricks');
+      const elConf = document.getElementById('in-confirm_minutes');
+      if (elDiv) elDiv.value = div;
+      if (elTp) elTp.value = tp;
+      if (elConf) elConf.value = conf;
+      await saveAndRun();
+      showToast(`⚡ Applied Optimizer Setup: ATR /${div} · TP ${tp}B · Confirm ${conf}m`);
     }
 
     async function loadState() {
@@ -2510,7 +2721,7 @@
           tr.style.borderLeft = '3px solid #f59e0b';
           const sideStr = item.side || item.action || 'SIGNAL';
           const sideBadge = `<span class="badge" style="background:rgba(245, 158, 11, 0.22); color:#f59e0b; border:1px solid #f59e0b; font-weight:700;">⚠️ ${sideStr}</span>`;
-          const entryTime = (item.t || item.sort_time || '').slice(5, 16).replace('T', ' ');
+          const entryTime = fmtGst(item.t || item.sort_time, 'short');
           const trigPx = fmtPrice(item.trigger_px, activeEpic);
           const mktPx = fmtPrice(item.c, activeEpic);
           const reasonBadge = `<span class="badge" style="background:rgba(245, 158, 11, 0.2); color:#f59e0b; border:1px solid #f59e0b; font-size:10.5px;">⚠️ ${item.reason || 'FILTERED'}</span>`;
@@ -2544,7 +2755,7 @@
             <td>${item.num}</td>
             <td>${sideBadge}${legBadge}</td>
             <td>${item.session}</td>
-            <td>${(item.entry_time || '').slice(5, 16).replace('T', ' ')}</td>
+            <td>${fmtGst(item.entry_time, 'short')}</td>
             <td>${fmtPrice(item.trigger_px, activeEpic)}</td>
             <td>${fmtPrice(item.entry_exec, activeEpic)}</td>
             <td>${fmtPrice(item.exit_exec, activeEpic)}</td>
@@ -2650,7 +2861,7 @@
             wSub.textContent = 'PAUSED';
             wSub.style.color = 'var(--amber)';
           }
-          wTxt.textContent = `${w.last_status || 'Idle'} | Last: ${w.last_check ? w.last_check.slice(11, 19) + ' UTC' : 'never'}`;
+          wTxt.textContent = `${w.last_status || 'Idle'} | Last: ${w.last_check ? fmtGst(w.last_check, 'time') : 'never'}`;
         }
 
         const elMode = document.getElementById('hdr-mode');
@@ -2719,6 +2930,17 @@
           tgTokEl.placeholder = `Active: ${tg.masked_token} (leave blank to keep)`;
         }
 
+        const pwBadge = document.getElementById('pw-status-badge');
+        if (pwBadge) {
+          if (creds.password_protected) {
+            pwBadge.textContent = 'LOCKED';
+            pwBadge.className = 'badge green';
+          } else {
+            pwBadge.textContent = 'OPEN ACCESS';
+            pwBadge.className = 'badge amber';
+          }
+        }
+
         const killBtn = document.getElementById('btn-kill');
         if (killBtn) {
           if (bot.kill_switch) {
@@ -2743,7 +2965,7 @@
             }
             const elSub = document.getElementById('ticket-sub');
             if (elSub) {
-              elSub.textContent = `Target: Capital.com ${creds.env ? creds.env.toUpperCase() : 'DEMO'} | Stop: ${t.safety_stop} | Brick Size: $${t.brick_size} | Expires: ${t.expires_at ? t.expires_at.slice(11, 19) + ' UTC' : 'soon'}`;
+              elSub.textContent = `Target: Capital.com ${creds.env ? creds.env.toUpperCase() : 'DEMO'} | Stop: ${t.safety_stop} | Brick Size: $${t.brick_size} | Expires: ${t.expires_at ? fmtGst(t.expires_at, 'time') : 'soon'}`;
             }
           } else {
             banner.className = 'ticket-card';
@@ -2838,9 +3060,9 @@
         if (sbody) {
           sbody.innerHTML = '';
           const labels = {
-            asian: 'Asian (00:00–07:00)',
-            london: 'London (07:00–13:00)',
-            new_york: 'New York (13:00–21:00)'
+            asian: 'Asian (04:00–11:00 GST)',
+            london: 'London (11:00–17:00 GST)',
+            new_york: 'New York (17:00–01:00 GST)'
           };
           for (const [k, st] of Object.entries(bt.sessions_net || {})) {
             const tr = document.createElement('tr');
@@ -2871,7 +3093,7 @@
           for (const l of logs) {
             const tr = document.createElement('tr');
             tr.innerHTML = `
-              <td>${(l.time || '').slice(5, 19).replace('T', ' ')}</td>
+              <td>${fmtGst(l.time, 'hud')}</td>
               <td><b>${l.event || ''}</b></td>
               <td>${l.side || ''}</td>
               <td>${l.size || ''}</td>
@@ -3067,7 +3289,7 @@
       for (let i = 0; i < view.length; i += timeInterval) {
         const b = view[i];
         if (b.time) {
-          const tLabel = b.time.slice(5, 16).replace('T', ' ');
+          const tLabel = fmtGst(b.time, 'chart');
           const tx = padL + i * stepX + offsetX;
           ctx.fillText(tLabel, tx, h - 7);
         }
@@ -3332,7 +3554,7 @@
             const moveAmt = Math.abs(hb.close - hb.open).toFixed(digits);
             const moveSign = isUp ? '+' : '-';
             const stStr = hb.st_value !== null ? (' | ST: ' + fmtPrice(hb.st_value, activeEpic) + (hb.st_dir === 1 ? ' (Bull)' : ' (Bear)')) : '';
-            const tStr = hb.time ? (' | ' + hb.time.slice(5, 19).replace('T', ' ') + ' UTC') : '';
+            const tStr = hb.time ? (' | ' + fmtGst(hb.time, 'hud')) : '';
             sub.innerHTML = `<span style="color:#38bdf8; font-weight:700;">BRICK #${hb.index}</span> | ` +
               `<span style="color:${dirColor}; font-weight:700;">${dirIcon} ${isUp ? 'UP' : 'DOWN'}</span> | ` +
               `<b>CLOSE: ${fmtPrice(hb.close, activeEpic)}</b> | OPEN: ${fmtPrice(hb.open, activeEpic)} | ` +
@@ -3392,8 +3614,8 @@
                 <span class="hud-val" style="color:${stColor}; font-size:10px;">${stLabel}</span>
               </div>
               <div class="hud-row">
-                <span class="hud-lbl">Timestamp:</span>
-                <span class="hud-val" style="font-size:10px; color:#94a3b8;">${hb.time ? hb.time.slice(0, 19).replace('T', ' ') : '--'}</span>
+                <span class="hud-lbl">Timestamp (UAE):</span>
+                <span class="hud-val" style="font-size:10px; color:#94a3b8;">${hb.time ? fmtGst(hb.time, 'full') : '--'}</span>
               </div>
               ${badgeHtml}
             `;
@@ -3815,7 +4037,7 @@
               wVal.textContent = w.running ? 'RUNNING' : 'PAUSED';
               wSub.textContent = w.running ? 'ACTIVE' : 'PAUSED';
               wSub.style.color = w.running ? 'var(--green-bright)' : 'var(--amber)';
-              wTxt.textContent = `${w.last_status || 'Idle'} | Last: ${w.last_check ? w.last_check.slice(11, 19) + ' UTC' : 'never'}`;
+              wTxt.textContent = `${w.last_status || 'Idle'} | Last: ${w.last_check ? fmtGst(w.last_check, 'time') : 'never'}`;
             }
           } catch (e) {}
         });

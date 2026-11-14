@@ -49,6 +49,31 @@ from risk import kill_switch_active, set_kill_switch, today_stats
 
 ROOT = Path(__file__).parent
 STATIC = ROOT / "static"
+GST_TZ = timezone(timedelta(hours=4), name="GST")
+
+
+def now_gst() -> datetime:
+    """Return current time in UAE Gulf Standard Time (UTC+4)."""
+    return datetime.now(GST_TZ)
+
+
+def fmt_gst(dt_or_iso=None, fmt: str = "%Y-%m-%d %H:%M:%S GST") -> str:
+    """Convert any UTC datetime or ISO-8601 string into UAE Gulf Standard Time (UTC+4)."""
+    if dt_or_iso is None:
+        dt = datetime.now(timezone.utc)
+    elif isinstance(dt_or_iso, datetime):
+        dt = dt_or_iso if dt_or_iso.tzinfo else dt_or_iso.replace(tzinfo=timezone.utc)
+    else:
+        raw = str(dt_or_iso).strip()
+        if not raw:
+            return "--"
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            return raw
+    return dt.astimezone(GST_TZ).strftime(fmt)
 
 
 # ----------------------------------------------------------------------------
@@ -148,6 +173,7 @@ class BackgroundWatcher:
         self.last_status: str = "Idle (Paused)"
         self.last_error: str | None = None
         self.checks_count: int = 0
+        self._last_digest_date: str | None = None
         self._lock = threading.Lock()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
@@ -198,6 +224,20 @@ class BackgroundWatcher:
                 if self.running and not kill_switch_active():
                     self.run_single_step()
                     cfg = load_config()
+                    g_now = now_gst()
+                    g_day = g_now.strftime("%Y-%m-%d")
+                    # Daily NY-close digest at 02:00 GST (22:00 UTC)
+                    if (
+                        g_now.hour == 2 and g_now.minute < 5
+                        and self._last_digest_date != g_day
+                        and os.environ.get("TELEGRAM_BOT_TOKEN")
+                        and os.environ.get("TELEGRAM_CHAT_ID")
+                    ):
+                        self._last_digest_date = g_day
+                        try:
+                            send_telegram(build_daily_telegram_digest(cfg))
+                        except Exception:
+                            pass
                     res_m = RES_MINUTES.get(cfg.get("resolution", "MINUTE"), 1)
                     now_utc = datetime.now(timezone.utc)
                     sec_in_candle = (now_utc.minute % res_m) * 60 + now_utc.second + (now_utc.microsecond / 1_000_000.0)
@@ -235,6 +275,253 @@ class BackgroundWatcher:
 
 WATCHER = BackgroundWatcher()
 TICK_STREAMER = CapitalTickStreamer()
+
+
+# ----------------------------------------------------------------------------
+# Phase 6: Daily Telegram P&L Digest, 2-Way Bot Commands & Parameter Optimizer
+# ----------------------------------------------------------------------------
+def build_daily_telegram_digest(cfg: dict | None = None) -> str:
+    cur_cfg = cfg or load_config()
+    cnt, pnl = today_stats()
+    bt = serialize_backtest(cur_cfg, use_cache=True, skip_network=True)
+    sn = bt.get("stats_net", {})
+    tca = bt.get("tca_attribution", {})
+    usual = tca.get("usual", {})
+    runner = tca.get("runner", {})
+    w_state = "RUNNING" if WATCHER.running else "PAUSED"
+    mode_lbl = str(cur_cfg.get("mode", "auto")).upper()
+    return (
+        f"📊 RENKO CLOUD DAILY DIGEST ({fmt_gst()})\n"
+        f"• Market: {cur_cfg.get('epic', 'GOLD')} ({cur_cfg.get('resolution', 'MINUTE')})\n"
+        f"• Bot: {w_state} | Mode: {mode_lbl} | KillSwitch: {'ON' if kill_switch_active() else 'OFF'}\n"
+        f"• Today's Live Trades: {cnt} | Realized P&L: ${float(pnl):+.2f}\n"
+        f"— Model E Strategy Window —\n"
+        f"• Usual 3B-TP: {usual.get('trades', 0)} tr | WR {usual.get('win_rate_%', 0)}% | ${float(usual.get('net', 0)):+.2f}\n"
+        f"• Runner +1B: {runner.get('trades', 0)} tr | WR {runner.get('win_rate_%', 0)}% | ${float(runner.get('net', 0)):+.2f}\n"
+        f"• Combined Net: ${float(sn.get('net', 0)):+.2f} | PF {sn.get('profit_factor', 0)} | "
+        f"Sharpe {sn.get('sharpe', 0)} | Calmar {sn.get('calmar', 0)} | 95% VaR -${float(sn.get('daily_var_95', 0)):.2f}"
+    )
+
+
+def handle_telegram_command(text: str, cfg: dict | None = None) -> str:
+    """Process an authorized 2-way Telegram command from the owner's Chat ID."""
+    cur_cfg = cfg or load_config()
+    raw = str(text or "").strip()
+    if not raw:
+        return "Empty command. Send /help for commands."
+    cmd = raw.split()[0].lower().split("@")[0]
+
+    if cmd in ("/start", "/help"):
+        return (
+            f"🤖 RENKOBOT Remote Control ({fmt_gst()})\n"
+            f"/status — Live worker, market & kill-switch state\n"
+            f"/positions — Open Capital.com deals & UPL\n"
+            f"/pnl or /digest — Daily P&L & Model E attribution\n"
+            f"/scanner — 16-market active signals summary\n"
+            f"/pause — Pause 24/7 watcher\n"
+            f"/resume — Clear kill switch & start watcher\n"
+            f"/flatten — EMERGENCY KILL SWITCH & pause"
+        )
+
+    if cmd == "/status":
+        cnt, pnl = today_stats()
+        return (
+            f"📡 RENKO COCKPIT STATUS ({fmt_gst()})\n"
+            f"• Active Market: {cur_cfg.get('epic', 'GOLD')} ({cur_cfg.get('resolution', 'MINUTE')})\n"
+            f"• 24/7 Watcher: {'RUNNING' if WATCHER.running else 'PAUSED'} ({WATCHER.last_status})\n"
+            f"• Mode: {str(cur_cfg.get('mode', 'auto')).upper()} | Env: {'LIVE' if cur_cfg.get('live') else 'DEMO'}\n"
+            f"• Kill Switch: {'ACTIVE' if kill_switch_active() else 'OFF'}\n"
+            f"• Today Live: {cnt} trades | ${float(pnl):+.2f}"
+        )
+
+    if cmd in ("/pnl", "/digest"):
+        return build_daily_telegram_digest(cur_cfg)
+
+    if cmd == "/positions":
+        creds = check_credentials_present()
+        if not creds.get("connected"):
+            return f"💼 Open Deals ({fmt_gst()}): Broker credentials not connected (offline/sample)."
+        try:
+            cap = Capital("live" if cur_cfg.get("live") else "demo")
+            pos_raw = cap.positions()
+            if not pos_raw:
+                return f"💼 Open Deals ({fmt_gst()}): 0 open positions on Capital.com ({cap.env.upper()})."
+            lines = [f"💼 Open Capital.com Deals ({len(pos_raw)} | {fmt_gst()}):"]
+            for p in pos_raw[:10]:
+                pi = p.get("position", {})
+                mi = p.get("market", {})
+                lines.append(
+                    f"• {mi.get('epic', '?')} {pi.get('direction', '')} x{pi.get('size', 0)} @ {pi.get('level', '')} "
+                    f"| SL {pi.get('stopLevel', '--')} | UPL ${float(pi.get('upl', 0)):+.2f}"
+                )
+            return "\n".join(lines)
+        except Exception as e:
+            return f"💼 Position query error: {e}"
+
+    if cmd == "/scanner":
+        from scanner import get_cached_or_scan_all
+        res = get_cached_or_scan_all(cur_cfg, cap=None)
+        items = res.get("items", [])
+        active = [r for r in items if r.get("signal_type") in ("BUY", "SELL") and not r.get("veto")]
+        lines = [
+            f"📊 16-Market Scanner ({fmt_gst()}): {res.get('ready_count', 0)}/16 READY | {len(active)} ACTIVE SIGNALS"
+        ]
+        for r in (active or items[:6]):
+            lines.append(f"• {r.get('epic')}: {r.get('signal')} @ {r.get('price')} ({r.get('filter_status')})")
+        return "\n".join(lines)
+
+    if cmd == "/pause":
+        WATCHER.stop()
+        return f"⏸ 24/7 Watcher PAUSED via Telegram ({fmt_gst()})."
+
+    if cmd == "/resume":
+        set_kill_switch(False)
+        WATCHER.start()
+        return f"▶ 24/7 Watcher RESUMED via Telegram ({fmt_gst()})."
+
+    if cmd == "/flatten":
+        set_kill_switch(True)
+        WATCHER.stop()
+        closed_cnt = 0
+        creds = check_credentials_present()
+        if creds.get("connected"):
+            try:
+                from bot import log_event
+                cap = Capital("live" if cur_cfg.get("live") else "demo")
+                for p in cap.positions():
+                    did = p.get("position", {}).get("dealId")
+                    sz = float(p.get("position", {}).get("size", 0.0))
+                    ep = p.get("market", {}).get("epic", "")
+                    if did:
+                        try:
+                            conf = cap.close_position(did)
+                            log_event("FLATTEN", "CLOSE", sz, conf.get("level"), None, did, note=f"[{ep}] TG_FLATTEN")
+                            closed_cnt += 1
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+        return f"🛑 EMERGENCY KILL SWITCH ENGAGED via Telegram ({fmt_gst()}). Closed {closed_cnt} deal(s)."
+
+    return f"Unknown command '{cmd}'. Send /help for available commands."
+
+
+class TelegramCommandPoller:
+    """Polls Telegram getUpdates so the bot owner can control the cockpit remotely."""
+
+    def __init__(self):
+        self.running = False
+        self._offset = 0
+        self._boot_epoch = time.time() - 120.0
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+
+    def start(self):
+        with self._lock:
+            if self.running:
+                return
+            self.running = True
+            self._thread = threading.Thread(target=self._loop, daemon=True)
+            self._thread.start()
+
+    def stop(self):
+        self.running = False
+
+    def poll_once(self) -> int:
+        load_env()
+        tok = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+        expected_chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+        if not tok or not expected_chat:
+            return 0
+        url = (
+            f"https://api.telegram.org/bot{tok}/getUpdates"
+            f"?offset={self._offset}&timeout=1&allowed_updates=%5B%22message%22%5D"
+        )
+        handled = 0
+        try:
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=6, context=SSL_CTX) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="ignore") or "{}")
+        except Exception:
+            return 0
+        if not data.get("ok"):
+            return 0
+        for upd in data.get("result", []):
+            uid = int(upd.get("update_id", 0))
+            if uid >= self._offset:
+                self._offset = uid + 1
+            msg = upd.get("message") or {}
+            msg_date = float(msg.get("date", 0) or 0)
+            chat_id = str((msg.get("chat") or {}).get("id", "")).strip()
+            text = str(msg.get("text", "")).strip()
+            if not text or chat_id != expected_chat:
+                continue
+            if self._offset == uid + 1 and msg_date and msg_date < self._boot_epoch:
+                continue
+            if text.startswith("/"):
+                reply = handle_telegram_command(text)
+                send_telegram_with_status(reply)
+                handled += 1
+        return handled
+
+    def _loop(self):
+        while self.running:
+            try:
+                self.poll_once()
+            except Exception:
+                pass
+            time.sleep(4.0)
+
+
+TG_POLLER = TelegramCommandPoller()
+
+
+def run_parameter_optimizer(cfg: dict, body: dict | None = None) -> dict:
+    """Run grid search over ATR Divisor × Usual TP Bricks × Confirm Minutes on active market."""
+    req = body if isinstance(body, dict) else {}
+    divisors = req.get("atr_divisors") or [15, 22, 32, 48]
+    tp_list = req.get("tp_bricks") or [2.0, 3.0, 4.0]
+    conf_list = req.get("confirm_minutes") or [0, 3, 5]
+    bars, days = ensure_data(cfg)
+    use_stop = bool(cfg.get("risk", {}).get("safety_stop_in_backtest", True))
+
+    rows = []
+    for div in divisors:
+        for tp in tp_list:
+            for conf in conf_list:
+                tcfg = copy.deepcopy(cfg)
+                tcfg["strategy"]["atr_div"] = int(div)
+                tcfg["strategy"]["tp_bricks"] = float(tp)
+                tcfg["strategy"]["confirm_minutes"] = int(conf)
+                trades, eng, _, _ = simulate(bars, days, tcfg, use_stop=use_stop)
+                st = stats(trades, "net")
+                last_bs = eng.bricks[-1].brick_size if eng.bricks else float(tcfg["strategy"].get("fallback_size", 1.0))
+                rows.append({
+                    "atr_div": int(div),
+                    "tp_bricks": float(tp),
+                    "confirm_minutes": int(conf),
+                    "brick_size": round(last_bs, 4),
+                    "trades": int(st.get("trades", 0)),
+                    "win_rate": float(st.get("win_rate_%", 0.0)),
+                    "profit_factor": float(st.get("profit_factor", 0.0)),
+                    "max_dd": float(st.get("max_drawdown", 0.0)),
+                    "sharpe": float(st.get("sharpe", 0.0)),
+                    "calmar": float(st.get("calmar", 0.0)),
+                    "net": float(st.get("net", 0.0)),
+                })
+
+    rows.sort(key=lambda r: (r["calmar"], r["net"]), reverse=True)
+    for idx, r in enumerate(rows, 1):
+        r["rank"] = idx
+
+    return {
+        "ok": True,
+        "epic": str(cfg.get("epic", "GOLD")).upper(),
+        "resolution": cfg.get("resolution", "MINUTE"),
+        "tested_combos": len(rows),
+        "scanned_at_gst": fmt_gst(),
+        "results": rows,
+    }
 
 CLOUD_STATE_DIR = Path(os.environ.get("RENDER_DISK_PATH", str(JOURNAL)))
 CLOUD_STATE_DB = CLOUD_STATE_DIR / "cloud_state.sqlite"
@@ -599,7 +886,7 @@ def render_tearsheet_html(cfg: dict, bt: dict) -> str:
     strat = cfg.get("strategy", {})
     epic = html.escape(str(ds.get("epic", cfg.get("epic", "GOLD"))))
     name = html.escape(str(ds.get("name", epic)))
-    gen_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    gen_at = fmt_gst(datetime.now(timezone.utc), "%Y-%m-%d %H:%M GST")
     edge = round(float(sn.get("net", 0.0)) - float(raw_sn.get("net", 0.0)), 2)
 
     leg_rows = ""
@@ -637,7 +924,7 @@ def render_tearsheet_html(cfg: dict, bt: dict) -> str:
     for t in trades[-60:]:
         trade_rows += (
             f"<tr><td>{t.get('num')}</td><td>{html.escape(str(t.get('leg', 'SINGLE')))}</td>"
-            f"<td>{html.escape(str(t.get('side', '')))}</td><td>{html.escape(str(t.get('entry_time', ''))[:16])}</td>"
+            f"<td>{html.escape(str(t.get('side', '')))}</td><td>{html.escape(fmt_gst(t.get('entry_time', ''), '%Y-%m-%d %H:%M'))}</td>"
             f"<td>{t.get('entry')}</td><td>{t.get('exit')}</td>"
             f"<td>{html.escape(str(t.get('why_out', '')))}</td>"
             f"<td><b>${float(t.get('net', 0)):+.2f}</b></td></tr>"
@@ -680,11 +967,11 @@ def render_tearsheet_html(cfg: dict, bt: dict) -> str:
   <h2>Transaction Cost &amp; Model E Leg Attribution</h2>
   <table><thead><tr><th>Cohort</th><th>Trades</th><th>Win Rate</th><th>Gross P&amp;L</th><th>Spread Drag</th><th>Net P&amp;L</th><th>Avg Net/Trade</th></tr></thead><tbody>{leg_rows}</tbody></table>
   <div class="grid2">
-    <div><h2>Session Performance (UTC)</h2><table><thead><tr><th>Session</th><th>Trades</th><th>Win Rate</th><th>PF</th><th>Net P&amp;L</th></tr></thead><tbody>{sess_rows}</tbody></table></div>
+    <div><h2>Session Performance (UAE GST / UTC+4)</h2><table><thead><tr><th>Session</th><th>Trades</th><th>Win Rate</th><th>PF</th><th>Net P&amp;L</th></tr></thead><tbody>{sess_rows}</tbody></table></div>
     <div><h2>Institutional Guard Vetoes ({ds.get('filtered_count',0)} Total)</h2><table><thead><tr><th>Guard / Filter</th><th>Blocked Signals</th></tr></thead><tbody>{flt_rows}</tbody></table></div>
   </div>
   <h2>Executed Trade Ledger (Latest 60)</h2>
-  <table><thead><tr><th>#</th><th>Leg</th><th>Side</th><th>Entry (UTC)</th><th>Entry Px</th><th>Exit Px</th><th>Exit Reason</th><th>Net P&amp;L</th></tr></thead><tbody>{trade_rows}</tbody></table>
+  <table><thead><tr><th>#</th><th>Leg</th><th>Side</th><th>Entry (GST)</th><th>Entry Px</th><th>Exit Px</th><th>Exit Reason</th><th>Net P&amp;L</th></tr></thead><tbody>{trade_rows}</tbody></table>
 </body></html>"""
 
 
@@ -974,9 +1261,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_HEAD(self):
         u = urlparse(self.path)
-        if u.path in ("/healthz", "/", "/index.html", "/studio", "/studio.html"):
+        if u.path in ("/healthz", "/", "/index.html", "/studio", "/studio.html", "/guide", "/guide.html", "/api/guide.pdf", "/guide.pdf"):
             self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8" if not u.path.startswith("/healthz") else "application/json")
+            if u.path.startswith("/healthz"):
+                ctype = "application/json"
+            elif u.path.endswith(".pdf"):
+                ctype = "application/pdf"
+            else:
+                ctype = "text/html; charset=utf-8"
+            self.send_header("Content-Type", ctype)
             self.end_headers()
         else:
             self.send_response(404)
@@ -1013,6 +1306,34 @@ class Handler(BaseHTTPRequestHandler):
             raw = p.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+            return
+
+        if u.path in ("/guide", "/guide.html"):
+            p = STATIC / "guide.html"
+            if not p.exists():
+                self._send_json({"error": "Master Guide has not been generated yet."}, 404)
+                return
+            raw = p.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.end_headers()
+            self.wfile.write(raw)
+            return
+
+        if u.path in ("/api/guide.pdf", "/guide.pdf"):
+            p = ROOT / "Renko_ATR_Cloud_Cockpit_McKinsey_Master_Guide.pdf"
+            if not p.exists():
+                self._send_json({"error": "Master Guide PDF not found."}, 404)
+                return
+            raw = p.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/pdf")
+            self.send_header("Content-Disposition", 'inline; filename="Renko_ATR_Cloud_Cockpit_McKinsey_Master_Guide.pdf"')
             self.send_header("Content-Length", str(len(raw)))
             self.end_headers()
             self.wfile.write(raw)
@@ -1100,7 +1421,7 @@ class Handler(BaseHTTPRequestHandler):
                     pending_ticket = None
             pulse = {
                 "ok": True,
-                "ts": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "ts": fmt_gst(),
                 "watcher": WATCHER.state(),
                 "kill_switch": kill_switch_active(),
                 "today_trades": cnt,
@@ -1283,9 +1604,10 @@ class Handler(BaseHTTPRequestHandler):
                     "TELEGRAM_CHAT_ID": chat_id,
                 })
                 build_cloud_backup_snapshot(cfg)
+                TG_POLLER.start()
                 self._send_json({
                     "ok": True,
-                    "message": f"Telegram alerts configured for Chat ID {chat_id}.",
+                    "message": f"Telegram alerts & 2-way remote control active for Chat ID {chat_id}.",
                     "bot": get_bot_status(cfg, skip_network=True),
                 })
                 return
@@ -1295,7 +1617,7 @@ class Handler(BaseHTTPRequestHandler):
                     f"🤖 Renko Cloud Bot Test Alert\n"
                     f"• Market: {cfg.get('epic', 'GOLD')} ({cfg.get('resolution', 'MINUTE')})\n"
                     f"• Chat ID: {os.environ.get('TELEGRAM_CHAT_ID', '')}\n"
-                    f"• Time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}"
+                    f"• Time: {fmt_gst()}"
                 )
                 res = send_telegram_with_status(txt)
                 code = 200 if res.get("ok") else 400
@@ -1305,6 +1627,47 @@ class Handler(BaseHTTPRequestHandler):
                     "chat_id": os.environ.get("TELEGRAM_CHAT_ID", ""),
                     "bot": get_bot_status(cfg, skip_network=True),
                 }, code)
+                return
+
+            if u.path == "/api/telegram-digest":
+                digest_txt = build_daily_telegram_digest(cfg)
+                res = send_telegram_with_status(digest_txt)
+                code = 200 if res.get("ok") else 400
+                self._send_json({
+                    "ok": bool(res.get("ok")),
+                    "detail": res.get("detail", ""),
+                    "digest": digest_txt,
+                    "bot": get_bot_status(cfg, skip_network=True),
+                }, code)
+                return
+
+            if u.path == "/api/optimize":
+                res = run_parameter_optimizer(cfg, body)
+                self._send_json(res)
+                return
+
+            if u.path == "/api/save-password":
+                pw = str(body.get("password", "")).strip()
+                update_dotenv({"DASHBOARD_PASSWORD": pw if pw else None})
+                build_cloud_backup_snapshot(cfg)
+                if pw:
+                    tok = expected_session_token(pw)
+                    cookie = f"renko_session={tok}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000"
+                    self._send_json({
+                        "ok": True,
+                        "password_protected": True,
+                        "token": tok,
+                        "message": "Dashboard password lock enabled.",
+                        "bot": get_bot_status(cfg, skip_network=True),
+                    }, extra_headers=[("Set-Cookie", cookie)])
+                else:
+                    cookie = "renko_session=; Path=/; HttpOnly; Max-Age=0"
+                    self._send_json({
+                        "ok": True,
+                        "password_protected": False,
+                        "message": "Dashboard password removed (Open Access).",
+                        "bot": get_bot_status(cfg, skip_network=True),
+                    }, extra_headers=[("Set-Cookie", cookie)])
                 return
 
             if u.path == "/api/close-position":
@@ -1693,6 +2056,9 @@ def main():
         WATCHER.start()
         TICK_STREAMER.start([cfg.get("epic", "GOLD")], env="live" if cfg.get("live") else "demo")
         print("24/7 Watcher & WebSocket Tick Streamer auto-started (Broker credentials active).")
+    if os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID"):
+        TG_POLLER.start()
+        print("Telegram 2-Way Remote Command Poller started.")
 
     srv = ThreadingHTTPServer((a.host, a.port), Handler)
     print(f"Renko ATR Pro Cloud Dashboard running at http://{a.host}:{a.port}")
