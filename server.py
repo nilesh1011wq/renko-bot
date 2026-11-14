@@ -37,7 +37,8 @@ from urllib.parse import urlparse
 from backtest import (DATA, JOURNAL, INSTRUMENT_SPECS, data_path, ensure_data, generate_sample_gold_data,
                       load_config, save_bars, save_config, session_breakdown,
                       simulate, stats, write_trades)
-from bot import LIVE_TRADES, PENDING_FILE, resolve_epic_alias, step_once, step_multi_market
+from bot import (LIVE_TRADES, PENDING_FILE, _PENDING_CONFIRM, _PENDING_RUNNERS,
+                 resolve_epic_alias, step_once, step_multi_market)
 from capital_api import Capital, CapitalError, RES_MINUTES, SSL_CTX, load_env
 from montecarlo import run_montecarlo
 from risk import kill_switch_active, set_kill_switch, today_stats
@@ -562,6 +563,8 @@ def get_bot_status(cfg: dict, skip_network: bool = False) -> dict:
         "today_trades": cnt,
         "today_pnl": pnl,
         "pending_ticket": pending,
+        "pending_confirm": dict(_PENDING_CONFIRM),
+        "pending_runners": dict(_PENDING_RUNNERS),
         "live_positions": broker_positions,
         "market": broker_market,
         "live_log": list(reversed(live_log)),

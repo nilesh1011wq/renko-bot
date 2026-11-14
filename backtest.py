@@ -338,6 +338,8 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
                     bid_c, ask_c = r.get("c_bid"), r.get("c_ask")
                     half_sp = ((ask_c - bid_c) / 2.0) if (bid_c is not None and ask_c is not None) else 0.0
                     tp_exec = (tp_px - half_sp) if pos > 0 else (tp_px + half_sp)
+                    if runner_trade is not None and runner_stop is not None:
+                        runner_stop = max(runner_stop, trade["entry_exec"]) if pos > 0 else min(runner_stop, trade["entry_exec"])
                     close_leg(trade, r, tp_px, "TP_3_BRICKS", tp_exec)
                     trade, stop = None, None
                     if runner_trade is None and pending_runner is None:
@@ -536,7 +538,9 @@ def stats(trades, key):
         return {"trades": 0, "win_rate_%": 0.0, "net": 0.0, "avg_trade": 0.0,
                 "avg_win": 0.0, "avg_loss": 0.0, "profit_factor": 0.0,
                 "max_drawdown": 0.0, "longest_losing_streak": 0,
-                "avg_mfe_bricks": 0.0, "avg_mae_bricks": 0.0, "avg_overshoot": 0.0}
+                "avg_mfe_bricks": 0.0, "avg_mae_bricks": 0.0, "avg_overshoot": 0.0,
+                "sharpe": 0.0, "sortino": 0.0, "calmar": 0.0,
+                "payoff_ratio": 0.0, "expectancy_r": 0.0}
     wins = [x for x in pnl if x > 0]
     losses = [x for x in pnl if x <= 0]
     eq = peak = mdd = 0.0
@@ -551,19 +555,38 @@ def stats(trades, key):
     mfe = sum(t.get("mfe_bricks", 0.0) for t in trades) / len(trades)
     mae = sum(t.get("mae_bricks", 0.0) for t in trades) / len(trades)
     over = sum(t.get("overshoot", 0.0) for t in trades) / len(trades)
+    n = len(pnl)
+    total_pnl = sum(pnl)
+    avg_tr = total_pnl / n
+    avg_w = (sum(wins) / len(wins)) if wins else 0.0
+    avg_l = (sum(losses) / len(losses)) if losses else 0.0
+    variance = sum((x - avg_tr) ** 2 for x in pnl) / n
+    stdev = math.sqrt(variance)
+    down_var = sum((min(0.0, x)) ** 2 for x in pnl) / n
+    down_dev = math.sqrt(down_var)
+    sharpe = round((avg_tr / stdev) * math.sqrt(n), 2) if stdev > 0 else 0.0
+    sortino = round((avg_tr / down_dev) * math.sqrt(n), 2) if down_dev > 0 else (99.0 if avg_tr > 0 else 0.0)
+    calmar = round(total_pnl / mdd, 2) if mdd > 0 else (99.0 if total_pnl > 0 else 0.0)
+    payoff = round(avg_w / abs(avg_l), 2) if avg_l < 0 else 0.0
+    exp_r = round(avg_tr / abs(avg_l), 2) if avg_l < 0 else 0.0
     return {
-        "trades": len(pnl),
-        "win_rate_%": round(100 * len(wins) / len(pnl), 1),
-        "net": round(sum(pnl), 2),
-        "avg_trade": round(sum(pnl) / len(pnl), 2),
-        "avg_win": round(sum(wins) / len(wins), 2) if wins else 0.0,
-        "avg_loss": round(sum(losses) / len(losses), 2) if losses else 0.0,
+        "trades": n,
+        "win_rate_%": round(100 * len(wins) / n, 1),
+        "net": round(total_pnl, 2),
+        "avg_trade": round(avg_tr, 2),
+        "avg_win": round(avg_w, 2),
+        "avg_loss": round(avg_l, 2),
         "profit_factor": round(sum(wins) / gl, 2) if gl > 0 else 99.0,
         "max_drawdown": round(mdd, 2),
         "longest_losing_streak": worst,
         "avg_mfe_bricks": round(mfe, 2),
         "avg_mae_bricks": round(mae, 2),
         "avg_overshoot": round(over, 2),
+        "sharpe": sharpe,
+        "sortino": sortino,
+        "calmar": calmar,
+        "payoff_ratio": payoff,
+        "expectancy_r": exp_r,
     }
 
 

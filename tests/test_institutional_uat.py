@@ -687,6 +687,60 @@ class TestInstitutionalUAT(unittest.TestCase):
                 bot._HANDLED_RUNS.clear()
                 bot._DAYS_CACHE.clear()
 
+    def test_23_phase1_institutional_kpis_oms_persistence_and_chart_overlays(self):
+        """Phase 1: verify Sharpe/Sortino/Calmar KPIs, OMS JSON persistence, and chart level overlays."""
+        import tempfile
+        import backtest
+        import bot
+        import server
+
+        # 1. stats() computes institutional risk-adjusted KPIs
+        st = backtest.stats([{"net": 120.0}, {"net": -40.0}, {"net": 80.0}, {"net": -30.0}], "net")
+        for key in ("sharpe", "sortino", "calmar", "payoff_ratio", "expectancy_r"):
+            self.assertIn(key, st)
+            self.assertGreater(st[key], 0.0)
+        empty_st = backtest.stats([], "net")
+        self.assertEqual(empty_st["sharpe"], 0.0)
+        self.assertEqual(empty_st["calmar"], 0.0)
+
+        # 2. _save_oms_state / _load_oms_state round-trips OMS dictionaries
+        orig_log = bot.LIVE_TRADES
+        bot._PENDING_CONFIRM.clear()
+        bot._PENDING_RUNNERS.clear()
+        bot._HANDLED_RUNS.clear()
+        with tempfile.TemporaryDirectory() as tmpd:
+            bot.LIVE_TRADES = Path(tmpd) / "live_trades.csv"
+            try:
+                bot._PENDING_CONFIRM["GOLD"] = {"side": 1, "action": "BUY", "t0_epoch": 1000.0, "run_id": 7}
+                bot._PENDING_RUNNERS["GOLD"] = {"side": 1, "action": "BUY", "target_px": 3900.0, "size": 1.0, "run_id": 7}
+                bot._HANDLED_RUNS["GOLD"] = 7
+                bot._save_oms_state()
+
+                bot._PENDING_CONFIRM.clear()
+                bot._PENDING_RUNNERS.clear()
+                bot._HANDLED_RUNS.clear()
+                bot._load_oms_state()
+
+                self.assertEqual(bot._PENDING_CONFIRM["GOLD"]["action"], "BUY")
+                self.assertEqual(bot._PENDING_RUNNERS["GOLD"]["target_px"], 3900.0)
+                self.assertEqual(bot._HANDLED_RUNS["GOLD"], 7)
+
+                status = server.get_bot_status(backtest.load_config(), skip_network=True)
+                self.assertIn("pending_confirm", status)
+                self.assertIn("pending_runners", status)
+                self.assertIn("GOLD", status["pending_confirm"])
+                self.assertIn("GOLD", status["pending_runners"])
+            finally:
+                bot.LIVE_TRADES = orig_log
+                bot._PENDING_CONFIRM.clear()
+                bot._PENDING_RUNNERS.clear()
+                bot._HANDLED_RUNS.clear()
+
+        # 3. Chart overlays & KPIs wired in static/index.html
+        html = (Path(backtest.ROOT) / "static" / "index.html").read_text(encoding="utf-8")
+        for marker in ("drawLevelLine", "RUN +1B", "TP 3B", "5m Confirm", "Calmar:"):
+            self.assertIn(marker, html)
+
 
 if __name__ == "__main__":
     unittest.main()

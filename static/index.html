@@ -2501,12 +2501,12 @@
         const kPf = document.getElementById('kpi-pf');
         if (kPf) kPf.textContent = sn.profit_factor ?? '--';
         const kAvg = document.getElementById('kpi-avg');
-        if (kAvg) kAvg.textContent = `W:${fmtUsd(sn.avg_win)} / L:${fmtUsd(sn.avg_loss)}`;
+        if (kAvg) kAvg.textContent = `W:${fmtUsd(sn.avg_win)} / L:${fmtUsd(sn.avg_loss)} (${sn.payoff_ratio ?? '--'}R)`;
 
         const kDd = document.getElementById('kpi-dd');
         if (kDd) kDd.textContent = '-$' + (sn.max_drawdown || 0).toFixed(2);
         const kStreak = document.getElementById('kpi-streak');
-        if (kStreak) kStreak.textContent = `Worst Streak: ${sn.longest_losing_streak ?? 0}`;
+        if (kStreak) kStreak.textContent = `Streak: ${sn.longest_losing_streak ?? 0} | Calmar: ${sn.calmar ?? '--'} | Sharpe: ${sn.sharpe ?? '--'}`;
 
         const kMfe = document.getElementById('kpi-mfe');
         if (kMfe) kMfe.textContent = `+${sn.avg_mfe_bricks ?? 0} / -${sn.avg_mae_bricks ?? 0} brk`;
@@ -2652,6 +2652,8 @@
       const spec = getSpec(activeEpic);
       const digits = spec.digits;
       const pfx = spec.currency;
+      const pConf = (bot.pending_confirm || {})[activeEpic];
+      const pRun = (bot.pending_runners || {})[activeEpic];
 
       // Update Live buttons visibility
       const btnFloat = document.getElementById('btn-floating-live');
@@ -2674,7 +2676,9 @@
         const modeBadge = CHART_SCROLL_OFFSET > 0 
           ? `<span style="color:var(--amber); font-weight:700;">📜 HISTORY (-${CHART_SCROLL_OFFSET} bricks)</span>`
           : `<span style="color:var(--green); font-weight:700;">⚡ LIVE</span>`;
-        sub.innerHTML = `${modeBadge} | ${activeEpic} | Showing ${view.length} bricks (#${view[0].index}–#${view[view.length - 1].index} of ${totalBricks}) | Brick Size: ${fmtBrickSize(ds.last_brick_size || 0, activeEpic)}${pxTag}`;
+        const confBadge = pConf ? ` | <span style="color:#f59e0b; font-weight:700;">⏳ 5m Confirm (${pConf.action})</span>` : '';
+        const runBadge = pRun ? ` | <span style="color:#c084fc; font-weight:700;">🚀 Runner Armed @ ${fmtPrice(pRun.target_px, activeEpic)}</span>` : '';
+        sub.innerHTML = `${modeBadge} | ${activeEpic} | Showing ${view.length} bricks (#${view[0].index}–#${view[view.length - 1].index} of ${totalBricks}) | Brick Size: ${fmtBrickSize(ds.last_brick_size || 0, activeEpic)}${pxTag}${confBadge}${runBadge}`;
       }
 
       let minP = Infinity, maxP = -Infinity;
@@ -2856,6 +2860,36 @@
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 9.5px JetBrains Mono, monospace';
         ctx.fillText(fmtPrice(activePx, activeEpic, digits), w - padR + 4, lpy + 3.5);
+      }
+
+      // 7. Live Position Levels (Entry / Stop / 3B TP) & Armed +1B Runner Trigger
+      const drawLevelLine = (px, color, bg, label) => {
+        if (px === null || px === undefined || !isFinite(px) || px < minP || px > maxP) return;
+        const ly = py(px);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([5, 3]);
+        ctx.beginPath();
+        ctx.moveTo(padL, ly);
+        ctx.lineTo(w - padR, ly);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = bg;
+        ctx.fillRect(w - padR + 2, ly - 8, padR - 4, 16);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 8.5px JetBrains Mono, monospace';
+        ctx.fillText(label, w - padR + 4, ly + 3);
+      };
+
+      for (const p of (bot.live_positions || [])) {
+        if ((p.epic || '').toUpperCase() === activeEpic) {
+          drawLevelLine(p.level, '#38bdf8', '#0369a1', 'ENTRY');
+          if (p.stopLevel) drawLevelLine(p.stopLevel, '#ef4444', '#b91c1c', 'STOP');
+          if (p.profitLevel) drawLevelLine(p.profitLevel, '#10b981', '#047857', 'TP 3B');
+        }
+      }
+      if (pRun && pRun.target_px) {
+        drawLevelLine(pRun.target_px, '#c084fc', '#6b21a8', 'RUN +1B');
       }
 
       // 7. Interactive Hover: Crosshairs, Halo, Prices on Block, Floating Tooltip

@@ -78,6 +78,41 @@ _PENDING_RUNNERS: dict[str, dict] = {}
 _HANDLED_RUNS: dict[str, int] = {}
 
 
+def _oms_state_path() -> Path:
+    return LIVE_TRADES.parent / "oms_state.json"
+
+
+def _save_oms_state():
+    try:
+        p = _oms_state_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps({
+            "pending_confirm": _PENDING_CONFIRM,
+            "pending_runners": _PENDING_RUNNERS,
+            "handled_runs": _HANDLED_RUNS,
+        }, indent=2))
+    except Exception:
+        pass
+
+
+def _load_oms_state():
+    try:
+        p = _oms_state_path()
+        if p.exists():
+            d = json.loads(p.read_text())
+            if isinstance(d.get("pending_confirm"), dict):
+                _PENDING_CONFIRM.update(d["pending_confirm"])
+            if isinstance(d.get("pending_runners"), dict):
+                _PENDING_RUNNERS.update(d["pending_runners"])
+            if isinstance(d.get("handled_runs"), dict):
+                _HANDLED_RUNS.update({k: int(v) for k, v in d["handled_runs"].items()})
+    except Exception:
+        pass
+
+
+_load_oms_state()
+
+
 def warmup_engine(cap: Capital, cfg: dict, allow_synthetic: bool = True):
     """Fetch recent history to warm up DailyAtr and RenkoEngine without repainting."""
     epic = cfg["epic"]
@@ -278,6 +313,13 @@ def _close_epic_positions(cap: Capital, epic: str, deal_ids: list[str], action: 
 
 
 def step_once(cap: Capital, cfg: dict):
+    try:
+        return _step_once_impl(cap, cfg)
+    finally:
+        _save_oms_state()
+
+
+def _step_once_impl(cap: Capital, cfg: dict):
     eng, _, closed_bars, last_n, bs = warmup_engine(cap, cfg, allow_synthetic=False)
     if not closed_bars:
         print("No closed bars returned.")
@@ -693,6 +735,7 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
             print(f"[{epic}] Background scan error: {inst_err}")
             continue
 
+    _save_oms_state()
     return {
         "monitored": len(target_epics),
         "open_deals": total_open_count,
