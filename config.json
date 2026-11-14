@@ -1,5 +1,5 @@
 {
-  "_comment": "Strategy inputs mirror the Pine script + optional Pro Trader filters and risk controls.",
+  "_comment": "Native Python Renko ATR Strategy + Pro Trader filters, 5-Min Confirmation & Model E Dual-Order Execution.",
   "epic": "GOLD",
   "resolution": "MINUTE",
   "price": "mid",
@@ -27,7 +27,11 @@
     "one_trade_per_run": true,
     "max_bricks_on_entry_bar": 3,
     "max_overshoot_bricks": 1.5,
-    "grid_anchor": true
+    "grid_anchor": true,
+    "confirm_minutes": 5,
+    "dual_order_mode": true,
+    "tp_bricks": 3.0,
+    "runner_offset_bricks": 1.0
   },
   "risk": {
     "safety_stop_bricks": 3,

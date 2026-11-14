@@ -44,6 +44,10 @@ class Params:
     max_bricks_on_entry_bar: int = 0  # 0 = disabled, e.g. 3 = skip if >3 bricks in 1 candle
     max_overshoot_bricks: float = 0.0 # 0.0 = disabled, e.g. 1.5 = skip if bar close overshoots trigger brick
     grid_anchor: bool = False         # snap initial last_close to nearest brick_size multiple
+    confirm_minutes: int = 0          # 0 = instant entry, 5 = wait 5 mins to confirm brick run & ST hold
+    dual_order_mode: bool = False     # True = Model E (Order 1: +3B TP Usual + Order 2: +1B Strategy Runner)
+    tp_bricks: float = 3.0            # Fixed Take Profit in bricks for Order 1 (Usual leg)
+    runner_offset_bricks: float = 1.0 # Continuation offset (+N bricks ahead) for Order 2 (Runner leg)
 
     @classmethod
     def from_dict(cls, d: dict) -> "Params":

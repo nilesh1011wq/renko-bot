@@ -11,7 +11,7 @@ from pathlib import Path
 
 from backtest import load_config, pick, INSTRUMENT_SPECS
 from capital_api import Capital, CapitalError, RES_MINUTES
-from renko import DailyAtr, Params, RenkoEngine, brick_size_from_atr
+from renko import DailyAtr, Params, RenkoEngine, brick_size_from_atr, round_to_tick
 from risk import (check_entry_allowed, compute_size, kill_switch_active,
                   safety_stop_level, set_kill_switch, should_trail_stop, today_stats)
 
@@ -73,6 +73,8 @@ _DAYS_CACHE: dict[str, tuple[float, list]] = {}
 _DAYS_CACHE_TTL = 3600.0  # 1 hour TTL for daily ATR candles
 _RECENT_ENTRIES: dict[str, float] = {}
 ENTRY_DEBOUNCE_SECONDS = 120.0  # Prevent duplicate order submissions within 2 minutes
+_PENDING_CONFIRM: dict[str, dict] = {}
+_PENDING_RUNNERS: dict[str, dict] = {}
 
 
 def warmup_engine(cap: Capital, cfg: dict):
@@ -151,7 +153,8 @@ def broker_position(cap: Capital, epic: str):
 
 
 def execute_decision(cap: Capital, cfg: dict, action: str, reverse: bool,
-                     last_close: float, bs: float, deal_ids: list[str], size: float | None = None):
+                     last_close: float, bs: float, deal_ids: list[str], size: float | None = None,
+                     profit_level: float | None = None, note_tag: str = ""):
     epic = cfg["epic"]
     sz = size if size is not None else compute_size(cfg, bs)
     if action in ("EXIT", "COVER") or (reverse and deal_ids):
@@ -174,7 +177,13 @@ def execute_decision(cap: Capital, cfg: dict, action: str, reverse: bool,
         last_err = None
         for cand in resolve_epic_alias(epic):
             try:
-                conf = cap.open_position(cand, action, sz, stop_level=stop)
+                try:
+                    if profit_level is not None:
+                        conf = cap.open_position(cand, action, sz, stop_level=stop, profit_level=profit_level)
+                    else:
+                        conf = cap.open_position(cand, action, sz, stop_level=stop)
+                except TypeError:
+                    conf = cap.open_position(cand, action, sz, stop_level=stop)
                 cfg["epic"] = cand
                 break
             except Exception as e:
@@ -183,9 +192,10 @@ def execute_decision(cap: Capital, cfg: dict, action: str, reverse: bool,
         if conf:
             did = conf.get("dealId", "")
             evt = "REVERSE_OPEN" if reverse else "OPEN"
-            log_event(evt, action, sz, conf.get("level"), stop, did, note=f"[{epic}] {conf.get('dealStatus', '')}")
-            print(f"[{epic}] Opened {action} {sz} {cfg['epic']}: dealId={did} status={conf.get('dealStatus')} "
-                  f"level={conf.get('level')} stop={stop}")
+            tag_str = f" {note_tag}" if note_tag else ""
+            log_event(evt, action, sz, conf.get("level"), stop, did, note=f"[{epic}]{tag_str} {conf.get('dealStatus', '')}")
+            print(f"[{epic}]{tag_str} Opened {action} {sz} {cfg['epic']}: dealId={did} status={conf.get('dealStatus')} "
+                  f"level={conf.get('level')} stop={stop} tp={profit_level}")
         else:
             log_event("ERROR", action, sz, None, stop, note=f"[{epic}] Order failed: {last_err}")
             print(f"[{epic}] Failed to open {action}: {last_err}")
@@ -258,6 +268,54 @@ def step_once(cap: Capital, cfg: dict):
         status_note = f"G:{eng.green_run} R:{eng.red_run} | ST:{st_label} | Brick:${bs:.2f} | Sig:{d.action or 'Waiting'}"
         log_event("SCAN", st_label, 0.0, eng.last_close, None, "", note=status_note)
 
+    epic = cfg["epic"]
+    if epic in _PENDING_RUNNERS:
+        runner = _PENDING_RUNNERS[epic]
+        rev_cond = (
+            (runner["side"] > 0 and (eng.red_run >= 1 or eng.st_dir != 1))
+            or (runner["side"] < 0 and (eng.green_run >= 1 or eng.st_dir != -1))
+            or d.action in ("EXIT", "COVER")
+        )
+        if rev_cond:
+            _PENDING_RUNNERS.pop(epic, None)
+            log_event("BLOCKED", runner["action"], runner["size"], last_c, None,
+                      note=f"[{epic}] runner_+1b_unfilled (cancelled)")
+        elif (runner["side"] > 0 and last_c >= runner["target_px"]) or (runner["side"] < 0 and last_c <= runner["target_px"]):
+            _PENDING_RUNNERS.pop(epic, None)
+            execute_decision(cap, cfg, runner["action"], False, eng.last_close, bs, [],
+                             size=runner["size"], profit_level=None, note_tag="RUNNER +1B")
+
+    confirm_minutes = int(cfg.get("strategy", {}).get("confirm_minutes", 0))
+    if epic in _PENDING_CONFIRM:
+        pc = _PENDING_CONFIRM[epic]
+        still_ok = (
+            (eng.green_run >= eng.p.green_buy and (not eng.p.use_st or eng.st_dir == 1) and eng.run_id == pc["run_id"])
+            if pc["side"] > 0
+            else (eng.red_run >= eng.p.red_sell and (not eng.p.use_st or eng.st_dir == -1) and eng.run_id == pc["run_id"])
+        )
+        if not still_ok:
+            _PENDING_CONFIRM.pop(epic, None)
+            log_event("BLOCKED", pc["action"], compute_size(cfg, bs), last_c, None,
+                      note=f"[{epic}] 5m_confirm_failed")
+            return
+        if time.time() >= pc["t0_epoch"] + confirm_minutes * 60:
+            _PENDING_CONFIRM.pop(epic, None)
+            d.action = pc["action"]
+            d.reverse = False
+            d.trigger_brick_px = last_c
+        else:
+            return
+    elif d.action in ("BUY", "SELL") and confirm_minutes > 0:
+        _PENDING_CONFIRM[epic] = {
+            "side": 1 if d.action == "BUY" else -1,
+            "action": d.action,
+            "t0_epoch": time.time(),
+            "run_id": eng.run_id,
+        }
+        log_event("CONFIRM_WAIT", d.action, 0.0, eng.last_close, None, "",
+                  note=f"[{epic}] Waiting {confirm_minutes}m confirmation")
+        return
+
     if not d.action:
         return
 
@@ -297,7 +355,23 @@ def step_once(cap: Capital, cfg: dict):
         print(json.dumps(ticket, indent=2))
         print("Run `python3 bot.py approve` (or click Approve in the Dashboard) before expiry.")
     else:
-        execute_decision(cap, cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz)
+        dual_mode = bool(cfg.get("strategy", {}).get("dual_order_mode", False))
+        if d.action in ("BUY", "SELL") and dual_mode:
+            side_val = 1 if d.action == "BUY" else -1
+            tp_bricks = float(cfg.get("strategy", {}).get("tp_bricks", 3.0))
+            runner_offset = float(cfg.get("strategy", {}).get("runner_offset_bricks", 1.0))
+            tp_lvl = round_to_tick(last_c + side_val * tp_bricks * bs, cfg["tick"])
+            execute_decision(cap, cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz,
+                             profit_level=tp_lvl, note_tag=f"USUAL {tp_bricks:g}B-TP")
+            _PENDING_RUNNERS[epic] = {
+                "side": side_val,
+                "action": d.action,
+                "target_px": round_to_tick(last_c + side_val * runner_offset * bs, cfg["tick"]),
+                "size": sz,
+                "run_id": eng.run_id,
+            }
+        else:
+            execute_decision(cap, cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz)
 
 
 def match_position_to_epic(pos_epic: str, all_epics: list[str]) -> str:
@@ -390,6 +464,26 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                     status_note = f"[{epic}] G:{eng.green_run} R:{eng.red_run} | ST:{st_label} | Brick:${bs:.2f} | Sig:{d.action or 'Waiting'}"
                     log_event("SCAN", st_label, 0.0, eng.last_close, None, "", note=status_note)
 
+            # Handle +1B Continuation Runner Orders (Model E Order 2)
+            if epic in _PENDING_RUNNERS:
+                runner = _PENDING_RUNNERS[epic]
+                rev_cond = (
+                    (runner["side"] > 0 and (eng.red_run >= 1 or eng.st_dir != 1))
+                    or (runner["side"] < 0 and (eng.green_run >= 1 or eng.st_dir != -1))
+                    or d.action in ("EXIT", "COVER")
+                )
+                if rev_cond:
+                    _PENDING_RUNNERS.pop(epic, None)
+                    log_event("BLOCKED", runner["action"], runner["size"], last_c, None,
+                              note=f"[{epic}] runner_+1b_unfilled (cancelled)")
+                elif ((runner["side"] > 0 and last_c >= runner["target_px"]) or
+                      (runner["side"] < 0 and last_c <= runner["target_px"])) and total_open_count < max_portfolio:
+                    _PENDING_RUNNERS.pop(epic, None)
+                    execute_decision(cap, inst_cfg, runner["action"], False, eng.last_close, bs, [],
+                                     size=runner["size"], profit_level=None, note_tag="RUNNER +1B")
+                    total_open_count += 1
+                    actions_taken.append({"epic": epic, "action": f"{runner['action']}_RUNNER", "size": runner["size"]})
+
             # Handle EXIT / COVER of active positions
             if pos_dir != 0 and (d.action in ("EXIT", "COVER") or (d.reverse and d.action in ("BUY", "SELL"))):
                 for did in deal_ids:
@@ -403,8 +497,42 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                     except Exception as e:
                         print(f"[{epic}] Error closing deal {did}: {e}")
                         log_event("ERROR", d.action or "CLOSE", total_sz, None, None, did, note=f"[{epic}] {e}")
+                pos_dir, deal_ids = 0, []
+                d.reverse = False
                 if d.action in ("EXIT", "COVER"):
                     continue
+
+            # Handle Time Confirmation Window (Q3)
+            confirm_minutes = int(inst_cfg.get("strategy", {}).get("confirm_minutes", 0))
+            if epic in _PENDING_CONFIRM:
+                pc = _PENDING_CONFIRM[epic]
+                still_ok = (
+                    (eng.green_run >= eng.p.green_buy and (not eng.p.use_st or eng.st_dir == 1) and eng.run_id == pc["run_id"])
+                    if pc["side"] > 0
+                    else (eng.red_run >= eng.p.red_sell and (not eng.p.use_st or eng.st_dir == -1) and eng.run_id == pc["run_id"])
+                )
+                if not still_ok:
+                    _PENDING_CONFIRM.pop(epic, None)
+                    log_event("BLOCKED", pc["action"], compute_size(inst_cfg, bs), last_c, None,
+                              note=f"[{epic}] 5m_confirm_failed")
+                    continue
+                if time.time() >= pc["t0_epoch"] + confirm_minutes * 60:
+                    _PENDING_CONFIRM.pop(epic, None)
+                    d.action = pc["action"]
+                    d.reverse = False
+                    d.trigger_brick_px = last_c
+                else:
+                    continue
+            elif d.action in ("BUY", "SELL") and confirm_minutes > 0 and pos_dir == 0:
+                _PENDING_CONFIRM[epic] = {
+                    "side": 1 if d.action == "BUY" else -1,
+                    "action": d.action,
+                    "t0_epoch": time.time(),
+                    "run_id": eng.run_id,
+                }
+                log_event("CONFIRM_WAIT", d.action, 0.0, eng.last_close, None, "",
+                          note=f"[{epic}] Waiting {confirm_minutes}m confirmation")
+                continue
 
             # Handle BUY / SELL Entries
             if d.action in ("BUY", "SELL"):
@@ -473,7 +601,22 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 else:
                     # Full Auto execution
                     _RECENT_ENTRIES[epic] = now_epoch
-                    execute_decision(cap, inst_cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz)
+                    dual_mode = bool(inst_cfg.get("strategy", {}).get("dual_order_mode", False))
+                    if dual_mode:
+                        tp_bricks = float(inst_cfg.get("strategy", {}).get("tp_bricks", 3.0))
+                        runner_offset = float(inst_cfg.get("strategy", {}).get("runner_offset_bricks", 1.0))
+                        tp_lvl = round_to_tick(last_c + side_val * tp_bricks * bs, inst_cfg["tick"])
+                        execute_decision(cap, inst_cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz,
+                                         profit_level=tp_lvl, note_tag=f"USUAL {tp_bricks:g}B-TP")
+                        _PENDING_RUNNERS[epic] = {
+                            "side": side_val,
+                            "action": d.action,
+                            "target_px": round_to_tick(last_c + side_val * runner_offset * bs, inst_cfg["tick"]),
+                            "size": sz,
+                            "run_id": eng.run_id,
+                        }
+                    else:
+                        execute_decision(cap, inst_cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz)
                     total_open_count += 1
                     actions_taken.append({"epic": epic, "action": d.action, "size": sz})
         except Exception as inst_err:

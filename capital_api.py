@@ -188,10 +188,12 @@ class Capital:
                 time.sleep(0.5)
         raise CapitalError("no confirmation for " + deal_ref)
 
-    def open_position(self, epic, direction, size, stop_level=None):
+    def open_position(self, epic, direction, size, stop_level=None, profit_level=None):
         body = {"epic": epic, "direction": direction, "size": size, "guaranteedStop": False}
         if stop_level is not None:
             body["stopLevel"] = stop_level
+        if profit_level is not None:
+            body["profitLevel"] = profit_level
         r = self._req("POST", "/positions", body)
         return self.confirm(r["dealReference"])
 

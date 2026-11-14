@@ -365,6 +365,8 @@ def serialize_backtest(cfg: dict, use_cache: bool = True, skip_network: bool = F
     raw_cfg["strategy"]["max_bricks_on_entry_bar"] = 0
     raw_cfg["strategy"]["max_overshoot_bricks"] = 0.0
     raw_cfg["strategy"]["grid_anchor"] = False
+    raw_cfg["strategy"]["confirm_minutes"] = 0
+    raw_cfg["strategy"]["dual_order_mode"] = False
     raw_cfg["risk"]["safety_stop_in_backtest"] = False
     raw_cfg["risk"]["breakeven_after_bricks"] = 0.0
     raw_cfg["risk"]["max_spread_frac_of_brick"] = 0.0
@@ -397,6 +399,8 @@ def serialize_backtest(cfg: dict, use_cache: bool = True, skip_network: bool = F
         equity_curve.append({"i": idx, "t": xt, "gross": eq_gross, "net": eq_net})
         trades_json.append({
             "num": idx,
+            "leg": t.get("leg", "SINGLE"),
+            "why_in": t.get("why_in", ""),
             "side": t["side"],
             "size": t["size"],
             "session": t["session"],
@@ -766,6 +770,7 @@ class Handler(BaseHTTPRequestHandler):
                         save_bars(data_path(cfg["epic"], cfg["resolution"]), bars)
                     if day_bars:
                         save_bars(data_path(cfg["epic"], "DAY"), day_bars)
+                    clear_backtest_cache()
                 except Exception:
                     pass
 
@@ -963,6 +968,7 @@ class Handler(BaseHTTPRequestHandler):
                         save_bars(data_path(cfg["epic"], cfg["resolution"]), bars)
                     if day_bars:
                         save_bars(data_path(cfg["epic"], "DAY"), day_bars)
+                    clear_backtest_cache()
 
                     bot_st = get_bot_status(cfg)
                     bt_st = serialize_backtest(cfg)

@@ -549,6 +549,46 @@ class TestInstitutionalUAT(unittest.TestCase):
         self.assertIn("c", flt)
         self.assertIn("brick_size", flt)
 
+    def test_21_model_e_5m_confirmation_and_dual_order_execution(self):
+        """Model E (5m time confirmation + Usual 3B-TP & +1B Runner dual-order execution) and UI wiring."""
+        import copy
+        from pathlib import Path
+        import backtest
+        import server
+
+        cfg = copy.deepcopy(backtest.load_config())
+        cfg["active_instrument"] = "GOLD"
+        cfg["strategy"]["confirm_minutes"] = 5
+        cfg["strategy"]["dual_order_mode"] = True
+        cfg["strategy"]["tp_bricks"] = 3.0
+        cfg["strategy"]["runner_offset_bricks"] = 1.0
+
+        res = server.serialize_backtest(cfg, skip_network=True)
+        trades = res["trades"]
+        filtered = res["filtered_events"]
+        st = res["stats_net"]
+
+        legs = {t.get("leg") for t in trades}
+        why_outs = {t.get("why_out") for t in trades}
+        reasons = [f.get("reason", "") for f in filtered]
+
+        self.assertIn("USUAL", legs)
+        self.assertIn("RUNNER", legs)
+        self.assertIn("TP_3_BRICKS", why_outs)
+        self.assertGreater(st["net"], 1900.0)
+        self.assertGreater(st["win_rate_%"], 55.0)
+        self.assertTrue(any(r.startswith("5m_confirm_failed") for r in reasons))
+        self.assertTrue(any(r.startswith("runner_+1b_unfilled") for r in reasons))
+
+        html = (Path(backtest.ROOT) / "static" / "index.html").read_text(encoding="utf-8")
+        for dom_id in (
+            'id="in-dual_order_mode"',
+            'id="in-confirm_minutes"',
+            'id="in-tp_bricks"',
+            'id="in-runner_offset_bricks"',
+        ):
+            self.assertIn(dom_id, html)
+
 
 if __name__ == "__main__":
     unittest.main()

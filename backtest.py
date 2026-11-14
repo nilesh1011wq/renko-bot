@@ -210,56 +210,71 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
     datr = DailyAtr([d["t"] for d in days], [pick(d, "h", price) for d in days],
                     [pick(d, "l", price) for d in days], [pick(d, "c", price) for d in days], p.atr_len)
     eng = RenkoEngine(p)
+    confirm_mins = int(p.confirm_minutes) if use_stop else 0
+    dual_mode = bool(p.dual_order_mode) and use_stop
+    tp_bricks = float(p.tp_bricks) if p.tp_bricks > 0 else 3.0
+    runner_offset = float(p.runner_offset_bricks) if p.runner_offset_bricks > 0 else 1.0
+
     pos, stop, trade, trades = 0, None, None, []
+    runner_trade, runner_stop = None, None
+    pending_confirm = None
+    pending_runner = None
     signals = []
     filtered_events = []
 
-    def open_trade(side, r, why, bs, trig_px):
-        nonlocal trade
-        px = pick(r, "c", price)
-        exe = r.get("c_ask") if side > 0 else r.get("c_bid")
-        exe_px = exe if exe is not None else px
+    def open_leg(side, r, why, bs, trig_px, fill_px=None, tp_b=None, leg_label="SINGLE"):
+        c_mid = pick(r, "c", price)
+        base_px = fill_px if fill_px is not None else c_mid
+        if fill_px is None:
+            exe = r.get("c_ask") if side > 0 else r.get("c_bid")
+            exe_px = exe if exe is not None else base_px
+        else:
+            bid_c, ask_c = r.get("c_bid"), r.get("c_ask")
+            half_sp = ((ask_c - bid_c) / 2.0) if (bid_c is not None and ask_c is not None) else 0.0
+            exe_px = (base_px + half_sp) if side > 0 else (base_px - half_sp)
         sz = compute_size(cfg, bs)
-        trig = trig_px if trig_px is not None else px
-        overshoot = round((px - trig) * side, digits)
-        trade = {
+        trig = trig_px if trig_px is not None else base_px
+        overshoot = round((base_px - trig) * side, digits)
+        tp_px = round(base_px + side * tp_b * bs, digits) if tp_b else None
+        leg_obj = {
+            "leg": leg_label,
             "side": "LONG" if side > 0 else "SHORT",
             "size": sz,
             "session": session_of(r["t"]),
             "entry_time": r["t"],
             "entry_brick_idx": eng.brick_cnt - 1,
             "trigger_px": round(trig, digits),
-            "entry": round(px, digits),
+            "entry": round(base_px, digits),
             "entry_exec": round(exe_px, digits),
             "overshoot": overshoot,
             "brick_size": round(bs, bs_digits),
             "why_in": why,
+            "tp_px": tp_px,
             "mfe_px": 0.0,
             "mae_px": 0.0,
         }
         eng.mark_run_traded()
+        return leg_obj
 
-    def close_trade(r, px, why, exec_px=None):
-        nonlocal trade
-        side = 1 if trade["side"] == "LONG" else -1
-        sz = trade["size"]
-        bs = trade["brick_size"] or 1.0
+    def close_leg(leg_obj, r, px, why, exec_px=None):
+        side = 1 if leg_obj["side"] == "LONG" else -1
+        sz = leg_obj["size"]
+        bs_val = leg_obj["brick_size"] or 1.0
         if exec_px is None:
             e = r.get("c_bid") if side > 0 else r.get("c_ask")
             exec_px = e if e is not None else px
-        trade.update(
+        leg_obj.update(
             exit_time=r["t"],
             exit_brick_idx=eng.brick_cnt - 1,
             exit=round(px, digits),
             exit_exec=round(exec_px, digits),
             why_out=why,
-            mfe_bricks=round(trade["mfe_px"] / bs, 2),
-            mae_bricks=round(trade["mae_px"] / bs, 2),
-            gross=round((px - trade["entry"]) * side * sz, 2),
-            net=round((exec_px - trade["entry_exec"]) * side * sz, 2),
+            mfe_bricks=round(leg_obj["mfe_px"] / bs_val, 2),
+            mae_bricks=round(leg_obj["mae_px"] / bs_val, 2),
+            gross=round((px - leg_obj["entry"]) * side * sz, 2),
+            net=round((exec_px - leg_obj["entry_exec"]) * side * sz, 2),
         )
-        trades.append(trade)
-        trade = None
+        trades.append(leg_obj)
 
     for r in bars:
         t = r["t"]
@@ -267,32 +282,82 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
         live_window = (start is None or t >= start) and (end is None or t < end)
         h, l, c, o = (pick(r, k, price) for k in ("h", "l", "c", "o"))
 
-        # Track MFE / MAE while trade is open
-        if trade is not None and pos != 0:
-            if pos > 0:
-                trade["mfe_px"] = max(trade["mfe_px"], h - trade["entry"])
-                trade["mae_px"] = max(trade["mae_px"], trade["entry"] - l)
-            else:
-                trade["mfe_px"] = max(trade["mfe_px"], trade["entry"] - l)
-                trade["mae_px"] = max(trade["mae_px"], h - trade["entry"])
+        # 1. Check pending +1B Runner continuation order fill before TP/exit evaluation
+        if live_window and pending_runner is not None and runner_trade is None:
+            ps = pending_runner["side"]
+            t_px = pending_runner["target_px"]
+            r_bs = pending_runner["bs"]
+            no_stop_hit = not (use_stop and stop is not None and ((ps > 0 and l <= stop) or (ps < 0 and h >= stop)))
+            if no_stop_hit and ((ps > 0 and h >= t_px) or (ps < 0 and l <= t_px)):
+                r_why = f"{'BUY' if ps > 0 else 'SELL'} [RUNNER +{runner_offset:g}B]"
+                runner_trade = open_leg(ps, r, r_why, r_bs, t_px, fill_px=t_px, tp_b=None, leg_label="RUNNER")
+                runner_stop = t_px - ps * k_stop * r_bs
+                signals.append({
+                    "t": t.isoformat(),
+                    "action": "BUY_RUNNER" if ps > 0 else "SELL_RUNNER",
+                    "c": round(t_px, digits),
+                    "bs": r_bs,
+                    "brick_idx": eng.brick_cnt - 1,
+                })
+                pending_runner = None
 
-        # Safety stop resting at the broker
-        if use_stop and pos != 0 and stop is not None:
-            if pos > 0 and l <= stop:
-                fill = min(stop, o)
-                close_trade(r, fill, "SAFETY_STOP", fill)
-                pos, stop = 0, None
-            elif pos < 0 and h >= stop:
-                fill = max(stop, o)
-                close_trade(r, fill, "SAFETY_STOP", fill)
-                pos, stop = 0, None
+        # 2. Track MFE / MAE while trades are open
+        for leg_obj in (trade, runner_trade):
+            if leg_obj is not None and pos != 0:
+                if pos > 0:
+                    leg_obj["mfe_px"] = max(leg_obj["mfe_px"], h - leg_obj["entry"])
+                    leg_obj["mae_px"] = max(leg_obj["mae_px"], leg_obj["entry"] - l)
+                else:
+                    leg_obj["mfe_px"] = max(leg_obj["mfe_px"], leg_obj["entry"] - l)
+                    leg_obj["mae_px"] = max(leg_obj["mae_px"], h - leg_obj["entry"])
+
+        # 3. Safety stop & fixed 3-brick TP on Order 1 (Usual / Single leg)
+        if trade is not None and pos != 0:
+            if use_stop and stop is not None and ((pos > 0 and l <= stop) or (pos < 0 and h >= stop)):
+                fill = min(stop, o) if pos > 0 else max(stop, o)
+                close_leg(trade, r, fill, "SAFETY_STOP", fill)
+                trade, stop = None, None
+                if pending_runner is not None:
+                    filtered_events.append({
+                        "t": t.isoformat(),
+                        "session": session_of(t),
+                        "side": "LONG" if pos > 0 else "SHORT",
+                        "action": "BUY" if pos > 0 else "SELL",
+                        "reason": f"runner_+{runner_offset:g}b_unfilled (stop)",
+                        "trigger_px": pending_runner["target_px"],
+                        "c": round(c, digits),
+                        "brick_size": round(bs, bs_digits),
+                        "brick_idx": eng.brick_cnt - 1,
+                    })
+                    pending_runner = None
+                if runner_trade is None:
+                    pos = 0
+            elif trade.get("tp_px") is not None:
+                tp_px = trade["tp_px"]
+                if (pos > 0 and h >= tp_px) or (pos < 0 and l <= tp_px):
+                    bid_c, ask_c = r.get("c_bid"), r.get("c_ask")
+                    half_sp = ((ask_c - bid_c) / 2.0) if (bid_c is not None and ask_c is not None) else 0.0
+                    tp_exec = (tp_px - half_sp) if pos > 0 else (tp_px + half_sp)
+                    close_leg(trade, r, tp_px, "TP_3_BRICKS", tp_exec)
+                    trade, stop = None, None
+                    if runner_trade is None and pending_runner is None:
+                        pos = 0
+
+        # 4. Safety stop on Order 2 (Runner leg)
+        if runner_trade is not None and pos != 0 and use_stop and runner_stop is not None:
+            if (pos > 0 and l <= runner_stop) or (pos < 0 and h >= runner_stop):
+                fill = min(runner_stop, o) if pos > 0 else max(runner_stop, o)
+                close_leg(runner_trade, r, fill, "SAFETY_STOP", fill)
+                runner_trade, runner_stop = None, None
+                if trade is None and pending_runner is None:
+                    pos = 0
 
         n = eng.on_bar(t, h, l, c, bs)
         if not live_window:
             continue
 
         d = eng.decide(pos, n, bar_close=c, brick_size=bs)
-        if d.filtered_reason:
+        if d.filtered_reason and pending_confirm is None:
             sess = session_of(t)
             side_str = "LONG" if d.filtered_action == "BUY" else ("SHORT" if d.filtered_action == "SELL" else "")
             filtered_events.append({
@@ -307,76 +372,161 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
                 "brick_idx": eng.brick_cnt - 1
             })
 
-        # Check session / rollover / spread / slippage filters on new entries (BUY / SELL)
-        if d.action in ("BUY", "SELL"):
+        # 7. Strategy exits / reversals on open positions
+        if pos != 0 and (d.action in ("EXIT", "COVER") or (d.action in ("BUY", "SELL") and d.reverse)):
+            out_why = "REVERSE" if d.action in ("BUY", "SELL") else d.action
+            if trade is not None:
+                close_leg(trade, r, c, out_why)
+                trade, stop = None, None
+            if runner_trade is not None:
+                close_leg(runner_trade, r, c, out_why)
+                runner_trade, runner_stop = None, None
+            if pending_runner is not None:
+                ps_r = pending_runner["side"]
+                filtered_events.append({
+                    "t": t.isoformat(),
+                    "session": session_of(t),
+                    "side": "LONG" if ps_r > 0 else "SHORT",
+                    "action": "BUY" if ps_r > 0 else "SELL",
+                    "reason": f"runner_+{runner_offset:g}b_unfilled (reversed)",
+                    "trigger_px": pending_runner["target_px"],
+                    "c": round(c, digits),
+                    "brick_size": round(bs, bs_digits),
+                    "brick_idx": eng.brick_cnt - 1,
+                })
+                pending_runner = None
+            pos = 0
+            if d.action in ("EXIT", "COVER"):
+                signals.append({"t": t.isoformat(), "action": d.action, "c": c, "bs": bs, "brick_idx": eng.brick_cnt - 1})
+                d.action = ""
+
+        # 8. Process active 5-minute time confirmation timer
+        ready_entry = None
+        if pending_confirm is not None:
+            ps = pending_confirm["side"]
+            still_ok = (
+                (eng.green_run >= p.green_buy and (not p.use_st or eng.st_dir == 1) and eng.run_id == pending_confirm["run_id"])
+                if ps > 0
+                else (eng.red_run >= p.red_sell and (not p.use_st or eng.st_dir == -1) and eng.run_id == pending_confirm["run_id"])
+            )
+            if not still_ok:
+                elapsed = max(1, int((t - pending_confirm["t0"]).total_seconds() // 60))
+                filtered_events.append({
+                    "t": t.isoformat(),
+                    "session": session_of(t),
+                    "side": "LONG" if ps > 0 else "SHORT",
+                    "action": pending_confirm["action"],
+                    "reason": f"5m_confirm_failed ({elapsed}m)",
+                    "trigger_px": round(pending_confirm["trigger_px"], digits),
+                    "c": round(c, digits),
+                    "brick_size": round(bs, bs_digits),
+                    "brick_idx": eng.brick_cnt - 1,
+                })
+                pending_confirm = None
+            elif t >= pending_confirm["t0"] + timedelta(minutes=confirm_mins):
+                ready_entry = {
+                    "action": pending_confirm["action"],
+                    "side": ps,
+                    "trig_px": pending_confirm["trigger_px"],
+                    "slip_ref_px": eng.last_close,
+                    "confirmed_wait": True,
+                }
+                pending_confirm = None
+
+        # 9. Arm confirmation timer or mark instant entry
+        if d.action in ("BUY", "SELL") and pos == 0 and pending_confirm is None and ready_entry is None:
+            if confirm_mins > 0:
+                pending_confirm = {
+                    "side": 1 if d.action == "BUY" else -1,
+                    "action": d.action,
+                    "t0": t,
+                    "run_id": eng.run_id,
+                    "trigger_px": d.trigger_brick_px if d.trigger_brick_px is not None else c,
+                }
+                eng.mark_run_traded()
+            else:
+                ready_entry = {
+                    "action": d.action,
+                    "side": 1 if d.action == "BUY" else -1,
+                    "trig_px": d.trigger_brick_px,
+                    "slip_ref_px": d.trigger_brick_px,
+                }
+
+        # 10. Risk filter checks & execution for confirmed entry
+        if ready_entry is not None:
             sess = session_of(t)
             bid_c, ask_c = r.get("c_bid"), r.get("c_ask")
             spread = (ask_c - bid_c) if (bid_c is not None and ask_c is not None) else 0.0
             veto = ""
+            slip_ref = ready_entry.get("slip_ref_px")
             if rollover_blk and in_rollover_blackout(t):
                 veto = "rollover_blackout"
             elif not sess_allowed.get(sess, True):
                 veto = f"session_{sess}"
             elif max_sp_frac > 0 and bs > 0 and spread > max_sp_frac * bs:
                 veto = f"spread ({spread:.{digits}f})"
-            elif max_slip_frac > 0 and bs > 0 and d.trigger_brick_px is not None:
-                side_mult = 1 if d.action == "BUY" else -1
-                slip = (c - d.trigger_brick_px) * side_mult
-                if slip > max_slip_frac * bs:
+            elif max_slip_frac > 0 and bs > 0 and slip_ref is not None:
+                eff_slip_frac = max(max_slip_frac, 1.0) if ready_entry.get("confirmed_wait") else max_slip_frac
+                slip = (c - slip_ref) * ready_entry["side"]
+                if slip > eff_slip_frac * bs:
                     veto = f"slippage ({slip/bs:.2f} brk)"
 
             if veto:
                 filtered_events.append({
                     "t": t.isoformat(),
                     "session": sess,
-                    "side": "LONG" if d.action == "BUY" else "SHORT",
-                    "action": d.action,
+                    "side": "LONG" if ready_entry["side"] > 0 else "SHORT",
+                    "action": ready_entry["action"],
                     "reason": veto,
-                    "trigger_px": round(d.trigger_brick_px, digits) if d.trigger_brick_px is not None else round(c, digits),
+                    "trigger_px": round(ready_entry["trig_px"], digits) if ready_entry["trig_px"] is not None else round(c, digits),
                     "c": round(c, digits),
                     "brick_size": round(bs, bs_digits),
                     "brick_idx": eng.brick_cnt - 1
                 })
-                # If we were reversing an open trade, still close the open trade!
-                if pos > 0 and d.action == "SELL":
-                    d.action = "EXIT"
-                elif pos < 0 and d.action == "BUY":
-                    d.action = "COVER"
+            else:
+                signals.append({"t": t.isoformat(), "action": ready_entry["action"], "c": c, "bs": bs, "brick_idx": eng.brick_cnt - 1})
+                side = ready_entry["side"]
+                if dual_mode:
+                    u_why = f"{ready_entry['action']} [USUAL {tp_bricks:g}B-TP]"
+                    trade = open_leg(side, r, u_why, bs, ready_entry["trig_px"], tp_b=tp_bricks, leg_label="USUAL")
+                    pending_runner = {
+                        "side": side,
+                        "target_px": round(c + side * runner_offset * bs, digits),
+                        "bs": bs,
+                        "run_id": eng.run_id,
+                    }
                 else:
-                    d.action = ""
+                    trade = open_leg(side, r, ready_entry["action"], bs, ready_entry["trig_px"], tp_b=None, leg_label="SINGLE")
+                pos = side
+                stop = eng.last_close - side * k_stop * bs
 
-        if d.action:
-            signals.append({"t": t.isoformat(), "action": d.action, "c": c, "bs": bs, "brick_idx": eng.brick_cnt - 1})
+        # 11. Trail the safety stops & optional breakeven lock as bricks form
+        if trade is not None and stop is not None:
+            s_tr = 1 if trade["side"] == "LONG" else -1
+            if s_tr > 0:
+                stop = max(stop, eng.last_close - k_stop * bs)
+                if be_bricks > 0 and trade["mfe_px"] >= be_bricks * bs:
+                    stop = max(stop, trade["entry_exec"])
+            else:
+                stop = min(stop, eng.last_close + k_stop * bs)
+                if be_bricks > 0 and trade["mfe_px"] >= be_bricks * bs:
+                    stop = min(stop, trade["entry_exec"])
 
-        if d.action == "BUY":
-            if pos < 0:
-                close_trade(r, c, "REVERSE")
-            open_trade(1, r, "BUY", bs, d.trigger_brick_px)
-            pos, stop = 1, eng.last_close - k_stop * bs
-        elif d.action == "SELL":
-            if pos > 0:
-                close_trade(r, c, "REVERSE")
-            open_trade(-1, r, "SELL", bs, d.trigger_brick_px)
-            pos, stop = -1, eng.last_close + k_stop * bs
-        elif d.action == "EXIT" and pos > 0:
-            close_trade(r, c, "EXIT")
-            pos, stop = 0, None
-        elif d.action == "COVER" and pos < 0:
-            close_trade(r, c, "COVER")
-            pos, stop = 0, None
-
-        # Trail the safety stop & optional breakeven lock as bricks form
-        if pos > 0 and stop is not None and trade is not None:
-            stop = max(stop, eng.last_close - k_stop * bs)
-            if be_bricks > 0 and trade["mfe_px"] >= be_bricks * bs:
-                stop = max(stop, trade["entry_exec"])
-        elif pos < 0 and stop is not None and trade is not None:
-            stop = min(stop, eng.last_close + k_stop * bs)
-            if be_bricks > 0 and trade["mfe_px"] >= be_bricks * bs:
-                stop = min(stop, trade["entry_exec"])
+        if runner_trade is not None and runner_stop is not None:
+            s_rn = 1 if runner_trade["side"] == "LONG" else -1
+            if s_rn > 0:
+                runner_stop = max(runner_stop, eng.last_close - k_stop * bs)
+                if be_bricks > 0 and runner_trade["mfe_px"] >= be_bricks * bs:
+                    runner_stop = max(runner_stop, runner_trade["entry_exec"])
+            else:
+                runner_stop = min(runner_stop, eng.last_close + k_stop * bs)
+                if be_bricks > 0 and runner_trade["mfe_px"] >= be_bricks * bs:
+                    runner_stop = min(runner_stop, runner_trade["entry_exec"])
 
     if trade is not None:
-        close_trade(bars[-1], pick(bars[-1], "c", price), "END_OF_DATA")
+        close_leg(trade, bars[-1], pick(bars[-1], "c", price), "END_OF_DATA")
+    if runner_trade is not None:
+        close_leg(runner_trade, bars[-1], pick(bars[-1], "c", price), "END_OF_DATA")
     return trades, eng, signals, filtered_events
 
 
@@ -427,7 +577,7 @@ def session_breakdown(trades, key="net"):
 
 def write_trades(trades, path):
     path.parent.mkdir(parents=True, exist_ok=True)
-    cols = ["side", "size", "session", "entry_time", "trigger_px", "entry", "entry_exec",
+    cols = ["leg", "side", "size", "session", "entry_time", "trigger_px", "entry", "entry_exec",
             "overshoot", "brick_size", "why_in", "exit_time", "exit", "exit_exec",
             "why_out", "mfe_bricks", "mae_bricks", "gross", "net"]
     with path.open("w", newline="") as f:

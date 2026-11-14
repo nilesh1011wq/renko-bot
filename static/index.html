@@ -820,14 +820,14 @@
         </div>
         <div style="display:flex; gap:6px;">
           <button style="flex:1" class="primary" onclick="applyPreset('pro')">Pro Filtered (Rec)</button>
-          <button style="flex:1" onclick="applyPreset('raw')">Raw Pine v6</button>
+          <button style="flex:1" onclick="applyPreset('raw')">Raw Baseline</button>
         </div>
       </div>
 
-      <!-- Pine Strategy Inputs -->
+      <!-- Python Native Strategy Inputs -->
       <div class="panel">
         <div class="panel-title">
-          <span>1. Pine v6 Renko &amp; ST Inputs</span>
+          <span>1. Python Native Renko &amp; ST Inputs</span>
         </div>
         <div class="form-grid">
           <div class="field">
@@ -877,7 +877,7 @@
           <div class="field full">
             <label>Entry Mode</label>
             <select id="in-entry_mode">
-              <option value="hold">While condition holds (Pine default)</option>
+              <option value="hold">While condition holds (Default)</option>
               <option value="close">On brick close only</option>
             </select>
           </div>
@@ -920,7 +920,23 @@
           <span>Broker Safety Stop in Backtest</span>
           <input type="checkbox" id="in-safety_stop_in_backtest" checked>
         </div>
+        <div class="check-row" title="Model E: split entry into Usual (3B fixed TP) + Runner (+1B continuation)">
+          <span>Dual-Order Mode (3B TP + +1B Runner)</span>
+          <input type="checkbox" id="in-dual_order_mode" checked>
+        </div>
         <div class="form-grid" style="margin-top:8px;">
+          <div class="field" title="Minutes to confirm brick + ST hold before entering (0=instant)">
+            <label>Time Confirm (Mins)</label>
+            <input type="number" id="in-confirm_minutes" value="5" min="0" max="30">
+          </div>
+          <div class="field" title="Fixed Take Profit in bricks for the Usual leg in Dual-Order Mode">
+            <label>Usual TP (Brk)</label>
+            <input type="number" id="in-tp_bricks" value="3.0" step="0.5" min="1">
+          </div>
+          <div class="field" title="Breakout offset in bricks for the pending Runner order">
+            <label>Runner Offset (+Brk)</label>
+            <input type="number" id="in-runner_offset_bricks" value="1.0" step="0.25" min="0.25">
+          </div>
           <div class="field" title="Skip news spike candles that print more than N bricks in 1 bar (0=off)">
             <label>Max Bricks / Bar</label>
             <input type="number" id="in-max_bricks_on_entry_bar" value="3" min="0" max="20">
@@ -1237,11 +1253,11 @@
           <!-- Tab 3: Equity Curve -->
           <div id="tab-equity" class="dock-pane">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-size:11px;">
-              <span style="font-family:var(--font-mono); color:var(--text-1);">Cumulative Net P&amp;L vs. Raw TradingView Pine v6</span>
+              <span style="font-family:var(--font-mono); color:var(--text-1);">Cumulative Net P&amp;L vs. Raw Baseline</span>
               <div class="legend">
                 <span><i class="swatch" style="background:#10b981"></i>Pro Net P&amp;L</span>
                 <span><i class="swatch" style="background:#3b82f6"></i>Pro Gross</span>
-                <span><i class="swatch" style="background:#64748b"></i>Raw Pine</span>
+                <span><i class="swatch" style="background:#64748b"></i>Raw Baseline</span>
               </div>
             </div>
             <div style="height:calc(100% - 22px); width:100%; position:relative;">
@@ -1879,6 +1895,10 @@
 
       document.getElementById('in-one_trade_per_run').checked = !!s.one_trade_per_run;
       document.getElementById('in-grid_anchor').checked = !!s.grid_anchor;
+      document.getElementById('in-dual_order_mode').checked = !!s.dual_order_mode;
+      document.getElementById('in-confirm_minutes').value = s.confirm_minutes ?? 0;
+      document.getElementById('in-tp_bricks').value = s.tp_bricks ?? 3.0;
+      document.getElementById('in-runner_offset_bricks').value = s.runner_offset_bricks ?? 1.0;
       document.getElementById('in-max_bricks_on_entry_bar').value = s.max_bricks_on_entry_bar ?? 0;
       document.getElementById('in-max_overshoot_bricks').value = s.max_overshoot_bricks ?? 0;
 
@@ -1926,6 +1946,10 @@
           exit_on_st: document.getElementById('in-exit_on_st').checked,
           one_trade_per_run: document.getElementById('in-one_trade_per_run').checked,
           grid_anchor: document.getElementById('in-grid_anchor').checked,
+          confirm_minutes: parseInt(document.getElementById('in-confirm_minutes').value, 10) || 0,
+          dual_order_mode: document.getElementById('in-dual_order_mode').checked,
+          tp_bricks: parseFloat(document.getElementById('in-tp_bricks').value) || 3.0,
+          runner_offset_bricks: parseFloat(document.getElementById('in-runner_offset_bricks').value) || 1.0,
           max_bricks_on_entry_bar: parseInt(document.getElementById('in-max_bricks_on_entry_bar').value, 10),
           max_overshoot_bricks: parseFloat(document.getElementById('in-max_overshoot_bricks').value),
         },
@@ -1949,6 +1973,8 @@
         document.getElementById('in-grid_anchor').checked = false;
         document.getElementById('in-rollover_blackout').checked = false;
         document.getElementById('in-safety_stop_in_backtest').checked = false;
+        document.getElementById('in-dual_order_mode').checked = false;
+        document.getElementById('in-confirm_minutes').value = 0;
         document.getElementById('in-max_bricks_on_entry_bar').value = 0;
         document.getElementById('in-max_overshoot_bricks').value = 0;
         document.getElementById('in-breakeven_after_bricks').value = 0;
@@ -1960,12 +1986,16 @@
         document.getElementById('in-grid_anchor').checked = true;
         document.getElementById('in-rollover_blackout').checked = true;
         document.getElementById('in-safety_stop_in_backtest').checked = true;
+        document.getElementById('in-dual_order_mode').checked = true;
+        document.getElementById('in-confirm_minutes').value = 5;
+        document.getElementById('in-tp_bricks').value = 3.0;
+        document.getElementById('in-runner_offset_bricks').value = 1.0;
         document.getElementById('in-max_bricks_on_entry_bar').value = 3;
         document.getElementById('in-max_overshoot_bricks').value = 1.5;
         document.getElementById('in-safety_stop_bricks').value = 3.0;
       }
       await saveAndRun();
-      showToast(which === 'pro' ? 'Applied Pro Gold Protections' : 'Applied Raw Pine v6 Mode');
+      showToast(which === 'pro' ? 'Applied Pro Gold Protections' : 'Applied Raw Baseline Mode');
     }
 
     async function saveAndRun() {
@@ -2245,12 +2275,19 @@
           `;
         } else {
           const sideBadge = item.side === 'LONG' ? '<span class="badge buy">LONG</span>' : '<span class="badge sell">SHORT</span>';
+          const legBadge = item.leg === 'USUAL'
+            ? ' <span class="badge" style="background:rgba(56,189,248,0.16);color:#38bdf8;border:1px solid rgba(56,189,248,0.35);">USUAL 3B-TP</span>'
+            : (item.leg === 'RUNNER'
+              ? ' <span class="badge" style="background:rgba(168,85,247,0.16);color:#c084fc;border:1px solid rgba(168,85,247,0.35);">RUNNER +1B</span>'
+              : '');
           const outBadge = item.why_out === 'SAFETY_STOP'
             ? '<span class="badge stop">SAFETY_STOP</span>'
-            : (item.why_out || '--');
+            : (item.why_out === 'TP_3_BRICKS'
+              ? '<span class="badge buy">🎯 TP_3_BRICKS</span>'
+              : (item.why_out || '--'));
           tr.innerHTML = `
             <td>${item.num}</td>
-            <td>${sideBadge}</td>
+            <td>${sideBadge}${legBadge}</td>
             <td>${item.session}</td>
             <td>${(item.entry_time || '').slice(5, 16).replace('T', ' ')}</td>
             <td>${fmtPrice(item.trigger_px, activeEpic)}</td>
