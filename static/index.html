@@ -1368,9 +1368,26 @@
               <div style="background:var(--bg-1); border:1px solid var(--border); border-radius:6px; padding:8px; font-family:var(--font-mono); font-size:11.5px; overflow-y:auto;">
                 <div style="font-weight:700; margin-bottom:4px;">Capital.com Broker Connection</div>
                 <div id="cred-status-line" style="color:var(--amber); margin-bottom:6px;">Checking broker connection...</div>
-                <div style="display:flex; gap:6px;">
+                <div style="display:flex; gap:6px; margin-bottom:10px;">
                   <button onclick="testBrokerConnection()" style="font-size:10.5px; padding:3px 8px;">Verify Session</button>
                   <button onclick="openBrokerModal()" class="primary" style="font-size:10.5px; padding:3px 8px;">🔑 Manage Keys</button>
+                </div>
+
+                <div style="border-top:1px solid var(--border); padding-top:8px; margin-top:4px;">
+                  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+                    <span style="font-weight:700;">📲 Telegram Mobile Alerts (<code>@RENKO2026BOT</code>)</span>
+                    <span id="tg-status-badge" class="badge amber" style="font-size:10px;">NOT CONFIGURED</span>
+                  </div>
+                  <div style="display:grid; grid-template-columns:1.2fr 0.9fr; gap:6px; margin-bottom:6px;">
+                    <input type="password" id="tg-bot-token" placeholder="Bot Token (e.g. 123456:ABC...)" style="font-size:11px; padding:4px 6px;" />
+                    <input type="text" id="tg-chat-id" placeholder="Chat ID (e.g. 123456789)" style="font-size:11px; padding:4px 6px;" />
+                  </div>
+                  <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                    <button id="btn-save-telegram" class="primary" onclick="saveTelegramConfig()" style="font-size:10.5px; padding:3px 8px;">Save Telegram</button>
+                    <button id="btn-test-telegram" class="success" onclick="testTelegramAlert()" style="font-size:10.5px; padding:3px 8px;">📲 Send Test Alert</button>
+                    <a href="https://t.me/RENKO2026BOT" target="_blank" rel="noopener noreferrer" style="font-size:10.5px; color:var(--blue-light); text-decoration:underline;">Open @RENKO2026BOT &amp; tap Start</a>
+                  </div>
+                  <div id="tg-feedback-line" style="font-size:10.5px; color:var(--text-dim); margin-top:5px;">Alerts fire on OPEN, REVERSE, RUNNER, BREAKEVEN &amp; FLATTEN.</div>
                 </div>
               </div>
             </div>
@@ -1747,7 +1764,8 @@
         const saved = JSON.parse(raw);
         const serverHasLogs = (STATE?.bot?.live_log || []).length > 0;
         const backupHasLogs = (saved?.live_trades || []).length > 0;
-        if (!serverHasLogs && backupHasLogs) {
+        const missingTelegram = !(STATE?.bot?.telegram?.configured) && !!(saved?.telegram_config?.bot_token && saved?.telegram_config?.chat_id);
+        if ((!serverHasLogs && backupHasLogs) || missingTelegram) {
           const res = await apiFetch('/api/restore-state', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -1764,6 +1782,63 @@
         }
         await syncCloudBackupToBrowser();
       } catch (e) {}
+    }
+
+    async function saveTelegramConfig() {
+      const tokEl = document.getElementById('tg-bot-token');
+      const chatEl = document.getElementById('tg-chat-id');
+      const fbEl = document.getElementById('tg-feedback-line');
+      const bot_token = tokEl ? tokEl.value.trim() : '';
+      const chat_id = chatEl ? chatEl.value.trim() : '';
+      if (!chat_id && !(STATE?.bot?.telegram?.chat_id)) {
+        showToast('Enter your numeric Telegram Chat ID');
+        return;
+      }
+      try {
+        const res = await apiFetch('/api/save-telegram', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ bot_token, chat_id })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          const err = data.error || 'Failed to save Telegram settings';
+          if (fbEl) { fbEl.style.color = 'var(--red)'; fbEl.textContent = err; }
+          showToast(err);
+          return;
+        }
+        if (data.bot) STATE.bot = data.bot;
+        if (tokEl) tokEl.value = '';
+        if (fbEl) { fbEl.style.color = 'var(--green-bright)'; fbEl.textContent = '✓ ' + (data.message || 'Telegram saved'); }
+        renderAll();
+        await syncCloudBackupToBrowser();
+        showToast(data.message || 'Telegram configuration saved');
+      } catch (e) {
+        showToast('Telegram save error: ' + e);
+      }
+    }
+
+    async function testTelegramAlert() {
+      const fbEl = document.getElementById('tg-feedback-line');
+      if (fbEl) { fbEl.style.color = 'var(--text-dim)'; fbEl.textContent = 'Sending test Telegram alert...'; }
+      try {
+        const res = await apiFetch('/api/test-telegram', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          if (fbEl) { fbEl.style.color = 'var(--green-bright)'; fbEl.textContent = '✓ ' + (data.detail || 'Test alert delivered!'); }
+          showToast('📲 Telegram test alert sent!');
+        } else {
+          const msg = data.detail || data.error || 'Telegram test failed';
+          if (fbEl) { fbEl.style.color = 'var(--amber)'; fbEl.textContent = '⚠ ' + msg; }
+          showToast(msg);
+        }
+      } catch (e) {
+        if (fbEl) { fbEl.style.color = 'var(--red)'; fbEl.textContent = 'Error: ' + e; }
+      }
     }
 
     async function loadState() {
@@ -2622,6 +2697,26 @@
             kpiBrokerStatus.className = 'k-val neg';
           }
           if (credLine) credLine.innerHTML = `<span style="color:var(--amber)">⚠ Capital.com keys not connected yet (using sample feed)</span>`;
+        }
+
+        const tg = bot.telegram || { configured: !!creds.telegram, chat_id: creds.telegram_chat_id || '', masked_token: creds.telegram_masked_token };
+        const tgBadge = document.getElementById('tg-status-badge');
+        const tgChatEl = document.getElementById('tg-chat-id');
+        const tgTokEl = document.getElementById('tg-bot-token');
+        if (tgBadge) {
+          if (tg.configured) {
+            tgBadge.textContent = 'CONNECTED';
+            tgBadge.className = 'badge green';
+          } else {
+            tgBadge.textContent = 'NOT CONFIGURED';
+            tgBadge.className = 'badge amber';
+          }
+        }
+        if (tgChatEl && tg.chat_id && document.activeElement !== tgChatEl && !tgChatEl.value) {
+          tgChatEl.value = tg.chat_id;
+        }
+        if (tgTokEl && tg.masked_token) {
+          tgTokEl.placeholder = `Active: ${tg.masked_token} (leave blank to keep)`;
         }
 
         const killBtn = document.getElementById('btn-kill');

@@ -28,6 +28,7 @@ import os
 import sqlite3
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -53,19 +54,45 @@ STATIC = ROOT / "static"
 # ----------------------------------------------------------------------------
 # Telegram Notification Helper (optional)
 # ----------------------------------------------------------------------------
-def send_telegram(text: str):
+def send_telegram_with_status(text: str) -> dict:
+    """Send a Telegram Bot API message and return delivery diagnostics."""
     load_env()
     tok = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
     if not tok or not chat:
-        return
+        return {"ok": False, "detail": "Telegram Bot Token or Chat ID is not configured yet."}
+    url = f"https://api.telegram.org/bot{tok}/sendMessage"
+    payload = json.dumps({"chat_id": chat, "text": text}).encode("utf-8")
+    req = urllib.request.Request(url, data=payload, method="POST",
+                                 headers={"Content-Type": "application/json"})
     try:
-        url = f"https://api.telegram.org/bot{tok}/sendMessage"
-        payload = json.dumps({"chat_id": chat, "text": text}).encode("utf-8")
-        req = urllib.request.Request(url, data=payload, method="POST",
-                                     headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=8, context=SSL_CTX):
-            pass
+        with urllib.request.urlopen(req, timeout=8, context=SSL_CTX) as resp:
+            raw = resp.read().decode("utf-8", errors="ignore")
+            data = json.loads(raw) if raw else {}
+            if data.get("ok"):
+                return {"ok": True, "detail": "Telegram notification sent."}
+            desc = str(data.get("description", "Unknown Telegram error"))
+            return {"ok": False, "detail": desc}
+    except urllib.error.HTTPError as e:
+        raw = ""
+        try:
+            raw = e.read().decode("utf-8", errors="ignore")
+            err_json = json.loads(raw) if raw else {}
+            desc = str(err_json.get("description", raw or str(e)))
+            code = err_json.get("error_code", e.code)
+        except Exception:
+            desc = raw or str(e)
+            code = getattr(e, "code", 400)
+        if code == 400 and "chat not found" in desc.lower():
+            desc = f"{desc} — open https://t.me/RENKO2026BOT in Telegram and tap Start"
+        return {"ok": False, "detail": desc}
+    except Exception as e:
+        return {"ok": False, "detail": str(e)}
+
+
+def send_telegram(text: str):
+    try:
+        send_telegram_with_status(text)
     except Exception:
         pass
 
@@ -275,12 +302,18 @@ def build_cloud_backup_snapshot(cfg: dict | None = None) -> dict:
                 trades_rows = list(csv.DictReader(f))[-250:]
         except Exception:
             trades_rows = []
+    tg_tok = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    tg_chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
     snap = {
         "ok": True,
         "ts": datetime.now(timezone.utc).isoformat(),
         "config": cur_cfg,
         "oms_state": oms_data,
         "live_trades": trades_rows,
+        "telegram_config": {
+            "bot_token": tg_tok,
+            "chat_id": tg_chat,
+        } if (tg_tok and tg_chat) else {},
     }
     _persist_snapshot_to_sqlite(snap)
     return snap
@@ -289,6 +322,16 @@ def build_cloud_backup_snapshot(cfg: dict | None = None) -> dict:
 def restore_cloud_backup_snapshot(payload: dict) -> dict:
     if not isinstance(payload, dict):
         return {"ok": False, "restored": False}
+    tg_cfg = payload.get("telegram_config")
+    if isinstance(tg_cfg, dict):
+        tg_tok = str(tg_cfg.get("bot_token", "")).strip()
+        tg_chat = str(tg_cfg.get("chat_id", "")).strip()
+        if tg_tok and tg_chat:
+            update_dotenv({
+                "TELEGRAM_BOT_TOKEN": tg_tok,
+                "TELEGRAM_CHAT_ID": tg_chat,
+            })
+
     if isinstance(payload.get("config"), dict):
         cfg = load_config()
         src = payload["config"]
@@ -412,6 +455,8 @@ def check_credentials_present() -> dict:
     ident = os.environ.get("CAPITAL_IDENTIFIER", "").strip()
     pw = os.environ.get("CAPITAL_PASSWORD", "").strip()
     env = os.environ.get("CAPITAL_ENV", "demo").lower()
+    tg_tok = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    tg_chat = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
     has_creds = bool(key and ident and pw)
     return {
         "connected": has_creds,
@@ -421,7 +466,9 @@ def check_credentials_present() -> dict:
         "masked_identifier": mask_identifier(ident) if ident else None,
         "masked_key": mask_key(key) if key else None,
         "env": env,
-        "telegram": bool(os.environ.get("TELEGRAM_BOT_TOKEN") and os.environ.get("TELEGRAM_CHAT_ID")),
+        "telegram": bool(tg_tok and tg_chat),
+        "telegram_chat_id": tg_chat,
+        "telegram_masked_token": mask_key(tg_tok) if tg_tok else None,
         "password_protected": bool(get_dashboard_password()),
     }
 
@@ -867,6 +914,11 @@ def get_bot_status(cfg: dict, skip_network: bool = False) -> dict:
 
     return {
         "credentials": creds,
+        "telegram": {
+            "configured": bool(creds.get("telegram")),
+            "chat_id": creds.get("telegram_chat_id", ""),
+            "masked_token": creds.get("telegram_masked_token"),
+        },
         "watcher": WATCHER.state(),
         "kill_switch": kill_switch_active(),
         "mode": cfg.get("mode", "semi-auto"),
@@ -984,6 +1036,18 @@ class Handler(BaseHTTPRequestHandler):
                 "bot": get_bot_status(cfg),
                 "backtest": serialize_backtest(cfg),
                 "instrument_specs": INSTRUMENT_SPECS,
+            })
+            return
+
+        if u.path in ("/api/status", "/api/broker-status"):
+            cfg = load_config()
+            bot_st = get_bot_status(cfg, skip_network=True)
+            self._send_json({
+                "ok": True,
+                "credentials": bot_st.get("credentials", {}),
+                "telegram": bot_st.get("telegram", {"configured": False, "chat_id": ""}),
+                "watcher": bot_st.get("watcher", {}),
+                "kill_switch": bot_st.get("kill_switch", False),
             })
             return
 
@@ -1201,6 +1265,46 @@ class Handler(BaseHTTPRequestHandler):
                     "message": "Broker disconnected. Keys cleared from memory.",
                     "bot": get_bot_status(cfg),
                 })
+                return
+
+            if u.path == "/api/save-telegram":
+                load_env()
+                raw_tok = str(body.get("bot_token", "")).strip()
+                if not raw_tok or raw_tok == "***" or "•" in raw_tok:
+                    tok = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+                else:
+                    tok = raw_tok
+                chat_id = str(body.get("chat_id", "")).strip() or os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+                if not tok or not chat_id:
+                    self._send_json({"ok": False, "error": "Telegram Bot Token and Chat ID are both required."}, 400)
+                    return
+                update_dotenv({
+                    "TELEGRAM_BOT_TOKEN": tok,
+                    "TELEGRAM_CHAT_ID": chat_id,
+                })
+                build_cloud_backup_snapshot(cfg)
+                self._send_json({
+                    "ok": True,
+                    "message": f"Telegram alerts configured for Chat ID {chat_id}.",
+                    "bot": get_bot_status(cfg, skip_network=True),
+                })
+                return
+
+            if u.path == "/api/test-telegram":
+                txt = str(body.get("message", "")).strip() or (
+                    f"🤖 Renko Cloud Bot Test Alert\n"
+                    f"• Market: {cfg.get('epic', 'GOLD')} ({cfg.get('resolution', 'MINUTE')})\n"
+                    f"• Chat ID: {os.environ.get('TELEGRAM_CHAT_ID', '')}\n"
+                    f"• Time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}"
+                )
+                res = send_telegram_with_status(txt)
+                code = 200 if res.get("ok") else 400
+                self._send_json({
+                    "ok": bool(res.get("ok")),
+                    "detail": res.get("detail", ""),
+                    "chat_id": os.environ.get("TELEGRAM_CHAT_ID", ""),
+                    "bot": get_bot_status(cfg, skip_network=True),
+                }, code)
                 return
 
             if u.path == "/api/close-position":
@@ -1578,7 +1682,7 @@ def main():
     a = ap.parse_args()
 
     cfg = load_config()
-    if CLOUD_STATE_DB.exists() and not LIVE_TRADES.exists():
+    if CLOUD_STATE_DB.exists() and (not LIVE_TRADES.exists() or not os.environ.get("TELEGRAM_BOT_TOKEN")):
         saved = _load_snapshot_from_sqlite()
         if saved:
             restore_cloud_backup_snapshot(saved)

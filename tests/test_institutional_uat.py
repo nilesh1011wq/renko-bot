@@ -1102,6 +1102,95 @@ class TestInstitutionalUAT(unittest.TestCase):
         for marker in ("checkAndRestoreCloudState", "syncCloudBackupToBrowser", "live_tick", "VaR95"):
             self.assertIn(marker, html_src)
 
+    def test_29_telegram_config_save_and_cloud_backup_roundtrip(self):
+        import os
+        import tempfile
+        import bot
+        orig_root = server.ROOT
+        orig_db = server.CLOUD_STATE_DB
+        orig_live = server.LIVE_TRADES
+        orig_srv_oms = server._oms_state_path
+        orig_bot_oms = bot._oms_state_path
+        orig_load_env = server.load_env
+        orig_tok = os.environ.get("TELEGRAM_BOT_TOKEN")
+        orig_chat = os.environ.get("TELEGRAM_CHAT_ID")
+        orig_cfg = backtest.load_config()
+
+        def _make_handler(path: str, payload: dict | None = None):
+            h = server.Handler.__new__(server.Handler)
+            raw = json.dumps(payload or {}).encode("utf-8")
+            h.headers = {"Content-Length": str(len(raw))} if payload is not None else {}
+            h.rfile = io.BytesIO(raw)
+            h.wfile = io.BytesIO()
+            h.path = path
+            h.send_response = MagicMock()
+            h.send_header = MagicMock()
+            h.end_headers = MagicMock()
+            return h
+
+        with tempfile.TemporaryDirectory() as tmpd:
+            tmp = Path(tmpd)
+            server.ROOT = tmp
+            server.CLOUD_STATE_DB = tmp / "cloud_state.sqlite"
+            server.LIVE_TRADES = tmp / "live_trades.csv"
+            server._oms_state_path = lambda: tmp / "oms_state.json"
+            bot._oms_state_path = server._oms_state_path
+            server.load_env = lambda: None
+            os.environ.pop("TELEGRAM_BOT_TOKEN", None)
+            os.environ.pop("TELEGRAM_CHAT_ID", None)
+            try:
+                # 1. Save Telegram credentials via POST /api/save-telegram
+                h_save = _make_handler("/api/save-telegram", {"bot_token": "TEST_TOKEN_123", "chat_id": "123456"})
+                h_save.do_POST()
+                save_res = json.loads(h_save.wfile.getvalue().decode("utf-8"))
+                self.assertTrue(save_res["ok"])
+                self.assertTrue(save_res["bot"]["telegram"]["configured"])
+                self.assertEqual(save_res["bot"]["telegram"]["chat_id"], "123456")
+
+                # 2. Verify GET /api/status exposes Telegram configured state cleanly
+                h_st = _make_handler("/api/status")
+                h_st.do_GET()
+                st_res = json.loads(h_st.wfile.getvalue().decode("utf-8"))
+                self.assertTrue(st_res["telegram"]["configured"])
+                self.assertEqual(st_res["telegram"]["chat_id"], "123456")
+
+                # 3. Backup & Restore round-trip preserves Telegram configuration across restarts
+                h_bak = _make_handler("/api/backup-state")
+                h_bak.do_GET()
+                snap = json.loads(h_bak.wfile.getvalue().decode("utf-8"))
+                self.assertEqual(snap["telegram_config"]["bot_token"], "TEST_TOKEN_123")
+                self.assertEqual(snap["telegram_config"]["chat_id"], "123456")
+
+                os.environ.pop("TELEGRAM_BOT_TOKEN", None)
+                os.environ.pop("TELEGRAM_CHAT_ID", None)
+                h_rst = _make_handler("/api/restore-state", snap)
+                h_rst.do_POST()
+                rst_res = json.loads(h_rst.wfile.getvalue().decode("utf-8"))
+                self.assertTrue(rst_res["restored"])
+                self.assertEqual(os.environ.get("TELEGRAM_BOT_TOKEN"), "TEST_TOKEN_123")
+                self.assertEqual(os.environ.get("TELEGRAM_CHAT_ID"), "123456")
+
+                # 4. UI markers for Telegram configuration card
+                html_src = (Path(backtest.ROOT) / "static" / "index.html").read_text(encoding="utf-8")
+                for marker in ("tg-bot-token", "tg-chat-id", "saveTelegramConfig", "testTelegramAlert"):
+                    self.assertIn(marker, html_src)
+            finally:
+                server.ROOT = orig_root
+                server.CLOUD_STATE_DB = orig_db
+                server.LIVE_TRADES = orig_live
+                server._oms_state_path = orig_srv_oms
+                bot._oms_state_path = orig_bot_oms
+                server.load_env = orig_load_env
+                if orig_tok is not None:
+                    os.environ["TELEGRAM_BOT_TOKEN"] = orig_tok
+                else:
+                    os.environ.pop("TELEGRAM_BOT_TOKEN", None)
+                if orig_chat is not None:
+                    os.environ["TELEGRAM_CHAT_ID"] = orig_chat
+                else:
+                    os.environ.pop("TELEGRAM_CHAT_ID", None)
+                backtest.save_config(orig_cfg)
+
 
 if __name__ == "__main__":
     unittest.main()
