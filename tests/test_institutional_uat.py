@@ -794,6 +794,25 @@ class TestInstitutionalUAT(unittest.TestCase):
             scanner.simulate = orig_simulate
             scanner.ensure_data = orig_ensure
 
+        # Verify per-instrument synthetic seeds diversify non-GOLD runs without altering GOLD
+        gold_bars, _ = backtest.generate_sample_gold_data("GOLD", days_intraday=3, seed=42)
+        silver_bars, silver_days = backtest.generate_sample_gold_data("SILVER", days_intraday=3, seed=42)
+        eur_bars, eur_days = backtest.generate_sample_gold_data("EURUSD", days_intraday=3, seed=42)
+        silver_cfg = copy.deepcopy(cfg)
+        silver_cfg.update({"epic": "SILVER", "tick": 0.005})
+        silver_cfg["strategy"]["fallback_size"] = 0.08
+        eur_cfg = copy.deepcopy(cfg)
+        eur_cfg.update({"epic": "EURUSD", "tick": 0.0001})
+        eur_cfg["strategy"]["fallback_size"] = 0.0008
+        _, s_eng, _, _ = backtest.simulate(silver_bars, silver_days, silver_cfg)
+        _, e_eng, _, _ = backtest.simulate(eur_bars, eur_days, eur_cfg)
+        self.assertGreater(len(gold_bars), 0)
+        self.assertNotEqual(
+            (s_eng.green_run, s_eng.red_run, s_eng.brick_cnt),
+            (e_eng.green_run, e_eng.red_run, e_eng.brick_cnt),
+            "Non-GOLD synthetic regimes should use distinct per-instrument seeds",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

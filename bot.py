@@ -71,6 +71,8 @@ def resolve_epic_alias(epic: str) -> list[str]:
 
 _DAYS_CACHE: dict[str, tuple[float, list]] = {}
 _DAYS_CACHE_TTL = 3600.0  # 1 hour TTL for daily ATR candles
+_BARS_CACHE: dict[str, tuple[float, list, str]] = {}
+_BARS_CACHE_TTL = 55.0  # Cache full broker intraday warmups for 55s across scanner/watcher
 _RECENT_ENTRIES: dict[str, float] = {}
 ENTRY_DEBOUNCE_SECONDS = 120.0  # Prevent duplicate order submissions within 2 minutes
 _PENDING_CONFIRM: dict[str, dict] = {}
@@ -115,7 +117,7 @@ _load_oms_state()
 
 def warmup_engine(cap: Capital, cfg: dict, allow_synthetic: bool = True):
     """Fetch recent history to warm up DailyAtr and RenkoEngine without repainting."""
-    epic = cfg["epic"]
+    orig_epic = cfg["epic"]
     res = cfg["resolution"]
     price_type = cfg.get("price", "mid")
     p = Params.from_dict(cfg["strategy"])
@@ -125,25 +127,41 @@ def warmup_engine(cap: Capital, cfg: dict, allow_synthetic: bool = True):
     days = []
 
     now_ts = time.time()
-    if epic in _DAYS_CACHE and now_ts - _DAYS_CACHE[epic][0] < _DAYS_CACHE_TTL:
-        days = _DAYS_CACHE[epic][1]
+    if orig_epic in _DAYS_CACHE and now_ts - _DAYS_CACHE[orig_epic][0] < _DAYS_CACHE_TTL:
+        days = _DAYS_CACHE[orig_epic][1]
 
-    for cand in resolve_epic_alias(epic):
-        try:
-            b_try = cap.prices(cand, res, end - timedelta(days=5), end)
-            if b_try:
-                bars = b_try
-                cfg["epic"] = cand
-                if not days:
-                    try:
-                        days = cap.prices(cand, "DAY", end - timedelta(days=35), end)
-                        if days:
-                            _DAYS_CACHE[epic] = (now_ts, days)
-                    except Exception:
-                        pass
-                break
-        except Exception:
-            continue
+    cache_key = f"{orig_epic}:{res}"
+    if cache_key in _BARS_CACHE and now_ts - _BARS_CACHE[cache_key][0] < _BARS_CACHE_TTL:
+        _, cached_bars, cached_cand = _BARS_CACHE[cache_key]
+        bars = cached_bars
+        cfg["epic"] = cached_cand
+
+    if not bars:
+        for cand in resolve_epic_alias(orig_epic):
+            try:
+                b_try = cap.prices(cand, res, end - timedelta(days=5), end)
+                if b_try:
+                    bars = b_try
+                    cfg["epic"] = cand
+                    if not days:
+                        try:
+                            days = cap.prices(cand, "DAY", end - timedelta(days=35), end)
+                            if days:
+                                _DAYS_CACHE[orig_epic] = (now_ts, days)
+                        except Exception:
+                            pass
+                    if len(b_try) >= 50:
+                        _BARS_CACHE[cache_key] = (now_ts, b_try, cand)
+                        try:
+                            from backtest import data_path, save_bars
+                            save_bars(data_path(orig_epic, res), b_try)
+                            if days and len(days) >= 5:
+                                save_bars(data_path(orig_epic, "DAY"), days)
+                        except Exception:
+                            pass
+                    break
+            except Exception:
+                continue
 
     if not bars and allow_synthetic:
         try:

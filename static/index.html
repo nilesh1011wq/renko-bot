@@ -1534,7 +1534,8 @@
         } else if (it.signal_type === 'HOLD_SHORT') {
           sigBadge = `<span style="color:#ef5350; font-weight:600;">▼ Short Run (R:${it.red_run})</span>`;
         } else if (isVeto) {
-          sigBadge = `<span style="color:#f59e0b; font-weight:600;">⚠️ ${it.signal}</span>`;
+          const cleanSig = String(it.signal || '').replace(/^⚠️\s*/u, '');
+          sigBadge = `<span style="color:#f59e0b; font-weight:600;">⚠️ ${cleanSig}</span>`;
         }
 
         const stBadge = it.st_dir === 1

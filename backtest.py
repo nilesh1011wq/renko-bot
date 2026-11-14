@@ -77,7 +77,12 @@ def generate_sample_gold_data(epic="GOLD", res="MINUTE", days_intraday=12, seed=
     digits = spec["digits"]
     base_sp = spec["half_sp"]
 
-    rng = random.Random(seed)
+    epic_up = epic.upper()
+    if epic_up in ("GOLD", "XAUUSD"):
+        effective_seed = seed
+    else:
+        effective_seed = seed + sum((i + 1) * ord(c) for i, c in enumerate(epic_up))
+    rng = random.Random(effective_seed)
     end_day = datetime(2026, 11, 6, 21, 0, tzinfo=timezone.utc)
     start_day = end_day - timedelta(days=45)
 
