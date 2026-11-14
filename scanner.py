@@ -59,6 +59,7 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
             "signal_type": "NEUTRAL",
             "filter_status": "WAITING_DATA",
             "veto": None,
+            "auto_enabled": epic.upper() not in {str(x).upper() for x in cfg.get("risk", {}).get("disabled_epics", [])},
             "bars_count": 0,
             "time": datetime.now(timezone.utc).isoformat(),
         }
@@ -107,11 +108,16 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
     max_sp_frac = float(cfg.get("risk", {}).get("max_spread_frac_of_brick", 0.35))
     spread_veto = (max_sp_frac > 0 and bs > 0 and (cur_spread / bs) > max_sp_frac)
 
+    disabled_epics = {str(x).upper() for x in cfg.get("risk", {}).get("disabled_epics", [])}
+    auto_enabled = epic.upper() not in disabled_epics
+
     veto_reason = None
     if in_blackout:
         veto_reason = "Rollover Blackout (20:45–22:15 UTC)"
     elif not session_ok:
         veto_reason = f"{sess.title()} Session Filtered"
+    elif not auto_enabled:
+        veto_reason = "Auto-Trade Paused"
     elif spread_veto:
         veto_reason = f"Spread Wide ({cur_spread} > {round(max_sp_frac*bs, digits)})"
 
@@ -154,6 +160,7 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
         "signal_type": signal_type,
         "filter_status": filter_status,
         "veto": veto_reason,
+        "auto_enabled": auto_enabled,
         "total_bricks": eng.brick_cnt,
         "time": now_utc.isoformat(),
     }

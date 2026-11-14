@@ -12,7 +12,7 @@ from pathlib import Path
 from backtest import load_config, pick, INSTRUMENT_SPECS
 from capital_api import Capital, CapitalError, RES_MINUTES
 from renko import DailyAtr, Params, RenkoEngine, brick_size_from_atr, round_to_tick
-from risk import (check_entry_allowed, compute_size, kill_switch_active,
+from risk import (check_correlation_allowed, check_entry_allowed, compute_size, kill_switch_active,
                   safety_stop_level, set_kill_switch, should_trail_stop, today_stats)
 
 ROOT = Path(__file__).parent
@@ -215,6 +215,7 @@ def _trail_positions(cap: Capital, positions: list[dict], pos_dir: int,
         return []
     epic = cfg["epic"]
     new_stop = safety_stop_level(pos_dir, last_close, bs, cfg)
+    dual_mode = bool(cfg.get("strategy", {}).get("dual_order_mode", False))
     actions = []
     for p in positions:
         pos_info = p.get("position", {})
@@ -223,17 +224,26 @@ def _trail_positions(cap: Capital, positions: list[dict], pos_dir: int,
             continue
         p_stop = pos_info.get("stopLevel")
         p_tp = pos_info.get("profitLevel")
-        if should_trail_stop(pos_dir, p_stop, new_stop, cfg["tick"]):
+        candidate_stop = new_stop
+        # Live Runner Breakeven Ratchet: once USUAL (with TP) has exited and only Runner (no TP) remains
+        if dual_mode and len(positions) == 1 and p_tp is None and bs > 0:
+            entry_lvl = pos_info.get("level")
+            if entry_lvl is not None:
+                entry_f = float(entry_lvl)
+                if (last_close - entry_f) * pos_dir >= bs:
+                    be_stop = round_to_tick(entry_f, cfg["tick"])
+                    candidate_stop = max(candidate_stop, be_stop) if pos_dir > 0 else min(candidate_stop, be_stop)
+        if should_trail_stop(pos_dir, p_stop, candidate_stop, cfg["tick"]):
             try:
                 try:
                     if p_tp is not None:
-                        cap.update_stop(did, new_stop, profit_level=p_tp)
+                        cap.update_stop(did, candidate_stop, profit_level=p_tp)
                     else:
-                        cap.update_stop(did, new_stop)
+                        cap.update_stop(did, candidate_stop)
                 except TypeError:
-                    cap.update_stop(did, new_stop)
-                print(f"[{epic}] Trailed safety stop on {did} -> {new_stop}")
-                actions.append({"epic": epic, "action": "TRAIL_STOP", "deal_id": did, "new_stop": new_stop})
+                    cap.update_stop(did, candidate_stop)
+                print(f"[{epic}] Trailed safety stop on {did} -> {candidate_stop}")
+                actions.append({"epic": epic, "action": "TRAIL_STOP", "deal_id": did, "new_stop": candidate_stop})
             except Exception as e:
                 print(f"[{epic}] Error trailing stop: {e}")
     return actions
@@ -539,6 +549,7 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
 
     total_open_count = len(raw_pos)
     max_portfolio = int(cfg.get("risk", {}).get("max_portfolio_positions", 5))
+    disabled_epics = {str(x).upper() for x in cfg.get("risk", {}).get("disabled_epics", [])}
 
     actions_taken: list[dict] = []
     active_ui_epic = cfg.get("epic", "GOLD").upper()
@@ -596,8 +607,10 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
             if bar_age_sec > max_bar_age:
                 continue
 
+            is_paused = epic.upper() in disabled_epics
+
             # Handle +1B Continuation Runner Orders (Model E Order 2)
-            if epic in _PENDING_RUNNERS:
+            if not is_paused and epic in _PENDING_RUNNERS:
                 runner = _PENDING_RUNNERS[epic]
                 rev_cond = (
                     (runner["side"] > 0 and (eng.red_run >= 1 or eng.st_dir != 1))
@@ -625,6 +638,11 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 if d.action in ("EXIT", "COVER"):
                     continue
 
+            if is_paused:
+                _PENDING_CONFIRM.pop(epic, None)
+                _PENDING_RUNNERS.pop(epic, None)
+                continue
+
             # Handle Time Confirmation Window (Q3)
             confirm_minutes = int(inst_cfg.get("strategy", {}).get("confirm_minutes", 0))
             if epic in _PENDING_CONFIRM:
@@ -649,6 +667,11 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 else:
                     continue
             elif d.action in ("BUY", "SELL") and confirm_minutes > 0 and pos_dir == 0:
+                corr_ok, corr_reason = check_correlation_allowed(epic, 1 if d.action == "BUY" else -1, raw_pos, inst_cfg)
+                if not corr_ok:
+                    print(f"[{epic}] Confirmation skipped: {corr_reason}")
+                    log_event("BLOCKED", d.action, 0.0, d.trigger_brick_px, None, note=f"[{epic}] {corr_reason}")
+                    continue
                 _PENDING_CONFIRM[epic] = {
                     "side": 1 if d.action == "BUY" else -1,
                     "action": d.action,
@@ -675,6 +698,13 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 if pos_dir == 0 and total_open_count >= max_portfolio:
                     print(f"[{epic}] Entry blocked: portfolio max open positions reached ({total_open_count}/{max_portfolio})")
                     continue
+
+                if pos_dir == 0:
+                    corr_ok, corr_reason = check_correlation_allowed(epic, 1 if d.action == "BUY" else -1, raw_pos, inst_cfg)
+                    if not corr_ok:
+                        print(f"[{epic}] Entry blocked: {corr_reason}")
+                        log_event("BLOCKED", d.action, 0.0, d.trigger_brick_px, None, note=f"[{epic}] {corr_reason}")
+                        continue
 
                 mkt = {}
                 for cand in resolve_epic_alias(epic):
@@ -748,6 +778,7 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                     else:
                         execute_decision(cap, inst_cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz)
                     total_open_count += 1
+                    raw_pos.append({"market": {"epic": epic}, "position": {"direction": d.action}})
                     actions_taken.append({"epic": epic, "action": d.action, "size": sz})
         except Exception as inst_err:
             print(f"[{epic}] Background scan error: {inst_err}")

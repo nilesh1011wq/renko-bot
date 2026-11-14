@@ -867,6 +867,34 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json(res)
                 return
 
+            if u.path == "/api/scanner/toggle":
+                import scanner
+                target_epic = str(body.get("epic", "")).strip().upper()
+                if not target_epic:
+                    self._send_json({"ok": False, "error": "Missing epic"}, 400)
+                    return
+                risk_cfg = cfg.setdefault("risk", {})
+                disabled_list = [str(x).upper() for x in risk_cfg.get("disabled_epics", [])]
+                disabled_set = set(disabled_list)
+                if "enabled" in body:
+                    want_enabled = bool(body["enabled"])
+                else:
+                    want_enabled = target_epic in disabled_set
+                if want_enabled:
+                    disabled_set.discard(target_epic)
+                else:
+                    disabled_set.add(target_epic)
+                risk_cfg["disabled_epics"] = sorted(disabled_set)
+                save_config(cfg)
+                scanner._SCAN_CACHE_TIME = 0.0
+                self._send_json({
+                    "ok": True,
+                    "epic": target_epic,
+                    "auto_enabled": target_epic not in disabled_set,
+                    "disabled_epics": risk_cfg["disabled_epics"],
+                })
+                return
+
             if u.path == "/api/switch-instrument":
                 target_epic = str(body.get("epic", "GOLD")).upper()
                 if target_epic == "XAUUSD":

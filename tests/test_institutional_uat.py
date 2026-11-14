@@ -813,6 +813,68 @@ class TestInstitutionalUAT(unittest.TestCase):
             "Non-GOLD synthetic regimes should use distinct per-instrument seeds",
         )
 
+    def test_25_phase2_correlation_guard_runner_be_and_scanner_toggle(self):
+        """Phase 2: correlation caps, live Runner BE lock, per-market pause, and /api/scanner/toggle."""
+        import copy
+        import backtest
+        import bot
+        import risk
+        import scanner
+
+        cfg = copy.deepcopy(backtest.load_config())
+        cfg["tick"] = 0.01
+        cfg["strategy"]["dual_order_mode"] = True
+        cfg["risk"]["max_correlated_positions"] = 2
+
+        # 1. Cluster exclusivity (ENERGY: OIL_CRUDE vs OIL_BRENT same direction blocked; same epic allowed)
+        open_pos = [{"market": {"epic": "OIL_CRUDE"}, "position": {"direction": "BUY"}}]
+        ok_same, _ = risk.check_correlation_allowed("OIL_CRUDE", 1, open_pos, cfg)
+        self.assertTrue(ok_same, "Runner +1B on same epic must not be blocked by correlation guard")
+        ok_brent, reason_brent = risk.check_correlation_allowed("OIL_BRENT", 1, open_pos, cfg)
+        self.assertFalse(ok_brent)
+        self.assertIn("ENERGY", reason_brent)
+        ok_brent_opp, _ = risk.check_correlation_allowed("OIL_BRENT", -1, open_pos, cfg)
+        self.assertTrue(ok_brent_opp)
+
+        # 2. USD directional cap (2 long-USD shorts: GOLD BUY + EURUSD BUY => AUDUSD BUY blocked; USDCHF BUY allowed)
+        usd_pos = [
+            {"market": {"epic": "XAUUSD"}, "position": {"direction": "BUY"}},
+            {"market": {"epic": "EUR/USD"}, "position": {"direction": "BUY"}},
+        ]
+        ok_aud, reason_usd = risk.check_correlation_allowed("AUDUSD", 1, usd_pos, cfg)
+        self.assertFalse(ok_aud)
+        self.assertIn("USD directional cap", reason_usd)
+        ok_chf, _ = risk.check_correlation_allowed("USDCHF", 1, usd_pos, cfg)
+        self.assertTrue(ok_chf)
+
+        # 3. Live Runner Breakeven Ratchet in _trail_positions (when USUAL TP closed and only Runner remains)
+        updated_stops = []
+
+        class MockCap:
+            def update_stop(self, deal_id, new_stop, profit_level=None):
+                updated_stops.append((deal_id, new_stop, profit_level))
+
+        runner_cfg = copy.deepcopy(cfg)
+        runner_cfg["risk"]["safety_stop_bricks"] = 4
+        # entry = 3800, bs = 10, last_close = 3820 (+2B) -> raw stop = 3780, BE ratchet = 3800
+        runner_pos = [{"position": {"dealId": "RUN-1", "direction": "BUY", "level": 3800.0, "stopLevel": 3770.0, "profitLevel": None}}]
+        actions = bot._trail_positions(MockCap(), runner_pos, 1, 3820.0, 10.0, runner_cfg)
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(updated_stops[0], ("RUN-1", 3800.0, None))
+
+        # 4. Scanner disabled_epics pause + UI markers in server.py / static/index.html
+        paused_cfg = copy.deepcopy(cfg)
+        paused_cfg["risk"]["disabled_epics"] = ["EURUSD"]
+        paused_scan = scanner.scan_single_instrument("EURUSD", paused_cfg, cap=None)
+        self.assertFalse(paused_scan["auto_enabled"])
+        self.assertEqual(paused_scan["veto"], "Auto-Trade Paused")
+
+        srv_src = (Path(backtest.ROOT) / "server.py").read_text(encoding="utf-8")
+        html_src = (Path(backtest.ROOT) / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("/api/scanner/toggle", srv_src)
+        self.assertIn("toggleInstrumentAuto", html_src)
+        self.assertIn("const isEuUkIndex", html_src)
+
 
 if __name__ == "__main__":
     unittest.main()

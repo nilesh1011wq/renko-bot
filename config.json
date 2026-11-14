@@ -42,6 +42,8 @@
     "max_spread_frac_of_brick": 0.25,
     "max_slippage_bricks": 0.35,
     "max_portfolio_positions": 5,
+    "max_correlated_positions": 2,
+    "disabled_epics": [],
     "rollover_blackout": true,
     "ticket_ttl_seconds": 180,
     "sessions": {
