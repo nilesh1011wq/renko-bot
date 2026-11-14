@@ -589,6 +589,104 @@ class TestInstitutionalUAT(unittest.TestCase):
         ):
             self.assertIn(dom_id, html)
 
+    def test_22_live_bot_hardening_tp_preservation_and_run_dedup(self):
+        """Verify Capital.update_stop preserves profitLevel and _HANDLED_RUNS prevents duplicate CONFIRM_WAIT."""
+        import copy
+        from datetime import datetime, timedelta, timezone
+        import backtest
+        import bot
+        from capital_api import Capital
+
+        # 1. Capital.update_stop preserves profitLevel in PUT payload
+        cap_obj = Capital("demo", api_key="k", identifier="id", password="pw")
+        calls = []
+        cap_obj._req = lambda method, path, body=None: calls.append((method, path, body)) or {}
+        cap_obj.update_stop("DEAL-1", 3860.0, profit_level=3910.0)
+        self.assertEqual(calls[-1], ("PUT", "/positions/DEAL-1", {"stopLevel": 3860.0, "profitLevel": 3910.0}))
+
+        # 2. _trail_positions passes each position's profitLevel when trailing stops
+        trailed_calls = []
+
+        class MockTrailCap:
+            def update_stop(self, deal_id, stop_level, profit_level=None):
+                trailed_calls.append((deal_id, stop_level, profit_level))
+
+        positions = [
+            {"position": {"dealId": "D-USUAL", "stopLevel": 3840.0, "profitLevel": 3910.0}},
+            {"position": {"dealId": "D-RUNNER", "stopLevel": 3840.0, "profitLevel": None}},
+        ]
+        bot._trail_positions(MockTrailCap(), positions, 1, 3890.0, 10.0, {"epic": "GOLD", "tick": 0.01, "risk": {"safety_stop_bricks": 3.0}})
+        self.assertEqual(trailed_calls, [("D-USUAL", 3860.0, 3910.0), ("D-RUNNER", 3860.0, None)])
+
+        # 3. _HANDLED_RUNS prevents duplicate CONFIRM_WAIT on the same brick run_id
+        import tempfile
+        now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        bars = []
+        # Day range = 15.0 / atr_div 15 -> bs = 1.0; establish BEAR first then flip BULL right at end
+        closes = [100.0] * 40 + [99.0, 98.0, 97.0] + [97.0] * 13 + [98.0, 99.0, 100.0, 101.0]
+        prev = closes[0]
+        for i, c in enumerate(closes):
+            bars.append({"t": now - timedelta(minutes=len(closes) - i), "o": prev, "h": max(prev, c), "l": min(prev, c), "c": c})
+            prev = c
+        px = closes[-1]
+        day_bars = [{"t": now - timedelta(days=30 - d), "o": 100.0, "h": 115.0, "l": 100.0, "c": 100.0} for d in range(30)]
+
+        class MockLoopCap:
+            def __init__(self):
+                self.opened = []
+            def positions(self):
+                return []
+            def market(self, epic):
+                return {"snapshot": {"bid": px - 0.05, "offer": px + 0.05, "marketStatus": "TRADEABLE"}}
+            def prices(self, epic, res, start, end):
+                return day_bars if res == "DAY" else bars
+            def open_position(self, epic, direction, size, stop_level=None, profit_level=None):
+                self.opened.append((epic, direction, size, stop_level, profit_level))
+                return {"dealId": "M-1", "dealStatus": "ACCEPTED", "level": px}
+
+        cfg = copy.deepcopy(backtest.load_config())
+        cfg["epic"] = "GOLD"
+        cfg["mode"] = "auto"
+        cfg["strategy"]["confirm_minutes"] = 5
+        cfg["strategy"]["one_trade_per_run"] = True
+        cfg["strategy"]["grid_anchor"] = False
+        cfg["risk"]["rollover_blackout"] = False
+        cfg["risk"]["max_daily_loss"] = 0
+        cfg["risk"]["max_trades_per_day"] = 0
+        cfg["risk"]["sessions"] = {"asian": True, "london": True, "new_york": True}
+
+        orig_log = bot.LIVE_TRADES
+        bot._PENDING_CONFIRM.clear()
+        bot._PENDING_RUNNERS.clear()
+        bot._HANDLED_RUNS.clear()
+        bot._DAYS_CACHE.clear()
+
+        with tempfile.TemporaryDirectory() as tmpd:
+            bot.LIVE_TRADES = Path(tmpd) / "live_trades.csv"
+            try:
+                mock_cap = MockLoopCap()
+                bot.step_once(mock_cap, cfg)
+                self.assertIn("GOLD", bot._PENDING_CONFIRM)
+                self.assertEqual(len(mock_cap.opened), 0)
+
+                # Simulate 5 minutes elapsed while run holds -> executes once & marks run handled
+                bot._PENDING_CONFIRM["GOLD"]["t0_epoch"] -= 600
+                bot.step_once(mock_cap, cfg)
+                self.assertNotIn("GOLD", bot._PENDING_CONFIRM)
+                self.assertEqual(len(mock_cap.opened), 1)
+                self.assertIn("GOLD", bot._HANDLED_RUNS)
+
+                # Subsequent poll on the exact same run_id must NOT re-enter CONFIRM_WAIT
+                bot.step_once(mock_cap, cfg)
+                self.assertNotIn("GOLD", bot._PENDING_CONFIRM)
+                self.assertEqual(len(mock_cap.opened), 1)
+            finally:
+                bot.LIVE_TRADES = orig_log
+                bot._PENDING_CONFIRM.clear()
+                bot._PENDING_RUNNERS.clear()
+                bot._HANDLED_RUNS.clear()
+                bot._DAYS_CACHE.clear()
+
 
 if __name__ == "__main__":
     unittest.main()

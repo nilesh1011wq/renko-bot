@@ -2542,7 +2542,7 @@
                 <td>${sideBadge}</td>
                 <td>${p.size}</td>
                 <td>${fmtPrice(p.level, p.epic)}</td>
-                <td>${p.stopLevel ? fmtPrice(p.stopLevel, p.epic) : '--'}</td>
+                <td>${p.stopLevel ? fmtPrice(p.stopLevel, p.epic) : '--'}${p.profitLevel ? ' <span class="badge buy" style="font-size:9px;">TP ' + fmtPrice(p.profitLevel, p.epic) + '</span>' : ''}</td>
                 <td class="${uplCls}" style="font-weight:700;">${p.upl >= 0 ? '+' : ''}$${Number(p.upl).toFixed(2)}</td>
                 <td>
                   <button class="danger" style="padding:2px 8px; font-size:10.5px;" onclick="closeBrokerDeal('${p.dealId}')">Close</button>

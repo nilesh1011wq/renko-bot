@@ -75,9 +75,10 @@ _RECENT_ENTRIES: dict[str, float] = {}
 ENTRY_DEBOUNCE_SECONDS = 120.0  # Prevent duplicate order submissions within 2 minutes
 _PENDING_CONFIRM: dict[str, dict] = {}
 _PENDING_RUNNERS: dict[str, dict] = {}
+_HANDLED_RUNS: dict[str, int] = {}
 
 
-def warmup_engine(cap: Capital, cfg: dict):
+def warmup_engine(cap: Capital, cfg: dict, allow_synthetic: bool = True):
     """Fetch recent history to warm up DailyAtr and RenkoEngine without repainting."""
     epic = cfg["epic"]
     res = cfg["resolution"]
@@ -109,7 +110,7 @@ def warmup_engine(cap: Capital, cfg: dict):
         except Exception:
             continue
 
-    if not bars:
+    if not bars and allow_synthetic:
         try:
             from backtest import ensure_data
             bars, fallback_days = ensure_data(cfg)
@@ -134,7 +135,7 @@ def warmup_engine(cap: Capital, cfg: dict):
     return eng, datr, closed_bars, last_n, last_bs
 
 
-def broker_position(cap: Capital, epic: str):
+def broker_position(cap: Capital, epic: str, return_raw: bool = False):
     """Inspect open positions on Capital.com for this epic (including aliases)."""
     cands = set(resolve_epic_alias(epic))
     try:
@@ -143,13 +144,46 @@ def broker_position(cap: Capital, epic: str):
         raw_pos = []
     positions = [p for p in raw_pos if p.get("market", {}).get("epic") in cands]
     if not positions:
-        return 0, [], None, 0.0
+        return (0, [], None, 0.0, []) if return_raw else (0, [], None, 0.0)
     direction = positions[0].get("position", {}).get("direction", "BUY")
     pos_dir = 1 if direction == "BUY" else -1
     deal_ids = [p["position"]["dealId"] for p in positions]
     stop_level = positions[0]["position"].get("stopLevel")
     total_size = sum(float(p["position"].get("size", 0)) for p in positions)
+    if return_raw:
+        return pos_dir, deal_ids, stop_level, total_size, positions
     return pos_dir, deal_ids, stop_level, total_size
+
+
+def _trail_positions(cap: Capital, positions: list[dict], pos_dir: int,
+                     last_close: float | None, bs: float, cfg: dict) -> list[dict]:
+    """Trail stops per position individually while preserving any existing profitLevel (TP)."""
+    if pos_dir == 0 or not positions or last_close is None:
+        return []
+    epic = cfg["epic"]
+    new_stop = safety_stop_level(pos_dir, last_close, bs, cfg)
+    actions = []
+    for p in positions:
+        pos_info = p.get("position", {})
+        did = pos_info.get("dealId")
+        if not did:
+            continue
+        p_stop = pos_info.get("stopLevel")
+        p_tp = pos_info.get("profitLevel")
+        if should_trail_stop(pos_dir, p_stop, new_stop, cfg["tick"]):
+            try:
+                try:
+                    if p_tp is not None:
+                        cap.update_stop(did, new_stop, profit_level=p_tp)
+                    else:
+                        cap.update_stop(did, new_stop)
+                except TypeError:
+                    cap.update_stop(did, new_stop)
+                print(f"[{epic}] Trailed safety stop on {did} -> {new_stop}")
+                actions.append({"epic": epic, "action": "TRAIL_STOP", "deal_id": did, "new_stop": new_stop})
+            except Exception as e:
+                print(f"[{epic}] Error trailing stop: {e}")
+    return actions
 
 
 def execute_decision(cap: Capital, cfg: dict, action: str, reverse: bool,
@@ -225,30 +259,49 @@ def cmd_status(a, cfg):
         print(f"Pending tkt : {PENDING_FILE.read_text().strip()}")
 
 
+def _close_epic_positions(cap: Capital, epic: str, deal_ids: list[str], action: str,
+                          total_sz: float, actions_taken: list[dict] | None = None) -> int:
+    closed = 0
+    for did in deal_ids:
+        try:
+            conf = cap.close_position(did)
+            log_event("CLOSE", action or "REVERSE_CLOSE", total_sz, conf.get("level"), None, did,
+                      realized_pnl=conf.get("profit", 0.0), note=f"[{epic}] {conf.get('dealStatus', '')}")
+            print(f"[{epic}] Closed deal {did}: status={conf.get('dealStatus')} level={conf.get('level')}")
+            if actions_taken is not None:
+                actions_taken.append({"epic": epic, "action": action or "CLOSE", "deal_id": did})
+            closed += 1
+        except Exception as e:
+            print(f"[{epic}] Error closing deal {did}: {e}")
+            log_event("ERROR", action or "CLOSE", total_sz, None, None, did, note=f"[{epic}] {e}")
+    return closed
+
+
 def step_once(cap: Capital, cfg: dict):
-    eng, _, closed_bars, last_n, bs = warmup_engine(cap, cfg)
+    eng, _, closed_bars, last_n, bs = warmup_engine(cap, cfg, allow_synthetic=False)
     if not closed_bars:
         print("No closed bars returned.")
         return
-    pos_dir, deal_ids, current_stop, _ = broker_position(cap, cfg["epic"])
+    epic = cfg["epic"]
+    tick = cfg["tick"]
+    pos_dir, deal_ids, current_stop, total_sz, epic_positions = broker_position(cap, epic, return_raw=True)
     mkt = {}
-    for cand in resolve_epic_alias(cfg["epic"]):
+    for cand in resolve_epic_alias(epic):
         try:
             res = cap.market(cand)
             if res and res.get("snapshot"):
                 mkt = res.get("snapshot", {})
                 cfg["epic"] = cand
+                epic = cand
                 break
         except Exception:
             continue
     bid, ask = mkt.get("bid"), mkt.get("offer")
 
-    if pos_dir != 0 and deal_ids and eng.last_close is not None:
-        new_stop = safety_stop_level(pos_dir, eng.last_close, bs, cfg)
-        if should_trail_stop(pos_dir, current_stop, new_stop, cfg["tick"]):
-            for did in deal_ids:
-                cap.update_stop(did, new_stop)
-            print(f"Trailed safety stop on {deal_ids} -> {new_stop}")
+    _trail_positions(cap, epic_positions, pos_dir, eng.last_close, bs, cfg)
+
+    if eng.p.one_trade_per_run and _HANDLED_RUNS.get(epic) == eng.run_id:
+        eng.mark_run_traded()
 
     last_c = closed_bars[-1]["c"]
     d = eng.decide(pos_dir, last_n, bar_close=last_c, brick_size=bs)
@@ -266,9 +319,14 @@ def step_once(cap: Capital, cfg: dict):
 
     if need_scan_log:
         status_note = f"G:{eng.green_run} R:{eng.red_run} | ST:{st_label} | Brick:${bs:.2f} | Sig:{d.action or 'Waiting'}"
-        log_event("SCAN", st_label, 0.0, eng.last_close, None, "", note=status_note)
+        lc_px = round_to_tick(eng.last_close, tick) if eng.last_close is not None else None
+        log_event("SCAN", st_label, 0.0, lc_px, None, "", note=status_note)
 
-    epic = cfg["epic"]
+    max_bar_age = max(900, RES_MINUTES.get(cfg.get("resolution", "MINUTE"), 1) * 300)
+    bar_age_sec = (datetime.now(timezone.utc) - closed_bars[-1]["t"]).total_seconds()
+    if bar_age_sec > max_bar_age:
+        return
+
     if epic in _PENDING_RUNNERS:
         runner = _PENDING_RUNNERS[epic]
         rev_cond = (
@@ -278,12 +336,19 @@ def step_once(cap: Capital, cfg: dict):
         )
         if rev_cond:
             _PENDING_RUNNERS.pop(epic, None)
-            log_event("BLOCKED", runner["action"], runner["size"], last_c, None,
+            log_event("BLOCKED", runner["action"], runner["size"], round_to_tick(last_c, tick), None,
                       note=f"[{epic}] runner_+1b_unfilled (cancelled)")
         elif (runner["side"] > 0 and last_c >= runner["target_px"]) or (runner["side"] < 0 and last_c <= runner["target_px"]):
             _PENDING_RUNNERS.pop(epic, None)
             execute_decision(cap, cfg, runner["action"], False, eng.last_close, bs, [],
                              size=runner["size"], profit_level=None, note_tag="RUNNER +1B")
+
+    if pos_dir != 0 and (d.action in ("EXIT", "COVER") or (d.reverse and d.action in ("BUY", "SELL"))):
+        _close_epic_positions(cap, epic, deal_ids, d.action or "REVERSE_CLOSE", total_sz)
+        pos_dir, deal_ids = 0, []
+        d.reverse = False
+        if d.action in ("EXIT", "COVER"):
+            return
 
     confirm_minutes = int(cfg.get("strategy", {}).get("confirm_minutes", 0))
     if epic in _PENDING_CONFIRM:
@@ -295,24 +360,27 @@ def step_once(cap: Capital, cfg: dict):
         )
         if not still_ok:
             _PENDING_CONFIRM.pop(epic, None)
-            log_event("BLOCKED", pc["action"], compute_size(cfg, bs), last_c, None,
+            _HANDLED_RUNS[epic] = pc["run_id"]
+            log_event("BLOCKED", pc["action"], compute_size(cfg, bs), round_to_tick(last_c, tick), None,
                       note=f"[{epic}] 5m_confirm_failed")
             return
         if time.time() >= pc["t0_epoch"] + confirm_minutes * 60:
             _PENDING_CONFIRM.pop(epic, None)
+            _HANDLED_RUNS[epic] = pc["run_id"]
             d.action = pc["action"]
             d.reverse = False
-            d.trigger_brick_px = last_c
+            d.trigger_brick_px = round_to_tick(last_c, tick)
         else:
             return
-    elif d.action in ("BUY", "SELL") and confirm_minutes > 0:
+    elif d.action in ("BUY", "SELL") and confirm_minutes > 0 and pos_dir == 0:
         _PENDING_CONFIRM[epic] = {
             "side": 1 if d.action == "BUY" else -1,
             "action": d.action,
             "t0_epoch": time.time(),
             "run_id": eng.run_id,
         }
-        log_event("CONFIRM_WAIT", d.action, 0.0, eng.last_close, None, "",
+        lc_px = round_to_tick(eng.last_close, tick) if eng.last_close is not None else None
+        log_event("CONFIRM_WAIT", d.action, 0.0, lc_px, None, "",
                   note=f"[{epic}] Waiting {confirm_minutes}m confirmation")
         return
 
@@ -325,10 +393,12 @@ def step_once(cap: Capital, cfg: dict):
         ok, reason = check_entry_allowed(cfg, bid, ask, bs, trig_px=d.trigger_brick_px, side=side_val)
         if not ok:
             print(reason)
-            log_event("BLOCKED", d.action, sz, bid if d.action == "SELL" else ask, None, note=reason)
+            px_log = bid if d.action == "SELL" else ask
+            log_event("BLOCKED", d.action, sz, round_to_tick(px_log, tick) if px_log is not None else None, None, note=reason)
             return
 
     if cfg.get("mode", "semi-auto") == "semi-auto":
+        _HANDLED_RUNS[epic] = eng.run_id
         side = 1 if d.action == "BUY" else (-1 if d.action == "SELL" else 0)
         stop = safety_stop_level(side, eng.last_close, bs, cfg) if side else None
         ttl = int(cfg.get("risk", {}).get("ticket_ttl_seconds", 180))
@@ -355,18 +425,19 @@ def step_once(cap: Capital, cfg: dict):
         print(json.dumps(ticket, indent=2))
         print("Run `python3 bot.py approve` (or click Approve in the Dashboard) before expiry.")
     else:
+        _HANDLED_RUNS[epic] = eng.run_id
         dual_mode = bool(cfg.get("strategy", {}).get("dual_order_mode", False))
         if d.action in ("BUY", "SELL") and dual_mode:
             side_val = 1 if d.action == "BUY" else -1
             tp_bricks = float(cfg.get("strategy", {}).get("tp_bricks", 3.0))
             runner_offset = float(cfg.get("strategy", {}).get("runner_offset_bricks", 1.0))
-            tp_lvl = round_to_tick(last_c + side_val * tp_bricks * bs, cfg["tick"])
+            tp_lvl = round_to_tick(last_c + side_val * tp_bricks * bs, tick)
             execute_decision(cap, cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz,
                              profit_level=tp_lvl, note_tag=f"USUAL {tp_bricks:g}B-TP")
             _PENDING_RUNNERS[epic] = {
                 "side": side_val,
                 "action": d.action,
-                "target_px": round_to_tick(last_c + side_val * runner_offset * bs, cfg["tick"]),
+                "target_px": round_to_tick(last_c + side_val * runner_offset * bs, tick),
                 "size": sz,
                 "run_id": eng.run_id,
             }
@@ -431,21 +502,16 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
             else:
                 pos_dir, deal_ids, current_stop, total_sz = 0, [], None, 0.0
 
-            eng, _, closed_bars, last_n, bs = warmup_engine(cap, inst_cfg)
+            eng, _, closed_bars, last_n, bs = warmup_engine(cap, inst_cfg, allow_synthetic=False)
             if not closed_bars:
                 continue
 
-            # Trailing safety stop for existing deals on this instrument
-            if pos_dir != 0 and deal_ids and eng.last_close is not None:
-                new_stop = safety_stop_level(pos_dir, eng.last_close, bs, inst_cfg)
-                if should_trail_stop(pos_dir, current_stop, new_stop, inst_cfg["tick"]):
-                    for did in deal_ids:
-                        try:
-                            cap.update_stop(did, new_stop)
-                            print(f"[{epic}] Trailed safety stop on {did} -> {new_stop}")
-                            actions_taken.append({"epic": epic, "action": "TRAIL_STOP", "deal_id": did, "new_stop": new_stop})
-                        except Exception as e:
-                            print(f"[{epic}] Error trailing stop: {e}")
+            tick = inst_cfg["tick"]
+            # Trailing safety stop per position while preserving any broker profitLevel (TP)
+            actions_taken.extend(_trail_positions(cap, epic_positions, pos_dir, eng.last_close, bs, inst_cfg))
+
+            if eng.p.one_trade_per_run and _HANDLED_RUNS.get(epic) == eng.run_id:
+                eng.mark_run_traded()
 
             # Strategy decision on the confirmed candle
             last_c = closed_bars[-1]["c"]
@@ -462,7 +528,13 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                     need_scan_log = True
                 if need_scan_log:
                     status_note = f"[{epic}] G:{eng.green_run} R:{eng.red_run} | ST:{st_label} | Brick:${bs:.2f} | Sig:{d.action or 'Waiting'}"
-                    log_event("SCAN", st_label, 0.0, eng.last_close, None, "", note=status_note)
+                    lc_px = round_to_tick(eng.last_close, tick) if eng.last_close is not None else None
+                    log_event("SCAN", st_label, 0.0, lc_px, None, "", note=status_note)
+
+            max_bar_age = max(900, RES_MINUTES.get(inst_cfg.get("resolution", "MINUTE"), 1) * 300)
+            bar_age_sec = (datetime.now(timezone.utc) - closed_bars[-1]["t"]).total_seconds()
+            if bar_age_sec > max_bar_age:
+                continue
 
             # Handle +1B Continuation Runner Orders (Model E Order 2)
             if epic in _PENDING_RUNNERS:
@@ -474,7 +546,7 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 )
                 if rev_cond:
                     _PENDING_RUNNERS.pop(epic, None)
-                    log_event("BLOCKED", runner["action"], runner["size"], last_c, None,
+                    log_event("BLOCKED", runner["action"], runner["size"], round_to_tick(last_c, tick), None,
                               note=f"[{epic}] runner_+1b_unfilled (cancelled)")
                 elif ((runner["side"] > 0 and last_c >= runner["target_px"]) or
                       (runner["side"] < 0 and last_c <= runner["target_px"])) and total_open_count < max_portfolio:
@@ -486,17 +558,8 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
 
             # Handle EXIT / COVER of active positions
             if pos_dir != 0 and (d.action in ("EXIT", "COVER") or (d.reverse and d.action in ("BUY", "SELL"))):
-                for did in deal_ids:
-                    try:
-                        conf = cap.close_position(did)
-                        log_event("CLOSE", d.action or "REVERSE_CLOSE", total_sz, conf.get("level"), None, did,
-                                  realized_pnl=conf.get("profit", 0.0), note=f"[{epic}] {conf.get('dealStatus', '')}")
-                        print(f"[{epic}] Closed deal {did}: status={conf.get('dealStatus')} level={conf.get('level')}")
-                        actions_taken.append({"epic": epic, "action": d.action or "CLOSE", "deal_id": did})
-                        total_open_count = max(0, total_open_count - 1)
-                    except Exception as e:
-                        print(f"[{epic}] Error closing deal {did}: {e}")
-                        log_event("ERROR", d.action or "CLOSE", total_sz, None, None, did, note=f"[{epic}] {e}")
+                closed_cnt = _close_epic_positions(cap, epic, deal_ids, d.action or "REVERSE_CLOSE", total_sz, actions_taken)
+                total_open_count = max(0, total_open_count - closed_cnt)
                 pos_dir, deal_ids = 0, []
                 d.reverse = False
                 if d.action in ("EXIT", "COVER"):
@@ -513,14 +576,16 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 )
                 if not still_ok:
                     _PENDING_CONFIRM.pop(epic, None)
-                    log_event("BLOCKED", pc["action"], compute_size(inst_cfg, bs), last_c, None,
+                    _HANDLED_RUNS[epic] = pc["run_id"]
+                    log_event("BLOCKED", pc["action"], compute_size(inst_cfg, bs), round_to_tick(last_c, tick), None,
                               note=f"[{epic}] 5m_confirm_failed")
                     continue
                 if time.time() >= pc["t0_epoch"] + confirm_minutes * 60:
                     _PENDING_CONFIRM.pop(epic, None)
+                    _HANDLED_RUNS[epic] = pc["run_id"]
                     d.action = pc["action"]
                     d.reverse = False
-                    d.trigger_brick_px = last_c
+                    d.trigger_brick_px = round_to_tick(last_c, tick)
                 else:
                     continue
             elif d.action in ("BUY", "SELL") and confirm_minutes > 0 and pos_dir == 0:
@@ -530,7 +595,8 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                     "t0_epoch": time.time(),
                     "run_id": eng.run_id,
                 }
-                log_event("CONFIRM_WAIT", d.action, 0.0, eng.last_close, None, "",
+                lc_px = round_to_tick(eng.last_close, tick) if eng.last_close is not None else None
+                log_event("CONFIRM_WAIT", d.action, 0.0, lc_px, None, "",
                           note=f"[{epic}] Waiting {confirm_minutes}m confirmation")
                 continue
 
@@ -568,11 +634,14 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 if not ok:
                     print(f"[{epic}] Entry blocked: {reason}")
                     if d.action:
-                        log_event("BLOCKED", d.action, sz, bid if d.action == "SELL" else ask, None, note=f"[{epic}] {reason}")
+                        px_log = bid if d.action == "SELL" else ask
+                        log_event("BLOCKED", d.action, sz, round_to_tick(px_log, tick) if px_log is not None else None,
+                                  None, note=f"[{epic}] {reason}")
                     continue
 
                 if inst_cfg.get("mode", "semi-auto") == "semi-auto":
                     _RECENT_ENTRIES[epic] = now_epoch
+                    _HANDLED_RUNS[epic] = eng.run_id
                     side = 1 if d.action == "BUY" else (-1 if d.action == "SELL" else 0)
                     stop = safety_stop_level(side, eng.last_close, bs, inst_cfg) if side else None
                     ttl = int(inst_cfg.get("risk", {}).get("ticket_ttl_seconds", 180))
@@ -601,17 +670,18 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 else:
                     # Full Auto execution
                     _RECENT_ENTRIES[epic] = now_epoch
+                    _HANDLED_RUNS[epic] = eng.run_id
                     dual_mode = bool(inst_cfg.get("strategy", {}).get("dual_order_mode", False))
                     if dual_mode:
                         tp_bricks = float(inst_cfg.get("strategy", {}).get("tp_bricks", 3.0))
                         runner_offset = float(inst_cfg.get("strategy", {}).get("runner_offset_bricks", 1.0))
-                        tp_lvl = round_to_tick(last_c + side_val * tp_bricks * bs, inst_cfg["tick"])
+                        tp_lvl = round_to_tick(last_c + side_val * tp_bricks * bs, tick)
                         execute_decision(cap, inst_cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz,
                                          profit_level=tp_lvl, note_tag=f"USUAL {tp_bricks:g}B-TP")
                         _PENDING_RUNNERS[epic] = {
                             "side": side_val,
                             "action": d.action,
-                            "target_px": round_to_tick(last_c + side_val * runner_offset * bs, inst_cfg["tick"]),
+                            "target_px": round_to_tick(last_c + side_val * runner_offset * bs, tick),
                             "size": sz,
                             "run_id": eng.run_id,
                         }

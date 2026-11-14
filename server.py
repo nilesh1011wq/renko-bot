@@ -334,8 +334,8 @@ def _cfg_cache_key(cfg: dict) -> str:
     epic = str(cfg.get("epic", "GOLD")).upper()
     strat = cfg.get("strategy", {})
     risk = cfg.get("risk", {})
-    strat_str = f"{strat.get('mode')}_{strat.get('atr_len')}_{strat.get('atr_factor')}_{strat.get('green_run')}_{strat.get('red_run')}_{strat.get('st_atr_len')}_{strat.get('st_factor')}_{strat.get('fallback_size')}"
-    risk_str = f"{risk.get('safety_stop_bricks')}_{risk.get('breakeven_after_bricks')}_{risk.get('rollover_blackout')}"
+    strat_str = json.dumps(strat, sort_keys=True)
+    risk_str = json.dumps(risk, sort_keys=True)
     return f"{epic}_{cfg.get('resolution','MINUTE')}_{strat_str}_{risk_str}"
 
 
@@ -521,6 +521,7 @@ def get_bot_status(cfg: dict, skip_network: bool = False) -> dict:
                     "size": float(pos_info.get("size", 0.0)),
                     "level": float(pos_info.get("level", 0.0)),
                     "stopLevel": float(pos_info["stopLevel"]) if pos_info.get("stopLevel") is not None else None,
+                    "profitLevel": float(pos_info["profitLevel"]) if pos_info.get("profitLevel") is not None else None,
                     "upl": float(pos_info.get("upl", 0.0)),
                     "createdDate": str(pos_info.get("createdDate", "")),
                 })
