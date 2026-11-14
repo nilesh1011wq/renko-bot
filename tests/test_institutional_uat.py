@@ -1019,6 +1019,89 @@ class TestInstitutionalUAT(unittest.TestCase):
         for marker in ("in-use_htf_filter", "in-macro_blackout", "applyCategoryProfile", "EventSource('/api/stream')"):
             self.assertIn(marker, html_src)
 
+    def test_28_phase5_ws_streamer_cloud_state_persistence_and_var95(self):
+        """Phase 5: WebSocket tick streamer, SQLite/browser backup-restore persistence, and 95% Daily VaR."""
+        import io
+        import json
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import MagicMock
+        import backtest
+        import bot
+        import capital_api
+        import server
+
+        # 1. daily_var_95 computed cleanly in backtest.stats()
+        st = backtest.stats([
+            {"entry_time": "2026-11-10T10:00:00Z", "exit_time": "2026-11-10T10:05:00Z", "net": -45.0, "gross": -40.0},
+            {"entry_time": "2026-11-11T10:00:00Z", "exit_time": "2026-11-11T10:05:00Z", "net": 30.0, "gross": 35.0},
+            {"entry_time": "2026-11-12T10:00:00Z", "exit_time": "2026-11-12T10:05:00Z", "net": -20.0, "gross": -15.0},
+            {"entry_time": "2026-11-13T10:00:00Z", "exit_time": "2026-11-13T10:05:00Z", "net": 55.0, "gross": 60.0},
+        ], "net")
+        self.assertIn("daily_var_95", st)
+        self.assertEqual(st["daily_var_95"], 45.0)
+        self.assertEqual(backtest.stats([], "net")["daily_var_95"], 0.0)
+
+        # 2. Capital.com WS tick cache + SSE /api/stream live_tick delivery
+        self.assertTrue(capital_api.WS_URL.startswith("wss://"))
+        tick = capital_api.update_live_tick("GOLD", 3880.10, 3880.50, digits=2)
+        self.assertEqual(tick["mid"], 3880.30)
+        self.assertEqual(capital_api.get_live_tick("GOLD")["spread"], 0.40)
+
+        handler = server.Handler.__new__(server.Handler)
+        handler.headers = {}
+        handler.wfile = io.BytesIO()
+        handler.rfile = io.BytesIO()
+        handler.path = "/api/stream"
+        handler.send_response = MagicMock()
+        handler.send_header = MagicMock()
+        handler.end_headers = MagicMock()
+        handler.do_GET()
+        body = handler.wfile.getvalue().decode("utf-8")
+        data_line = next(line for line in body.splitlines() if line.startswith("data: "))
+        pulse = json.loads(data_line[6:])
+        self.assertEqual(pulse["live_tick"]["mid"], 3880.30)
+
+        # 3. Cloud state SQLite persistence & /api/backup-state + /api/restore-state round-trip
+        orig_db = server.CLOUD_STATE_DB
+        orig_live = server.LIVE_TRADES
+        orig_srv_oms = server._oms_state_path
+        orig_bot_oms = bot._oms_state_path
+        orig_cfg = backtest.load_config()
+        with tempfile.TemporaryDirectory() as tmpd:
+            tmp = Path(tmpd)
+            server.CLOUD_STATE_DB = tmp / "cloud_state.sqlite"
+            server.LIVE_TRADES = tmp / "live_trades.csv"
+            server._oms_state_path = lambda: tmp / "oms_state.json"
+            bot._oms_state_path = server._oms_state_path
+            try:
+                snap = server.build_cloud_backup_snapshot(orig_cfg)
+                self.assertTrue(snap["ok"])
+                self.assertTrue(server.CLOUD_STATE_DB.exists())
+                loaded = server._load_snapshot_from_sqlite(server.CLOUD_STATE_DB)
+                self.assertEqual(loaded["config"]["epic"], orig_cfg["epic"])
+
+                snap["live_trades"] = [{
+                    "time": "2026-11-14T10:00:00Z", "event": "OPEN", "side": "BUY",
+                    "size": "1.0", "price": "3880.30", "stop": "3865.0",
+                    "deal_id": "DEAL-RESTORE", "realized_pnl": "", "note": "RESTORE_TEST"
+                }]
+                restored = server.restore_cloud_backup_snapshot(snap)
+                self.assertTrue(restored["restored"])
+                self.assertTrue(server.LIVE_TRADES.exists())
+                self.assertIn("DEAL-RESTORE", server.LIVE_TRADES.read_text())
+            finally:
+                server.CLOUD_STATE_DB = orig_db
+                server.LIVE_TRADES = orig_live
+                server._oms_state_path = orig_srv_oms
+                bot._oms_state_path = orig_bot_oms
+                backtest.save_config(orig_cfg)
+
+        # 4. UI markers for Phase 5
+        html_src = (Path(backtest.ROOT) / "static" / "index.html").read_text(encoding="utf-8")
+        for marker in ("checkAndRestoreCloudState", "syncCloudBackupToBrowser", "live_tick", "VaR95"):
+            self.assertIn(marker, html_src)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -7,9 +7,14 @@ They are never printed or logged.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import os
+import socket
 import ssl
+import struct
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -31,6 +36,7 @@ URLS = {
     "demo": "https://demo-api-capital.backend-capital.com/api/v1",
     "live": "https://api-capital.backend-capital.com/api/v1",
 }
+WS_URL = "wss://api-streaming-capital.backend-capital.com/connect"
 RES_MINUTES = {"MINUTE": 1, "MINUTE_5": 5, "MINUTE_15": 15, "MINUTE_30": 30,
                "HOUR": 60, "HOUR_4": 240, "DAY": 1440, "WEEK": 10080}
 
@@ -230,3 +236,203 @@ class Capital:
     def delete_working_order(self, deal_id):
         r = self._req("DELETE", "/workingorders/" + deal_id)
         return self.confirm(r["dealReference"]) if "dealReference" in r else r
+
+
+_LIVE_TICK_LOCK = threading.Lock()
+_LIVE_TICK_CACHE: dict[str, dict] = {}
+
+
+def update_live_tick(epic: str, bid: float | None, offer: float | None, digits: int = 2) -> dict | None:
+    """Update thread-safe live quote cache from WebSocket stream or REST market snapshot."""
+    if not epic or (bid is None and offer is None):
+        return None
+    b = float(bid) if bid is not None else float(offer)
+    o = float(offer) if offer is not None else float(bid)
+    mid = round((b + o) / 2.0, digits)
+    spread = round(max(0.0, o - b), digits)
+    tick_obj = {
+        "epic": str(epic).upper(),
+        "bid": round(b, digits),
+        "offer": round(o, digits),
+        "mid": mid,
+        "spread": spread,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+    with _LIVE_TICK_LOCK:
+        _LIVE_TICK_CACHE[tick_obj["epic"]] = tick_obj
+        if tick_obj["epic"] == "XAUUSD":
+            _LIVE_TICK_CACHE["GOLD"] = dict(tick_obj, epic="GOLD")
+    return dict(tick_obj)
+
+
+def get_live_tick(epic: str) -> dict | None:
+    """Fetch the most recent cached live quote tick for an epic."""
+    with _LIVE_TICK_LOCK:
+        t = _LIVE_TICK_CACHE.get(str(epic or "GOLD").upper())
+        return dict(t) if t else None
+
+
+class CapitalTickStreamer:
+    """
+    Lightweight stdlib WebSocket client (wss://api-streaming-capital.backend-capital.com/connect)
+    for sub-second Capital.com quote streaming with automatic REST market snapshot fallback.
+    """
+
+    def __init__(self):
+        self._running = False
+        self._thread: threading.Thread | None = None
+        self._epics: list[str] = ["GOLD"]
+        self._env = "demo"
+        self.ws_connected = False
+        self.last_error: str | None = None
+
+    def set_targets(self, epics: list[str], env: str = "demo"):
+        cleaned = [str(e).upper() for e in epics if e]
+        if cleaned:
+            self._epics = list(dict.fromkeys(cleaned))
+        self._env = env
+
+    def start(self, epics: list[str] | None = None, env: str = "demo"):
+        if epics:
+            self.set_targets(epics, env=env)
+        if self._thread is not None and self._thread.is_alive():
+            self._running = True
+            return
+        self._running = True
+        self._thread = threading.Thread(target=self._run_loop, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._running = False
+        self.ws_connected = False
+
+    @staticmethod
+    def _send_ws_text(sock: ssl.SSLSocket, msg: str):
+        payload = msg.encode("utf-8")
+        mask = os.urandom(4)
+        n = len(payload)
+        if n < 126:
+            hdr = struct.pack("!BB", 0x81, 0x80 | n)
+        elif n < 65536:
+            hdr = struct.pack("!BBH", 0x81, 0x80 | 126, n)
+        else:
+            hdr = struct.pack("!BBQ", 0x81, 0x80 | 127, n)
+        masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+        sock.sendall(hdr + mask + masked)
+
+    @staticmethod
+    def _recv_exact(sock: ssl.SSLSocket, n: int) -> bytes:
+        buf = bytearray()
+        while len(buf) < n:
+            chunk = sock.recv(n - len(buf))
+            if not chunk:
+                raise ConnectionError("WebSocket closed")
+            buf.extend(chunk)
+        return bytes(buf)
+
+    def _recv_ws_frame(self, sock: ssl.SSLSocket) -> str | None:
+        b1, b2 = struct.unpack("!BB", self._recv_exact(sock, 2))
+        opcode = b1 & 0x0F
+        masked = bool(b2 & 0x80)
+        length = b2 & 0x7F
+        if length == 126:
+            (length,) = struct.unpack("!H", self._recv_exact(sock, 2))
+        elif length == 127:
+            (length,) = struct.unpack("!Q", self._recv_exact(sock, 8))
+        mask = self._recv_exact(sock, 4) if masked else b""
+        data = self._recv_exact(sock, length) if length else b""
+        if masked:
+            data = bytes(b ^ mask[i % 4] for i, b in enumerate(data))
+        if opcode == 0x8:
+            raise ConnectionError("WebSocket close frame")
+        if opcode in (0x1, 0x2):
+            return data.decode("utf-8", errors="replace")
+        return None
+
+    def _connect_ws_and_stream(self, cap: Capital):
+        cap._ensure_session()
+        parsed = urllib.parse.urlparse(WS_URL)
+        host = parsed.hostname or "api-streaming-capital.backend-capital.com"
+        port = parsed.port or 443
+        path = parsed.path or "/connect"
+        raw = socket.create_connection((host, port), timeout=10)
+        sock = SSL_CTX.wrap_socket(raw, server_hostname=host)
+        try:
+            key = base64.b64encode(os.urandom(16)).decode("ascii")
+            req = (
+                f"GET {path} HTTP/1.1\r\n"
+                f"Host: {host}\r\n"
+                f"Upgrade: websocket\r\n"
+                f"Connection: Upgrade\r\n"
+                f"Sec-WebSocket-Key: {key}\r\n"
+                f"Sec-WebSocket-Version: 13\r\n\r\n"
+            )
+            sock.sendall(req.encode("ascii"))
+            resp = b""
+            while b"\r\n\r\n" not in resp:
+                chunk = sock.recv(1024)
+                if not chunk:
+                    raise ConnectionError("Handshake EOF")
+                resp += chunk
+            if b"101" not in resp.splitlines()[0]:
+                raise ConnectionError("WebSocket handshake rejected")
+            self.ws_connected = True
+            self.last_error = None
+            sub_msg = json.dumps({
+                "destination": "marketData.subscribe",
+                "correlationId": "renko-sub-1",
+                "cst": cap.cst,
+                "securityToken": cap.sec,
+                "payload": {"epics": self._epics},
+            })
+            self._send_ws_text(sock, sub_msg)
+            sock.settimeout(25.0)
+            last_ping = time.time()
+            while self._running:
+                if time.time() - last_ping >= 25.0:
+                    self._send_ws_text(sock, json.dumps({
+                        "destination": "ping",
+                        "correlationId": "ping",
+                        "cst": cap.cst,
+                        "securityToken": cap.sec,
+                    }))
+                    last_ping = time.time()
+                try:
+                    txt = self._recv_ws_frame(sock)
+                except socket.timeout:
+                    continue
+                if not txt:
+                    continue
+                msg = json.loads(txt)
+                pl = msg.get("payload") or {}
+                ep = pl.get("epic")
+                bid = pl.get("bid")
+                ofr = pl.get("ofr") if pl.get("ofr") is not None else pl.get("offer")
+                if ep and (bid is not None or ofr is not None):
+                    update_live_tick(ep, bid, ofr, digits=5 if len(str(bid or ofr).split(".")[-1]) > 3 else 2)
+        finally:
+            self.ws_connected = False
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+    def _run_loop(self):
+        while self._running:
+            try:
+                cap = Capital(self._env)
+                self._connect_ws_and_stream(cap)
+            except Exception as e:
+                self.ws_connected = False
+                self.last_error = str(e)
+                # Fallback REST tick poll for the active epic when WebSocket stream unavailable
+                try:
+                    cap = Capital(self._env)
+                    for ep in self._epics[:2]:
+                        res = cap.market(ep)
+                        sn = (res or {}).get("snapshot", {})
+                        if sn.get("bid") is not None or sn.get("offer") is not None:
+                            update_live_tick(ep, sn.get("bid"), sn.get("offer"))
+                except Exception:
+                    pass
+                time.sleep(8.0)

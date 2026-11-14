@@ -548,7 +548,7 @@ def stats(trades, key):
                 "max_drawdown": 0.0, "longest_losing_streak": 0,
                 "avg_mfe_bricks": 0.0, "avg_mae_bricks": 0.0, "avg_overshoot": 0.0,
                 "sharpe": 0.0, "sortino": 0.0, "calmar": 0.0,
-                "payoff_ratio": 0.0, "expectancy_r": 0.0}
+                "payoff_ratio": 0.0, "expectancy_r": 0.0, "daily_var_95": 0.0}
     wins = [x for x in pnl if x > 0]
     losses = [x for x in pnl if x <= 0]
     eq = peak = mdd = 0.0
@@ -577,6 +577,15 @@ def stats(trades, key):
     calmar = round(total_pnl / mdd, 2) if mdd > 0 else (99.0 if total_pnl > 0 else 0.0)
     payoff = round(avg_w / abs(avg_l), 2) if avg_l < 0 else 0.0
     exp_r = round(avg_tr / abs(avg_l), 2) if avg_l < 0 else 0.0
+    by_day_pnl = {}
+    for tr, x in zip(trades, pnl):
+        dt_val = tr.get("exit_time") or tr.get("entry_time") or ""
+        d_key = dt_val.isoformat()[:10] if hasattr(dt_val, "isoformat") else str(dt_val)[:10]
+        if d_key:
+            by_day_pnl[d_key] = by_day_pnl.get(d_key, 0.0) + x
+    var_series = sorted(by_day_pnl.values()) if len(by_day_pnl) >= 3 else sorted(pnl)
+    idx_5 = max(0, min(len(var_series) - 1, int(math.floor(0.05 * len(var_series)))))
+    daily_var_95 = round(abs(min(0.0, var_series[idx_5])), 2)
     return {
         "trades": n,
         "win_rate_%": round(100 * len(wins) / n, 1),
@@ -595,6 +604,7 @@ def stats(trades, key):
         "calmar": calmar,
         "payoff_ratio": payoff,
         "expectancy_r": exp_r,
+        "daily_var_95": daily_var_95,
     }
 
 

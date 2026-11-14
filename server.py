@@ -25,12 +25,13 @@ import html
 import io
 import json
 import os
+import sqlite3
 import threading
 import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
-from http. cookies import SimpleCookie
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -38,9 +39,10 @@ from urllib.parse import urlparse
 from backtest import (DATA, JOURNAL, INSTRUMENT_SPECS, data_path, ensure_data, generate_sample_gold_data,
                       load_config, save_bars, save_config, session_breakdown,
                       simulate, stats, write_trades)
-from bot import (LIVE_TRADES, PENDING_FILE, _PENDING_CONFIRM, _PENDING_RUNNERS,
-                 resolve_epic_alias, step_once, step_multi_market)
-from capital_api import Capital, CapitalError, RES_MINUTES, SSL_CTX, load_env
+from bot import (LIVE_TRADES, PENDING_FILE, _PENDING_CONFIRM, _PENDING_RUNNERS, _HANDLED_RUNS,
+                 _oms_state_path, resolve_epic_alias, step_once, step_multi_market)
+from capital_api import (WS_URL, Capital, CapitalError, CapitalTickStreamer, RES_MINUTES, SSL_CTX,
+                         get_live_tick, load_env, update_live_tick)
 from montecarlo import run_montecarlo
 from risk import kill_switch_active, set_kill_switch, today_stats
 
@@ -205,6 +207,131 @@ class BackgroundWatcher:
 
 
 WATCHER = BackgroundWatcher()
+TICK_STREAMER = CapitalTickStreamer()
+
+CLOUD_STATE_DIR = Path(os.environ.get("RENDER_DISK_PATH", str(JOURNAL)))
+CLOUD_STATE_DB = CLOUD_STATE_DIR / "cloud_state.sqlite"
+_CLOUD_DB_LOCK = threading.Lock()
+
+
+def _persist_snapshot_to_sqlite(snap: dict, db_path: Path | None = None):
+    p = db_path or CLOUD_STATE_DB
+    try:
+        with _CLOUD_DB_LOCK:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(str(p))
+            try:
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS cloud_state "
+                    "(id INTEGER PRIMARY KEY, updated_at TEXT, payload_json TEXT)"
+                )
+                conn.execute(
+                    "INSERT OR REPLACE INTO cloud_state (id, updated_at, payload_json) VALUES (1, ?, ?)",
+                    (snap.get("ts", datetime.now(timezone.utc).isoformat()), json.dumps(snap)),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+    except Exception:
+        pass
+
+
+def _load_snapshot_from_sqlite(db_path: Path | None = None) -> dict | None:
+    p = db_path or CLOUD_STATE_DB
+    if not p.exists():
+        return None
+    try:
+        with _CLOUD_DB_LOCK:
+            conn = sqlite3.connect(str(p))
+            try:
+                cur = conn.execute("SELECT payload_json FROM cloud_state WHERE id=1")
+                row = cur.fetchone()
+                if row and row[0]:
+                    return json.loads(row[0])
+            finally:
+                conn.close()
+    except Exception:
+        pass
+    return None
+
+
+def build_cloud_backup_snapshot(cfg: dict | None = None) -> dict:
+    cur_cfg = cfg or load_config()
+    oms_data = {
+        "pending_confirm": dict(_PENDING_CONFIRM),
+        "pending_runners": dict(_PENDING_RUNNERS),
+        "handled_runs": dict(_HANDLED_RUNS),
+    }
+    oms_file = _oms_state_path()
+    if oms_file.exists():
+        try:
+            oms_data = json.loads(oms_file.read_text())
+        except Exception:
+            pass
+    trades_rows = []
+    if LIVE_TRADES.exists():
+        try:
+            with LIVE_TRADES.open() as f:
+                trades_rows = list(csv.DictReader(f))[-250:]
+        except Exception:
+            trades_rows = []
+    snap = {
+        "ok": True,
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "config": cur_cfg,
+        "oms_state": oms_data,
+        "live_trades": trades_rows,
+    }
+    _persist_snapshot_to_sqlite(snap)
+    return snap
+
+
+def restore_cloud_backup_snapshot(payload: dict) -> dict:
+    if not isinstance(payload, dict):
+        return {"ok": False, "restored": False}
+    if isinstance(payload.get("config"), dict):
+        cfg = load_config()
+        src = payload["config"]
+        for k in ("epic", "resolution", "price", "tick", "size", "sizing_mode",
+                  "risk_per_trade_usd", "mode", "live"):
+            if k in src:
+                cfg[k] = src[k]
+        if isinstance(src.get("strategy"), dict):
+            cfg["strategy"].update(src["strategy"])
+        if isinstance(src.get("risk"), dict):
+            for rk, rv in src["risk"].items():
+                if rk == "sessions" and isinstance(rv, dict):
+                    cfg["risk"].setdefault("sessions", {}).update(rv)
+                else:
+                    cfg["risk"][rk] = rv
+        save_config(cfg)
+        clear_backtest_cache()
+
+    if isinstance(payload.get("oms_state"), dict):
+        oms = payload["oms_state"]
+        _PENDING_CONFIRM.clear()
+        _PENDING_CONFIRM.update(oms.get("pending_confirm", {}))
+        _PENDING_RUNNERS.clear()
+        _PENDING_RUNNERS.update(oms.get("pending_runners", {}))
+        _HANDLED_RUNS.clear()
+        _HANDLED_RUNS.update(oms.get("handled_runs", {}))
+        oms_file = _oms_state_path()
+        oms_file.parent.mkdir(parents=True, exist_ok=True)
+        oms_file.write_text(json.dumps(oms, indent=2))
+
+    rows = payload.get("live_trades")
+    if isinstance(rows, list) and rows and (not LIVE_TRADES.exists() or LIVE_TRADES.stat().st_size < 120):
+        LIVE_TRADES.parent.mkdir(parents=True, exist_ok=True)
+        cols = ["time", "event", "side", "size", "price", "stop", "deal_id", "realized_pnl", "note"]
+        with LIVE_TRADES.open("w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(cols)
+            for r in rows:
+                if isinstance(r, dict):
+                    w.writerow([r.get(c, "") for c in cols])
+
+    snap = build_cloud_backup_snapshot()
+    return {"ok": True, "restored": True, "ts": snap["ts"]}
 
 
 def mask_identifier(ident: str) -> str:
@@ -319,6 +446,8 @@ def get_live_market_snapshot(cap: Capital, epic: str) -> tuple[dict, str]:
             res = cap.market(cand)
             if res and res.get("snapshot"):
                 snap = res.get("snapshot", {})
+                spec = INSTRUMENT_SPECS.get(epic.upper(), INSTRUMENT_SPECS.get("GOLD", {}))
+                update_live_tick(epic, snap.get("bid"), snap.get("offer"), digits=spec.get("digits", 2))
                 with _MARKET_SNAP_LOCK:
                     _MARKET_SNAP_CACHE[epic] = (now, snap, cand)
                 return snap, cand
@@ -499,7 +628,7 @@ def render_tearsheet_html(cfg: dict, bt: dict) -> str:
     <div class="kpi"><div class="lbl">Win Rate / Trades</div><div class="val">{sn.get('win_rate_%',0)}% ({sn.get('trades',0)})</div></div>
     <div class="kpi"><div class="lbl">Profit Factor / R</div><div class="val">{sn.get('profit_factor',0)} / {sn.get('payoff_ratio',0)}R</div></div>
     <div class="kpi"><div class="lbl">Sharpe / Sortino</div><div class="val">{sn.get('sharpe',0)} / {sn.get('sortino',0)}</div></div>
-    <div class="kpi"><div class="lbl">Max DD / Calmar</div><div class="val">-${float(sn.get('max_drawdown',0)):.2f} / {sn.get('calmar',0)}</div></div>
+    <div class="kpi"><div class="lbl">Max DD / 95% VaR</div><div class="val">-${float(sn.get('max_drawdown',0)):.2f} / -${float(sn.get('daily_var_95',0)):.2f}</div></div>
   </div>
   <h2>Transaction Cost &amp; Model E Leg Attribution</h2>
   <table><thead><tr><th>Cohort</th><th>Trades</th><th>Win Rate</th><th>Gross P&amp;L</th><th>Spread Drag</th><th>Net P&amp;L</th><th>Avg Net/Trade</th></tr></thead><tbody>{leg_rows}</tbody></table>
@@ -897,6 +1026,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if u.path == "/api/stream":
+            cfg = load_config()
             cnt, pnl = today_stats()
             pending_ticket = None
             if PENDING_FILE.exists():
@@ -914,6 +1044,7 @@ class Handler(BaseHTTPRequestHandler):
                 "pending_ticket": pending_ticket,
                 "pending_confirm": dict(_PENDING_CONFIRM),
                 "pending_runners": dict(_PENDING_RUNNERS),
+                "live_tick": get_live_tick(cfg.get("epic", "GOLD")),
             }
             body = f"retry: 5000\nevent: pulse\ndata: {json.dumps(pulse)}\n\n".encode("utf-8")
             self.send_response(200)
@@ -922,6 +1053,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
+            return
+
+        if u.path == "/api/backup-state":
+            self._send_json(build_cloud_backup_snapshot())
             return
 
         if u.path == "/api/scanner":
@@ -1027,6 +1162,7 @@ class Handler(BaseHTTPRequestHandler):
                     pass
 
                 WATCHER.start()
+                TICK_STREAMER.start([cfg.get("epic", "GOLD")], env=env)
 
                 self._send_json({
                     "ok": True,
@@ -1054,6 +1190,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             if u.path == "/api/disconnect-broker":
+                TICK_STREAMER.stop()
                 update_dotenv({
                     "CAPITAL_API_KEY": None,
                     "CAPITAL_IDENTIFIER": None,
@@ -1418,6 +1555,14 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True, "message": msg, "bot": get_bot_status(cfg)})
                 return
 
+            if u.path == "/api/restore-state":
+                res = restore_cloud_backup_snapshot(body)
+                cfg = load_config()
+                res["bot"] = get_bot_status(cfg)
+                res["config"] = cfg
+                self._send_json(res)
+                return
+
             self._send_json({"error": "Unknown endpoint"}, 404)
         except Exception as e:
             self._send_json({"error": str(e)}, 500)
@@ -1433,11 +1578,17 @@ def main():
     a = ap.parse_args()
 
     cfg = load_config()
+    if CLOUD_STATE_DB.exists() and not LIVE_TRADES.exists():
+        saved = _load_snapshot_from_sqlite()
+        if saved:
+            restore_cloud_backup_snapshot(saved)
+            cfg = load_config()
     ensure_data(cfg)
 
     if os.environ.get("AUTO_START_WATCHER", "").lower() in ("1", "true", "yes") or check_credentials_present().get("connected"):
         WATCHER.start()
-        print("24/7 Watcher auto-started (Broker credentials active).")
+        TICK_STREAMER.start([cfg.get("epic", "GOLD")], env="live" if cfg.get("live") else "demo")
+        print("24/7 Watcher & WebSocket Tick Streamer auto-started (Broker credentials active).")
 
     srv = ThreadingHTTPServer((a.host, a.port), Handler)
     print(f"Renko ATR Pro Cloud Dashboard running at http://{a.host}:{a.port}")
