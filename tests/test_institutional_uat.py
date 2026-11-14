@@ -875,6 +875,69 @@ class TestInstitutionalUAT(unittest.TestCase):
         self.assertIn("toggleInstrumentAuto", html_src)
         self.assertIn("const isEuUkIndex", html_src)
 
+    def test_26_phase3_working_orders_tca_attribution_and_tearsheet(self):
+        """Phase 3: native STOP working orders, TCA attribution, CSV export, and HTML tear-sheet."""
+        import copy
+        import backtest
+        import bot
+        import capital_api
+        import server
+
+        cfg = copy.deepcopy(backtest.load_config())
+        cfg["epic"] = "GOLD"
+        cfg["tick"] = 0.01
+
+        # 1. Capital working order methods & bot working-order helpers
+        self.assertTrue(hasattr(capital_api.Capital, "working_orders"))
+        self.assertTrue(hasattr(capital_api.Capital, "create_working_order"))
+        self.assertTrue(hasattr(capital_api.Capital, "delete_working_order"))
+
+        wo_calls = []
+
+        class MockWoCap:
+            def create_working_order(self, epic, direction, size, level, order_type="STOP", stop_level=None, profit_level=None):
+                wo_calls.append(("create", epic, direction, size, level, order_type, stop_level))
+                return {"dealId": "WO-99", "dealStatus": "ACCEPTED"}
+
+            def delete_working_order(self, deal_id):
+                wo_calls.append(("delete", deal_id))
+                return {"dealStatus": "DELETED"}
+
+        bot._PENDING_RUNNERS.clear()
+        orig_log = bot.LIVE_TRADES
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpd:
+            bot.LIVE_TRADES = Path(tmpd) / "live_trades.csv"
+            try:
+                bot._arm_runner_order(MockWoCap(), cfg, "GOLD", "BUY", 1, 3900.0, 3900.0, 10.0, 1.5, 12)
+                self.assertEqual(bot._PENDING_RUNNERS["GOLD"]["working_order_id"], "WO-99")
+                self.assertEqual(wo_calls[0][0], "create")
+                self.assertEqual(wo_calls[0][5], "STOP")
+                bot.cancel_runner_working_order(MockWoCap(), "GOLD", bot._PENDING_RUNNERS.pop("GOLD"))
+                self.assertEqual(wo_calls[1], ("delete", "WO-99"))
+            finally:
+                bot.LIVE_TRADES = orig_log
+                bot._PENDING_RUNNERS.clear()
+
+        # 2. TCA Attribution + Tear-Sheet HTML rendering + UI wiring
+        bt = server.serialize_backtest(cfg, use_cache=False, skip_network=True)
+        tca = bt.get("tca_attribution", {})
+        for key in ("usual", "runner", "costs", "filter_breakdown"):
+            self.assertIn(key, tca)
+        self.assertIn("total_spread_cost", tca["costs"])
+
+        sheet = server.render_tearsheet_html(cfg, bt)
+        self.assertIn("Strategy Performance Tear-Sheet", sheet)
+        self.assertIn("Transaction Cost", sheet)
+        self.assertIn("GOLD", sheet)
+
+        srv_src = (Path(backtest.ROOT) / "server.py").read_text(encoding="utf-8")
+        html_src = (Path(backtest.ROOT) / "static" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("/api/tearsheet", srv_src)
+        self.assertIn("/api/export-trades.csv", srv_src)
+        self.assertIn("tab-tca", html_src)
+        self.assertIn("renderTcaTab", html_src)
+
 
 if __name__ == "__main__":
     unittest.main()

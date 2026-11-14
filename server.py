@@ -21,6 +21,7 @@ import copy
 import csv
 import hashlib
 import hmac
+import html
 import io
 import json
 import os
@@ -331,6 +332,186 @@ _BACKTEST_CACHE_LOCK = threading.Lock()
 BACKTEST_CACHE_TTL = 60.0  # seconds
 
 
+def _bucket_filter_reason(reason: str) -> str:
+    r = str(reason or "other").strip().lower()
+    if r.startswith("overshoot"):
+        return "Overshoot Guard"
+    if "one_trade_per_run" in r:
+        return "One-Trade-Per-Run Lock"
+    if "news_spike" in r:
+        return "News Spike Guard"
+    if "5m_confirm" in r:
+        return "5m Confirmation Gate"
+    if "runner_+1b" in r:
+        return "Runner +1B Unfilled"
+    if "rollover" in r:
+        return "Rollover Blackout"
+    if "spread" in r:
+        return "Wide Spread Veto"
+    if "session" in r:
+        return "Session Filter"
+    return str(reason or "Other")
+
+
+def _leg_summary(sub_trades: list[dict]) -> dict:
+    n = len(sub_trades)
+    if not n:
+        return {
+            "trades": 0, "win_rate_%": 0.0, "gross": 0.0, "net": 0.0,
+            "spread_cost": 0.0, "avg_net": 0.0, "tp_hits": 0, "avg_mfe_bricks": 0.0,
+        }
+    wins = sum(1 for t in sub_trades if float(t.get("net", 0.0)) > 0)
+    gross = round(sum(float(t.get("gross", 0.0)) for t in sub_trades), 2)
+    net = round(sum(float(t.get("net", 0.0)) for t in sub_trades), 2)
+    sp_cost = round(gross - net, 2)
+    tp_hits = sum(1 for t in sub_trades if "TP" in str(t.get("why_out", "")))
+    avg_mfe = round(sum(float(t.get("mfe_bricks", 0.0)) for t in sub_trades) / n, 2)
+    return {
+        "trades": n,
+        "win_rate_%": round(100.0 * wins / n, 1),
+        "gross": gross,
+        "net": net,
+        "spread_cost": sp_cost,
+        "avg_net": round(net / n, 2),
+        "tp_hits": tp_hits,
+        "avg_mfe_bricks": avg_mfe,
+    }
+
+
+def _compute_tca_attribution(trades: list[dict], raw_trades: list[dict], filtered: list[dict]) -> dict:
+    usual_trades = [t for t in trades if t.get("leg", "SINGLE") != "RUNNER"]
+    runner_trades = [t for t in trades if t.get("leg") == "RUNNER"]
+    total_gross = round(sum(float(t.get("gross", 0.0)) for t in trades), 2)
+    total_net = round(sum(float(t.get("net", 0.0)) for t in trades), 2)
+    raw_net = round(sum(float(t.get("net", 0.0)) for t in raw_trades), 2)
+    total_spread = round(total_gross - total_net, 2)
+    n_tot = len(trades)
+    avg_over = round(sum(float(t.get("overshoot", 0.0)) for t in trades) / n_tot, 4) if n_tot else 0.0
+
+    counts: dict[str, int] = {}
+    for ev in filtered:
+        lbl = _bucket_filter_reason(ev.get("reason", ""))
+        counts[lbl] = counts.get(lbl, 0) + 1
+    breakdown = [{"reason": k, "count": v} for k, v in sorted(counts.items(), key=lambda x: (-x[1], x[0]))]
+
+    return {
+        "usual": _leg_summary(usual_trades),
+        "runner": _leg_summary(runner_trades),
+        "costs": {
+            "total_gross": total_gross,
+            "total_net": total_net,
+            "raw_net": raw_net,
+            "total_spread_cost": total_spread,
+            "avg_spread_cost": round(total_spread / n_tot, 2) if n_tot else 0.0,
+            "avg_overshoot": avg_over,
+            "pro_edge_vs_raw": round(total_net - raw_net, 2),
+            "filtered_count": len(filtered),
+        },
+        "filter_breakdown": breakdown,
+    }
+
+
+def render_tearsheet_html(cfg: dict, bt: dict) -> str:
+    """Render an institutional printable HTML quantitative strategy tear-sheet."""
+    ds = bt.get("data_summary", {})
+    sn = bt.get("stats_net", {})
+    sg = bt.get("stats_gross", {})
+    raw_sn = bt.get("raw_pine_stats_net", {})
+    tca = bt.get("tca_attribution", {})
+    sessions = bt.get("sessions_net", {})
+    trades = bt.get("trades", [])
+    strat = cfg.get("strategy", {})
+    epic = html.escape(str(ds.get("epic", cfg.get("epic", "GOLD"))))
+    name = html.escape(str(ds.get("name", epic)))
+    gen_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    edge = round(float(sn.get("net", 0.0)) - float(raw_sn.get("net", 0.0)), 2)
+
+    leg_rows = ""
+    for lbl, st_leg in (
+        ("Leg 1: USUAL (3B-TP / Single)", tca.get("usual", {})),
+        ("Leg 2: RUNNER (+1B Continuation)", tca.get("runner", {})),
+        ("Combined Pro Strategy (Net)", {"trades": sn.get("trades", 0), "win_rate_%": sn.get("win_rate_%", 0),
+                                          "gross": sg.get("net", 0), "spread_cost": tca.get("costs", {}).get("total_spread_cost", 0),
+                                          "net": sn.get("net", 0), "avg_net": sn.get("avg_trade", 0)}),
+    ):
+        leg_rows += (
+            f"<tr><td><b>{html.escape(lbl)}</b></td>"
+            f"<td>{st_leg.get('trades', 0)}</td>"
+            f"<td>{st_leg.get('win_rate_%', 0)}%</td>"
+            f"<td>${float(st_leg.get('gross', 0)):+.2f}</td>"
+            f"<td>-${abs(float(st_leg.get('spread_cost', 0))):.2f}</td>"
+            f"<td><b>${float(st_leg.get('net', 0)):+.2f}</b></td>"
+            f"<td>${float(st_leg.get('avg_net', 0)):+.2f}</td></tr>"
+        )
+
+    sess_rows = ""
+    for sk, sv in sessions.items():
+        sess_rows += (
+            f"<tr><td>{html.escape(sk.replace('_', ' ').title())}</td>"
+            f"<td>{sv.get('trades', 0)}</td><td>{sv.get('win_rate_%', 0)}%</td>"
+            f"<td>{sv.get('profit_factor', 0)}</td><td><b>${float(sv.get('net', 0)):+.2f}</b></td></tr>"
+        )
+
+    flt_rows = "".join(
+        f"<tr><td>{html.escape(str(r['reason']))}</td><td>{r['count']}</td></tr>"
+        for r in tca.get("filter_breakdown", [])
+    ) or "<tr><td colspan='2'>No blocked entries recorded.</td></tr>"
+
+    trade_rows = ""
+    for t in trades[-60:]:
+        trade_rows += (
+            f"<tr><td>{t.get('num')}</td><td>{html.escape(str(t.get('leg', 'SINGLE')))}</td>"
+            f"<td>{html.escape(str(t.get('side', '')))}</td><td>{html.escape(str(t.get('entry_time', ''))[:16])}</td>"
+            f"<td>{t.get('entry')}</td><td>{t.get('exit')}</td>"
+            f"<td>{html.escape(str(t.get('why_out', '')))}</td>"
+            f"<td><b>${float(t.get('net', 0)):+.2f}</b></td></tr>"
+        )
+
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Institutional Tear-Sheet — {epic}</title>
+<style>
+  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #0f172a; margin: 28px auto; max-width: 1020px; line-height: 1.45; }}
+  .hdr {{ display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #0f172a; padding-bottom:10px; margin-bottom:18px; }}
+  .kpis {{ display:grid; grid-template-columns:repeat(6, 1fr); gap:10px; margin-bottom:18px; }}
+  .kpi {{ border:1px solid #cbd5e1; border-radius:6px; padding:10px; background:#f8fafc; }}
+  .kpi .lbl {{ font-size:10px; text-transform:uppercase; color:#475569; font-weight:700; }}
+  .kpi .val {{ font-size:17px; font-weight:800; margin-top:2px; font-family:ui-monospace, monospace; }}
+  table {{ width:100%; border-collapse:collapse; margin-bottom:18px; font-size:12px; }}
+  th, td {{ border-bottom:1px solid #e2e8f0; padding:6px 8px; text-align:left; font-family:ui-monospace, monospace; }}
+  th {{ background:#f1f5f9; font-family:inherit; font-size:11px; text-transform:uppercase; color:#334155; }}
+  h2 {{ font-size:14px; margin:18px 0 8px; color:#0f172a; border-left:3px solid #0284c7; padding-left:8px; }}
+  .grid2 {{ display:grid; grid-template-columns:1.2fr 1fr; gap:18px; }}
+  .btn-print {{ background:#0284c7; color:#fff; border:none; border-radius:4px; padding:7px 14px; font-weight:700; cursor:pointer; }}
+  @media print {{ .no-print {{ display:none !important; }} body {{ margin: 10mm; }} }}
+</style></head><body>
+  <div class="hdr">
+    <div>
+      <div style="font-size:11px; font-weight:700; color:#0284c7; letter-spacing:0.06em;">RENKO ATR PRO INSTITUTIONAL QUANT DESK</div>
+      <h1 style="margin:2px 0; font-size:22px;">Strategy Performance Tear-Sheet — {epic} ({name})</h1>
+      <div style="font-size:11.5px; color:#475569;">ATR({strat.get('atr_len',5)}, /{strat.get('atr_div',15)}) · ST({strat.get('st_len',1)}, {strat.get('st_factor',2.1)}) · Confirm {strat.get('confirm_minutes',0)}m · Model E Dual-Order: {'ON' if strat.get('dual_order_mode') else 'OFF'} · Generated {gen_at}</div>
+    </div>
+    <button class="btn-print no-print" onclick="window.print()">🖨️ Print / Save PDF</button>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="lbl">Net P&amp;L</div><div class="val">${float(sn.get('net',0)):+.2f}</div></div>
+    <div class="kpi"><div class="lbl">Pro Edge vs Raw</div><div class="val">${edge:+.2f}</div></div>
+    <div class="kpi"><div class="lbl">Win Rate / Trades</div><div class="val">{sn.get('win_rate_%',0)}% ({sn.get('trades',0)})</div></div>
+    <div class="kpi"><div class="lbl">Profit Factor / R</div><div class="val">{sn.get('profit_factor',0)} / {sn.get('payoff_ratio',0)}R</div></div>
+    <div class="kpi"><div class="lbl">Sharpe / Sortino</div><div class="val">{sn.get('sharpe',0)} / {sn.get('sortino',0)}</div></div>
+    <div class="kpi"><div class="lbl">Max DD / Calmar</div><div class="val">-${float(sn.get('max_drawdown',0)):.2f} / {sn.get('calmar',0)}</div></div>
+  </div>
+  <h2>Transaction Cost &amp; Model E Leg Attribution</h2>
+  <table><thead><tr><th>Cohort</th><th>Trades</th><th>Win Rate</th><th>Gross P&amp;L</th><th>Spread Drag</th><th>Net P&amp;L</th><th>Avg Net/Trade</th></tr></thead><tbody>{leg_rows}</tbody></table>
+  <div class="grid2">
+    <div><h2>Session Performance (UTC)</h2><table><thead><tr><th>Session</th><th>Trades</th><th>Win Rate</th><th>PF</th><th>Net P&amp;L</th></tr></thead><tbody>{sess_rows}</tbody></table></div>
+    <div><h2>Institutional Guard Vetoes ({ds.get('filtered_count',0)} Total)</h2><table><thead><tr><th>Guard / Filter</th><th>Blocked Signals</th></tr></thead><tbody>{flt_rows}</tbody></table></div>
+  </div>
+  <h2>Executed Trade Ledger (Latest 60)</h2>
+  <table><thead><tr><th>#</th><th>Leg</th><th>Side</th><th>Entry (UTC)</th><th>Entry Px</th><th>Exit Px</th><th>Exit Reason</th><th>Net P&amp;L</th></tr></thead><tbody>{trade_rows}</tbody></table>
+</body></html>"""
+
+
 def _cfg_cache_key(cfg: dict) -> str:
     epic = str(cfg.get("epic", "GOLD")).upper()
     strat = cfg.get("strategy", {})
@@ -485,6 +666,7 @@ def serialize_backtest(cfg: dict, use_cache: bool = True, skip_network: bool = F
         "equity_curve": equity_curve,
         "raw_curve": raw_curve,
         "montecarlo": mc_net,
+        "tca_attribution": _compute_tca_attribution(trades, raw_trades, filtered),
     }
     with _BACKTEST_CACHE_LOCK:
         _BACKTEST_CACHE[cache_key] = (now, res)
@@ -674,6 +856,44 @@ class Handler(BaseHTTPRequestHandler):
                 "backtest": serialize_backtest(cfg),
                 "instrument_specs": INSTRUMENT_SPECS,
             })
+            return
+
+        if u.path == "/api/tearsheet":
+            cfg = load_config()
+            bt = serialize_backtest(cfg)
+            raw = render_tearsheet_html(cfg, bt).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.end_headers()
+            self.wfile.write(raw)
+            return
+
+        if u.path == "/api/export-trades.csv":
+            cfg = load_config()
+            bt = serialize_backtest(cfg)
+            buf = io.StringIO()
+            w = csv.writer(buf)
+            w.writerow(["num", "leg", "side", "size", "session", "entry_time", "exit_time",
+                        "trigger_px", "entry", "exit", "overshoot", "why_in", "why_out",
+                        "mfe_bricks", "mae_bricks", "gross", "net", "cum_net"])
+            for t in bt.get("trades", []):
+                w.writerow([
+                    t.get("num"), t.get("leg", "SINGLE"), t.get("side"), t.get("size"),
+                    t.get("session"), t.get("entry_time"), t.get("exit_time"),
+                    t.get("trigger_px"), t.get("entry"), t.get("exit"), t.get("overshoot"),
+                    t.get("why_in"), t.get("why_out"), t.get("mfe_bricks"), t.get("mae_bricks"),
+                    t.get("gross"), t.get("net"), t.get("cum_net"),
+                ])
+            raw = buf.getvalue().encode("utf-8")
+            epic_safe = "".join(c for c in str(cfg.get("epic", "GOLD")).upper() if c.isalnum() or c in "_-")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/csv; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="renko_trades_{epic_safe}.csv"')
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
             return
 
         if u.path == "/api/scanner":

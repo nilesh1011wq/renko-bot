@@ -1143,6 +1143,7 @@
           <button class="dock-tab" onclick="switchDockTab('tab-scanner', this)">📊 Market Scanner (<span id="dock-scanner-cnt" style="color:#10b981; font-weight:700;">16</span>)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-equity', this)">📈 Equity Curve (vs Raw)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-mc', this)">🎲 Monte Carlo Cone (2,500 Runs)</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-tca', this)">🎯 TCA &amp; Attribution</button>
           <button class="dock-tab" onclick="switchDockTab('tab-sessions', this)">🔑 Broker Env &amp; Sessions</button>
           <button class="dock-tab" onclick="switchDockTab('tab-log', this)">📜 Bot Activity Log</button>
         </div>
@@ -1161,6 +1162,8 @@
                 <span style="font-size:10.5px; color:#38bdf8; font-family:var(--font-mono); background:rgba(56,189,248,0.12); padding:2px 8px; border-radius:3px; border:1px solid rgba(56,189,248,0.3);">
                   🛡️ Pre-Execution Guard: ≤0.35 Brk Slippage | Candle Sync: :01s
                 </span>
+                <button type="button" class="btn-xs" onclick="window.open('/api/tearsheet', '_blank')" style="padding:2px 8px; font-weight:700; background:#0284c7; color:#fff;">📄 Tear-Sheet</button>
+                <button type="button" class="btn-xs" onclick="window.location.href='/api/export-trades.csv'" style="padding:2px 8px; font-weight:700;">📥 CSV</button>
               </div>
             </div>
             <div class="table-wrap" style="max-height:calc(100% - 32px);">
@@ -1276,6 +1279,49 @@
             </div>
             <div style="height:calc(100% - 22px); width:100%; position:relative;">
               <canvas id="mc-canvas" style="position:absolute; inset:0; width:100%; height:100%;"></canvas>
+            </div>
+          </div>
+
+          <!-- Tab: Execution Attribution & TCA -->
+          <div id="tab-tca" class="dock-pane">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:11.5px; font-weight:700; color:var(--text-1);">Transaction Cost Analysis (TCA) &amp; Model E Attribution</span>
+                <span id="tca-cost-pill" style="font-size:10.5px; font-family:var(--font-mono); color:#38bdf8;">--</span>
+              </div>
+              <div style="display:flex; gap:6px;">
+                <button type="button" class="btn-xs" onclick="window.open('/api/tearsheet', '_blank')" style="padding:3px 10px; font-weight:700; background:#0284c7; color:#fff;">📄 Open Institutional Tear-Sheet (Print / PDF)</button>
+                <button type="button" class="btn-xs" onclick="window.location.href='/api/export-trades.csv'" style="padding:3px 10px; font-weight:700;">📥 Export Ledger (CSV)</button>
+              </div>
+            </div>
+            <div style="display:grid; grid-template-columns:1.35fr 1fr; gap:10px; height:calc(100% - 28px);">
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Cohort / Leg</th>
+                      <th>Trades</th>
+                      <th>Win Rate</th>
+                      <th>Gross P&amp;L</th>
+                      <th>Spread Drag</th>
+                      <th>Net P&amp;L</th>
+                      <th>Avg/Trade</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tca-legs-tbody"></tbody>
+                </table>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Protection Guard / Filter</th>
+                      <th>Blocked Entries</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tca-filters-tbody"></tbody>
+                </table>
+              </div>
             </div>
           </div>
 
@@ -2614,6 +2660,9 @@
           }
         }
 
+        // Phase 3: TCA & Model E Attribution Tab
+        renderTcaTab(bt, activeEpic);
+
         // Trade List Table
         renderJournalTable(bt, bot);
 
@@ -2639,6 +2688,67 @@
         }
       } catch (err) {
         console.error('Error in renderAll:', err);
+      }
+    }
+
+    function renderTcaTab(bt, activeEpic) {
+      const tca = (bt && bt.tca_attribution) || {};
+      const usual = tca.usual || {};
+      const runner = tca.runner || {};
+      const costs = tca.costs || {};
+      const sn = (bt && bt.stats_net) || {};
+      const sg = (bt && bt.stats_gross) || {};
+
+      const pill = document.getElementById('tca-cost-pill');
+      if (pill) {
+        pill.textContent = `Spread Drag: -$${Number(costs.total_spread_cost || 0).toFixed(2)} ($${Number(costs.avg_spread_cost || 0).toFixed(2)}/trade) | Avg Overshoot: ${fmtPrice(costs.avg_overshoot || 0, activeEpic)} | Edge vs Raw: ${fmtUsd(costs.pro_edge_vs_raw || 0)}`;
+      }
+
+      const legBody = document.getElementById('tca-legs-tbody');
+      if (legBody) {
+        legBody.innerHTML = '';
+        const rows = [
+          ['Leg 1: USUAL (3B-TP / Single)', usual],
+          ['Leg 2: RUNNER (+1B Continuation)', runner],
+          ['Combined Pro Strategy (Net)', {
+            trades: sn.trades ?? 0,
+            'win_rate_%': sn['win_rate_%'] ?? 0,
+            gross: sg.net ?? costs.total_gross ?? 0,
+            spread_cost: costs.total_spread_cost ?? 0,
+            net: sn.net ?? costs.total_net ?? 0,
+            avg_net: sn.avg_trade ?? 0
+          }],
+        ];
+        for (const [label, st] of rows) {
+          const netVal = Number(st.net || 0);
+          const cls = netVal >= 0 ? 'pos' : 'neg';
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><b>${label}</b></td>
+            <td>${st.trades ?? 0}</td>
+            <td>${st['win_rate_%'] ?? 0}%</td>
+            <td>${fmtUsd(st.gross || 0)}</td>
+            <td class="neg">-$${Math.abs(Number(st.spread_cost || 0)).toFixed(2)}</td>
+            <td class="${cls}" style="font-weight:700;">${fmtUsd(netVal)}</td>
+            <td class="${Number(st.avg_net || 0) >= 0 ? 'pos' : 'neg'}">${fmtUsd(st.avg_net || 0)}</td>
+          `;
+          legBody.appendChild(tr);
+        }
+      }
+
+      const fltBody = document.getElementById('tca-filters-tbody');
+      if (fltBody) {
+        fltBody.innerHTML = '';
+        const items = tca.filter_breakdown || [];
+        if (items.length === 0) {
+          fltBody.innerHTML = '<tr><td colspan="2" style="text-align:center; color:var(--text-2); padding:12px;">No blocked entries in current window.</td></tr>';
+        } else {
+          for (const it of items) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${it.reason}</td><td style="font-weight:700; color:#f59e0b;">${it.count}</td>`;
+            fltBody.appendChild(tr);
+          }
+        }
       }
     }
 

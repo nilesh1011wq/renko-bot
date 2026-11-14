@@ -206,3 +206,27 @@ class Capital:
     def close_position(self, deal_id):
         r = self._req("DELETE", "/positions/" + deal_id)
         return self.confirm(r["dealReference"]) if "dealReference" in r else r
+
+    def working_orders(self):
+        return self._req("GET", "/workingorders").get("workingOrders", [])
+
+    def create_working_order(self, epic, direction, size, level, order_type="STOP",
+                             stop_level=None, profit_level=None):
+        body = {
+            "epic": epic,
+            "direction": direction,
+            "size": size,
+            "level": level,
+            "type": order_type,
+            "guaranteedStop": False,
+        }
+        if stop_level is not None:
+            body["stopLevel"] = stop_level
+        if profit_level is not None:
+            body["profitLevel"] = profit_level
+        r = self._req("POST", "/workingorders", body)
+        return self.confirm(r["dealReference"]) if "dealReference" in r else r
+
+    def delete_working_order(self, deal_id):
+        r = self._req("DELETE", "/workingorders/" + deal_id)
+        return self.confirm(r["dealReference"]) if "dealReference" in r else r
