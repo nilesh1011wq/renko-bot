@@ -509,19 +509,42 @@ TG_POLLER = TelegramCommandPoller()
 
 
 def run_parameter_optimizer(cfg: dict, body: dict | None = None) -> dict:
-    """Run grid search over ATR Divisor × Usual TP Bricks × Confirm Minutes on active market."""
+    """Run instrument-aware grid search over ATR Divisor × Usual TP Bricks × Confirm Minutes."""
     req = body if isinstance(body, dict) else {}
-    divisors = req.get("atr_divisors") or [15, 22, 32, 48]
-    tp_list = req.get("tp_bricks") or [2.0, 3.0, 4.0]
-    conf_list = req.get("confirm_minutes") or [0, 3, 5]
-    bars, days = ensure_data(cfg)
-    use_stop = bool(cfg.get("risk", {}).get("safety_stop_in_backtest", True))
+    base_cfg = copy.deepcopy(cfg)
+    clean_epic = "GOLD" if str(base_cfg.get("epic", "GOLD")).upper() == "XAUUSD" else str(base_cfg.get("epic", "GOLD")).upper()
+    if not req.get("preserve_current"):
+        apply_instrument_dna_to_config(base_cfg, clean_epic)
+
+    spec = INSTRUMENT_SPECS.get(clean_epic, {})
+    cat = spec.get("category", "Metals")
+    if req.get("atr_divisors"):
+        divisors = [int(d) for d in req["atr_divisors"]]
+    else:
+        default_divs = [8, 10, 12, 15] if cat in ("Crypto", "Indices") else [7, 9, 12, 15]
+        dna_div = int(round(float(base_cfg.get("strategy", {}).get("atr_div", 10))))
+        if 4 <= dna_div <= 48 and dna_div not in default_divs:
+            # Replace the closest non-extreme divisor or expand/trim to 4 divisors spanning the DNA
+            merged = sorted(set(default_divs + [dna_div]))
+            while len(merged) > 4:
+                # Drop whichever candidate is furthest from dna_div while keeping endpoints balanced
+                candidates = [x for x in merged if x != dna_div]
+                drop_x = min(candidates, key=lambda x: (abs(x - dna_div), -x))
+                merged.remove(drop_x)
+            divisors = merged
+        else:
+            divisors = default_divs
+
+    tp_list = req.get("tp_bricks") or [2.0, 2.5, 3.0]
+    conf_list = req.get("confirm_minutes") or [0, 2, 3]
+    bars, days = ensure_data(base_cfg)
+    use_stop = bool(base_cfg.get("risk", {}).get("safety_stop_in_backtest", True))
 
     rows = []
     for div in divisors:
         for tp in tp_list:
             for conf in conf_list:
-                tcfg = copy.deepcopy(cfg)
+                tcfg = copy.deepcopy(base_cfg)
                 tcfg["strategy"]["atr_div"] = int(div)
                 tcfg["strategy"]["tp_bricks"] = float(tp)
                 tcfg["strategy"]["confirm_minutes"] = int(conf)
@@ -542,14 +565,22 @@ def run_parameter_optimizer(cfg: dict, body: dict | None = None) -> dict:
                     "net": float(st.get("net", 0.0)),
                 })
 
-    rows.sort(key=lambda r: (r["calmar"], r["net"]), reverse=True)
+    rows.sort(
+        key=lambda r: (
+            1 if r["trades"] > 0 else 0,
+            r["calmar"],
+            r["profit_factor"],
+            r["net"],
+        ),
+        reverse=True,
+    )
     for idx, r in enumerate(rows, 1):
         r["rank"] = idx
 
     return {
         "ok": True,
-        "epic": str(cfg.get("epic", "GOLD")).upper(),
-        "resolution": cfg.get("resolution", "MINUTE"),
+        "epic": clean_epic,
+        "resolution": base_cfg.get("resolution", "MINUTE"),
         "tested_combos": len(rows),
         "scanned_at_gst": fmt_gst(),
         "results": rows,

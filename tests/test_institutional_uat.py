@@ -1239,6 +1239,17 @@ class TestInstitutionalUAT(unittest.TestCase):
                 self.assertIn("GST", opt_res["scanned_at_gst"])
                 self.assertGreaterEqual(opt_res["results"][0]["calmar"], opt_res["results"][-1]["calmar"])
 
+                # 2b. BTCUSD default optimizer uses Crypto DNA grid and never ranks 0-trade combos #1
+                btc_cfg = backtest.load_config()
+                btc_cfg["epic"] = "BTCUSD"
+                btc_opt = server.run_parameter_optimizer(btc_cfg, {})
+                self.assertEqual(btc_opt["tested_combos"], 36)
+                self.assertGreater(btc_opt["results"][0]["trades"], 0)
+                zero_indices = [i for i, r in enumerate(btc_opt["results"]) if r["trades"] == 0]
+                nonzero_indices = [i for i, r in enumerate(btc_opt["results"]) if r["trades"] > 0]
+                if zero_indices and nonzero_indices:
+                    self.assertGreater(min(zero_indices), max(nonzero_indices))
+
                 # 3. 2-way Telegram Command Handlers
                 self.assertIn("RENKO COCKPIT STATUS", server.handle_telegram_command("/status"))
                 self.assertIn("RENKO CLOUD DAILY DIGEST", server.handle_telegram_command("/pnl"))
