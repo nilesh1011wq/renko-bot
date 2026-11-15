@@ -1625,6 +1625,11 @@ class Handler(BaseHTTPRequestHandler):
                 pw = get_dashboard_password()
                 given = str(body.get("password", "")).strip()
                 if not pw:
+                    if is_view_only_public():
+                        self._send_json({
+                            "error": "No DASHBOARD_PASSWORD configured on server. Add DASHBOARD_PASSWORD in Render Environment Variables to unlock Admin.",
+                        }, 403)
+                        return
                     self._send_json({"ok": True, "authenticated": True})
                     return
                 if hmac.compare_digest(given, pw):
@@ -1813,7 +1818,10 @@ class Handler(BaseHTTPRequestHandler):
 
             if u.path == "/api/save-password":
                 pw = str(body.get("password", "")).strip()
-                update_dotenv({"DASHBOARD_PASSWORD": pw if pw else None})
+                env_updates = {"DASHBOARD_PASSWORD": pw if pw else None}
+                if not pw:
+                    env_updates["VIEW_ONLY_PUBLIC"] = None
+                update_dotenv(env_updates)
                 build_cloud_backup_snapshot(cfg)
                 if pw:
                     tok = expected_session_token(pw)
@@ -1830,6 +1838,8 @@ class Handler(BaseHTTPRequestHandler):
                     self._send_json({
                         "ok": True,
                         "password_protected": False,
+                        "view_only_public": False,
+                        "read_only": False,
                         "message": "Dashboard password removed (Open Access).",
                         "bot": get_bot_status(cfg, skip_network=True),
                     }, extra_headers=[("Set-Cookie", cookie)])
@@ -1837,19 +1847,39 @@ class Handler(BaseHTTPRequestHandler):
 
             if u.path == "/api/save-view-only":
                 enabled = bool(body.get("view_only", False))
-                update_dotenv({"VIEW_ONLY_PUBLIC": "1" if enabled else None})
+                extra_headers = None
+                issued_tok = None
+                if enabled and not get_dashboard_password():
+                    supplied_pw = str(body.get("password", "")).strip()
+                    if not supplied_pw:
+                        self._send_json({
+                            "ok": False,
+                            "error": "Please set a Dashboard Password first before enabling View-Only Share Mode so you can unlock it later.",
+                        }, 400)
+                        return
+                    update_dotenv({"DASHBOARD_PASSWORD": supplied_pw, "VIEW_ONLY_PUBLIC": "1"})
+                    issued_tok = expected_session_token(supplied_pw)
+                    cookie = f"renko_session={issued_tok}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000"
+                    extra_headers = [("Set-Cookie", cookie)]
+                else:
+                    update_dotenv({"VIEW_ONLY_PUBLIC": "1" if enabled else None})
                 build_cloud_backup_snapshot(cfg)
-                self._send_json({
+                ro_now = False if issued_tok else is_read_only_request(self)
+                res_obj = {
                     "ok": True,
                     "view_only_public": enabled,
-                    "read_only": is_read_only_request(self),
+                    "read_only": ro_now,
+                    "password_protected": bool(get_dashboard_password()),
                     "message": (
                         "Public View-Only Share Mode ENABLED. Visitors can view charts/metrics but cannot edit or trade."
                         if enabled else
                         "Public View-Only Share Mode DISABLED."
                     ),
                     "bot": get_bot_status(cfg, skip_network=True),
-                })
+                }
+                if issued_tok:
+                    res_obj["token"] = issued_tok
+                self._send_json(res_obj, extra_headers=extra_headers)
                 return
 
             if u.path == "/api/close-position":

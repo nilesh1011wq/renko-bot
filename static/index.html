@@ -1480,7 +1480,7 @@
                   <div style="display:flex; gap:6px; align-items:center;">
                     <input type="password" id="dash-pw-input" placeholder="Set access password (blank clears lock)" style="flex:1; font-size:11px; padding:4px 6px;" />
                     <button class="primary" onclick="saveDashboardPassword()" style="font-size:10.5px; padding:3px 8px;">🔒 Set Lock</button>
-                    <button onclick="clearDashboardPassword()" style="font-size:10.5px; padding:3px 8px;">🔓 Unlock</button>
+                    <button onclick="clearDashboardPassword()" title="Remove DASHBOARD_PASSWORD (switches to Open Access)" style="font-size:10.5px; padding:3px 8px;">🔓 Remove Password</button>
                   </div>
                 </div>
 
@@ -1920,6 +1920,7 @@
     }
 
     async function lockAdminSession() {
+      sessionStorage.removeItem('renko_admin_token');
       await fetch('/api/logout', { method: 'POST' });
       await loadState();
       showToast('👁️ Switched back to View-Only mode');
@@ -1928,21 +1929,50 @@
     async function toggleViewOnlyShareMode() {
       if (IS_READ_ONLY) { openAdminUnlockModal(); return; }
       const nextState = !VIEW_ONLY_PUBLIC;
+      const payload = {view_only: nextState};
+      if (nextState && !(STATE?.bot?.credentials?.password_protected)) {
+        const inp = document.getElementById('dash-pw-input');
+        let pw = inp ? inp.value.trim() : '';
+        if (!pw) {
+          pw = (window.prompt('Enter an Admin password first so only you can unlock View-Only Share Mode:') || '').trim();
+        }
+        if (!pw) {
+          showToast('🔒 Password required before enabling View-Only Share Mode');
+          if (inp) inp.focus();
+          return;
+        }
+        payload.password = pw;
+      }
       const res = await apiFetch('/api/save-view-only', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({view_only: nextState})
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (res.ok && data.ok) {
+        if (data.token) sessionStorage.setItem('renko_admin_token', data.token);
+        const inp = document.getElementById('dash-pw-input');
+        if (inp && payload.password) inp.value = '';
+        if (data.bot) STATE.bot = data.bot;
         applyReadOnlyUiState(data.read_only, data.view_only_public);
+        renderAll();
         showToast(data.message || 'View-Only mode updated');
+      } else {
+        showToast(data.error || 'Failed to update View-Only mode');
       }
     }
 
     async function apiFetch(url, options = {}) {
-      const res = await fetch(url, options);
+      const opts = Object.assign({}, options);
+      const hdrs = Object.assign({}, opts.headers || {});
+      const tok = sessionStorage.getItem('renko_admin_token');
+      if (tok && !hdrs['Authorization']) {
+        hdrs['Authorization'] = 'Bearer ' + tok;
+      }
+      opts.headers = hdrs;
+      const res = await fetch(url, opts);
       if (res.status === 401) {
+        sessionStorage.removeItem('renko_admin_token');
         const cancelBtn = document.getElementById('btn-cancel-login');
         if (cancelBtn) cancelBtn.style.display = 'none';
         document.getElementById('login-modal').classList.add('active');
@@ -1968,14 +1998,16 @@
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({password: pw})
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
+        if (data.token) sessionStorage.setItem('renko_admin_token', data.token);
         document.getElementById('login-modal').classList.remove('active');
         document.getElementById('login-pw').value = '';
         await loadState();
         await fetchScannerData();
-        showToast('Cockpit unlocked');
+        showToast(IS_READ_ONLY ? '⚠️ Unlock failed: check DASHBOARD_PASSWORD' : '🔓 Admin Cockpit unlocked');
       } else {
-        showToast('Invalid password');
+        showToast(data.error || 'Invalid password');
       }
     }
 
@@ -2154,6 +2186,7 @@
       });
       const data = await res.json();
       if (res.ok && data.ok) {
+        if (data.token) sessionStorage.setItem('renko_admin_token', data.token);
         if (inp) inp.value = '';
         if (data.bot) STATE.bot = data.bot;
         renderAll();
@@ -2171,7 +2204,9 @@
       });
       const data = await res.json();
       if (res.ok && data.ok) {
+        sessionStorage.removeItem('renko_admin_token');
         if (data.bot) STATE.bot = data.bot;
+        applyReadOnlyUiState(false, false);
         renderAll();
         showToast('🔓 ' + (data.message || 'Password lock cleared'));
       }
