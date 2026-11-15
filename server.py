@@ -163,6 +163,38 @@ def is_request_authenticated(handler: BaseHTTPRequestHandler) -> bool:
     return False
 
 
+def is_view_only_public() -> bool:
+    load_env()
+    return os.environ.get("VIEW_ONLY_PUBLIC", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def is_admin_authenticated(handler: BaseHTTPRequestHandler) -> bool:
+    pw = get_dashboard_password()
+    if not pw:
+        return not is_view_only_public()
+    return is_request_authenticated(handler)
+
+
+def is_read_only_request(handler: BaseHTTPRequestHandler) -> bool:
+    return is_view_only_public() and not is_admin_authenticated(handler)
+
+
+def redact_bot_status_for_readonly(bot_st: dict) -> dict:
+    """Strip masked credential identifiers and chat IDs in View-Only Share Mode."""
+    out = copy.deepcopy(bot_st)
+    creds = out.get("credentials")
+    if isinstance(creds, dict):
+        creds["masked_identifier"] = "PROTECTED" if creds.get("connected") else None
+        creds["masked_key"] = "PROTECTED" if creds.get("connected") else None
+        creds["telegram_chat_id"] = "PROTECTED" if creds.get("telegram") else ""
+        creds["telegram_masked_token"] = "PROTECTED" if creds.get("telegram") else ""
+    tg = out.get("telegram")
+    if isinstance(tg, dict):
+        tg["chat_id"] = "PROTECTED" if tg.get("configured") else ""
+        tg["masked_token"] = "PROTECTED" if tg.get("configured") else ""
+    return out
+
+
 # ----------------------------------------------------------------------------
 # 24/7 Background Watcher Worker
 # ----------------------------------------------------------------------------
@@ -1445,32 +1477,45 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({
                 "password_required": bool(get_dashboard_password()),
                 "authenticated": is_request_authenticated(self),
+                "view_only_public": is_view_only_public(),
+                "read_only": is_read_only_request(self),
             })
             return
 
-        if not is_request_authenticated(self):
+        if not is_request_authenticated(self) and not is_view_only_public():
             self._send_json({"error": "Authentication required", "auth_required": True}, 401)
             return
 
+        ro_mode = is_read_only_request(self)
+
         if u.path == "/api/state":
             cfg = load_config()
+            bot_st = get_bot_status(cfg)
+            if ro_mode:
+                bot_st = redact_bot_status_for_readonly(bot_st)
             self._send_json({
                 "config": cfg,
-                "bot": get_bot_status(cfg),
+                "bot": bot_st,
                 "backtest": serialize_backtest(cfg),
                 "instrument_specs": INSTRUMENT_SPECS,
+                "read_only": ro_mode,
+                "view_only_public": is_view_only_public(),
             })
             return
 
         if u.path in ("/api/status", "/api/broker-status"):
             cfg = load_config()
             bot_st = get_bot_status(cfg, skip_network=True)
+            if ro_mode:
+                bot_st = redact_bot_status_for_readonly(bot_st)
             self._send_json({
                 "ok": True,
                 "credentials": bot_st.get("credentials", {}),
                 "telegram": bot_st.get("telegram", {"configured": False, "chat_id": ""}),
                 "watcher": bot_st.get("watcher", {}),
                 "kill_switch": bot_st.get("kill_switch", False),
+                "read_only": ro_mode,
+                "view_only_public": is_view_only_public(),
             })
             return
 
@@ -1543,6 +1588,9 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if u.path == "/api/backup-state":
+            if ro_mode:
+                self._send_json({"error": "Read-Only Share Mode: state backup export restricted to Admin.", "read_only": True}, 403)
+                return
             self._send_json(build_cloud_backup_snapshot())
             return
 
@@ -1593,10 +1641,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"ok": True}, extra_headers=[("Set-Cookie", cookie)])
                 return
 
-            # All other POST endpoints require authentication
-            if not is_request_authenticated(self):
+            # All other POST endpoints require authentication (or view-only read-only compute allowlist)
+            if not is_request_authenticated(self) and not is_view_only_public():
                 self._send_json({"error": "Authentication required", "auth_required": True}, 401)
                 return
+
+            if is_read_only_request(self):
+                if u.path == "/api/scanner":
+                    body["force"] = False
+                elif u.path != "/api/optimize":
+                    self._send_json({
+                        "error": "Read-Only Share Mode is active. Unlock with Admin password to make changes.",
+                        "read_only": True,
+                    }, 403)
+                    return
 
             cfg = load_config()
 
@@ -1775,6 +1833,23 @@ class Handler(BaseHTTPRequestHandler):
                         "message": "Dashboard password removed (Open Access).",
                         "bot": get_bot_status(cfg, skip_network=True),
                     }, extra_headers=[("Set-Cookie", cookie)])
+                return
+
+            if u.path == "/api/save-view-only":
+                enabled = bool(body.get("view_only", False))
+                update_dotenv({"VIEW_ONLY_PUBLIC": "1" if enabled else None})
+                build_cloud_backup_snapshot(cfg)
+                self._send_json({
+                    "ok": True,
+                    "view_only_public": enabled,
+                    "read_only": is_read_only_request(self),
+                    "message": (
+                        "Public View-Only Share Mode ENABLED. Visitors can view charts/metrics but cannot edit or trade."
+                        if enabled else
+                        "Public View-Only Share Mode DISABLED."
+                    ),
+                    "bot": get_bot_status(cfg, skip_network=True),
+                })
                 return
 
             if u.path == "/api/close-position":

@@ -610,6 +610,19 @@
       z-index: 100;
       box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     }
+    body.read-only-mode .sidebar input,
+    body.read-only-mode .sidebar select,
+    body.read-only-mode .sidebar button,
+    body.read-only-mode #in-epic,
+    body.read-only-mode .top-actions button:not(.ro-allow),
+    body.read-only-mode #tab-optimizer button,
+    body.read-only-mode #tab-orders button,
+    body.read-only-mode #tab-broker button:not(.ro-allow),
+    body.read-only-mode #tab-broker input,
+    body.read-only-mode #tab-broker select {
+      opacity: 0.45 !important;
+      pointer-events: none !important;
+    }
   </style>
 </head>
 <body>
@@ -623,7 +636,10 @@
       </div>
       <p>Enter your <code>DASHBOARD_PASSWORD</code> to unlock strategy controls and live broker actions.</p>
       <input type="password" id="login-pw" placeholder="Dashboard password..." onkeydown="if(event.key==='Enter')submitLogin()" />
-      <button class="primary" style="width:100%;padding:10px;" onclick="submitLogin()">Unlock Cockpit</button>
+      <div style="display:flex; gap:8px; margin-top:6px;">
+        <button class="primary" style="flex:1;padding:10px;" onclick="submitLogin()">Unlock Cockpit</button>
+        <button id="btn-cancel-login" style="display:none; padding:10px 14px;" onclick="document.getElementById('login-modal').classList.remove('active')">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -784,6 +800,12 @@
         <span class="dot amber" id="hdr-conn-dot"></span>
         <span class="lbl">BROKER</span>
         <span class="val" id="hdr-conn">SAMPLE / DEMO</span>
+      </div>
+      <div class="pill" id="pill-readonly" style="display:none; cursor:pointer; background:rgba(245,158,11,0.18); border:1px solid #f59e0b;" onclick="openAdminUnlockModal()" title="Public View-Only Share Mode: Visitors cannot edit or trade. Click to unlock Admin with password.">
+        <span class="val" style="color:#fbbf24; font-weight:700;">👁️ VIEW-ONLY · 🔑 Unlock</span>
+      </div>
+      <div class="pill" id="pill-admin-unlocked" style="display:none; cursor:pointer; background:rgba(16,185,129,0.16); border:1px solid #10b981;" onclick="lockAdminSession()" title="Admin Unlocked while Public View-Only Share Mode is active. Click to lock back to View-Only.">
+        <span class="val" style="color:#34d399; font-weight:700;">🔓 ADMIN · Lock View</span>
       </div>
     </div>
 
@@ -1461,6 +1483,17 @@
                     <button onclick="clearDashboardPassword()" style="font-size:10.5px; padding:3px 8px;">🔓 Unlock</button>
                   </div>
                 </div>
+
+                <div style="border-top:1px solid var(--border); padding-top:8px; margin-top:8px;">
+                  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:5px;">
+                    <span style="font-weight:700;">👁️ Public View-Only Share Mode (<code>VIEW_ONLY_PUBLIC</code>)</span>
+                    <span id="vo-status-badge" class="badge amber" style="font-size:10px;">OFF</span>
+                  </div>
+                  <div style="display:flex; gap:6px; align-items:center; justify-content:space-between;">
+                    <span style="font-size:10px; color:var(--text-dim);">Share link openly without allowing edits, trades, or key access.</span>
+                    <button id="btn-toggle-viewonly" class="ro-allow" onclick="toggleViewOnlyShareMode()" style="font-size:10.5px; padding:3px 8px; background:#0284c7; color:#fff; white-space:nowrap;">👁️ Enable View-Only</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1855,11 +1888,75 @@
       }
     }
 
+    let IS_READ_ONLY = false;
+    let VIEW_ONLY_PUBLIC = false;
+
+    function applyReadOnlyUiState(readOnly, viewOnlyPublic) {
+      IS_READ_ONLY = !!readOnly;
+      VIEW_ONLY_PUBLIC = !!viewOnlyPublic;
+      document.body.classList.toggle('read-only-mode', IS_READ_ONLY);
+      const pillRo = document.getElementById('pill-readonly');
+      const pillAdm = document.getElementById('pill-admin-unlocked');
+      if (pillRo) pillRo.style.display = IS_READ_ONLY ? 'inline-flex' : 'none';
+      if (pillAdm) pillAdm.style.display = (VIEW_ONLY_PUBLIC && !IS_READ_ONLY) ? 'inline-flex' : 'none';
+      const inEpic = document.getElementById('in-epic');
+      if (inEpic) inEpic.disabled = IS_READ_ONLY;
+      const voBadge = document.getElementById('vo-status-badge');
+      const voBtn = document.getElementById('btn-toggle-viewonly');
+      if (voBadge) {
+        voBadge.textContent = VIEW_ONLY_PUBLIC ? 'ACTIVE' : 'OFF';
+        voBadge.className = 'badge ' + (VIEW_ONLY_PUBLIC ? 'green' : 'amber');
+      }
+      if (voBtn) {
+        voBtn.textContent = VIEW_ONLY_PUBLIC ? '🔓 Disable View-Only' : '👁️ Enable View-Only';
+        voBtn.style.background = VIEW_ONLY_PUBLIC ? '#b45309' : '#0284c7';
+      }
+    }
+
+    function openAdminUnlockModal() {
+      const cancelBtn = document.getElementById('btn-cancel-login');
+      if (cancelBtn) cancelBtn.style.display = 'inline-block';
+      document.getElementById('login-modal').classList.add('active');
+    }
+
+    async function lockAdminSession() {
+      await fetch('/api/logout', { method: 'POST' });
+      await loadState();
+      showToast('👁️ Switched back to View-Only mode');
+    }
+
+    async function toggleViewOnlyShareMode() {
+      if (IS_READ_ONLY) { openAdminUnlockModal(); return; }
+      const nextState = !VIEW_ONLY_PUBLIC;
+      const res = await apiFetch('/api/save-view-only', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({view_only: nextState})
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        applyReadOnlyUiState(data.read_only, data.view_only_public);
+        showToast(data.message || 'View-Only mode updated');
+      }
+    }
+
     async function apiFetch(url, options = {}) {
       const res = await fetch(url, options);
       if (res.status === 401) {
+        const cancelBtn = document.getElementById('btn-cancel-login');
+        if (cancelBtn) cancelBtn.style.display = 'none';
         document.getElementById('login-modal').classList.add('active');
         throw new Error('Authentication required');
+      }
+      if (res.status === 403) {
+        try {
+          const clone = res.clone();
+          const errJson = await clone.json();
+          if (errJson && errJson.read_only) {
+            applyReadOnlyUiState(true, true);
+            showToast('👁️ View-Only Share Mode — click 🔑 Unlock to edit');
+          }
+        } catch (e) {}
       }
       return res;
     }
@@ -1875,6 +1972,7 @@
         document.getElementById('login-modal').classList.remove('active');
         document.getElementById('login-pw').value = '';
         await loadState();
+        await fetchScannerData();
         showToast('Cockpit unlocked');
       } else {
         showToast('Invalid password');
@@ -1883,7 +1981,7 @@
 
     let _autoRestoringCreds = false;
     async function checkAndRestoreBrokerCredentials() {
-      if (_autoRestoringCreds) return;
+      if (IS_READ_ONLY || _autoRestoringCreds) return;
       const creds = STATE?.bot?.credentials || {};
       if (creds.connected) return;
       const raw = localStorage.getItem('renko_broker_creds');
@@ -1918,6 +2016,7 @@
     }
 
     async function syncCloudBackupToBrowser() {
+      if (IS_READ_ONLY) return;
       try {
         const res = await apiFetch('/api/backup-state');
         if (!res.ok) return;
@@ -1930,7 +2029,7 @@
 
     let _autoRestoredCloudState = false;
     async function checkAndRestoreCloudState() {
-      if (_autoRestoredCloudState) return;
+      if (IS_READ_ONLY || _autoRestoredCloudState) return;
       _autoRestoredCloudState = true;
       try {
         const raw = localStorage.getItem('renko_cloud_state_backup');
@@ -2401,6 +2500,7 @@
       try {
         const res = await apiFetch('/api/state');
         STATE = await res.json();
+        applyReadOnlyUiState(STATE?.read_only, STATE?.view_only_public);
         if (STATE && STATE.config) {
           syncInputsFromConfig(STATE.config);
           if (STATE.config.epic) {

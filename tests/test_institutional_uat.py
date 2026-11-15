@@ -1382,6 +1382,74 @@ class TestInstitutionalUAT(unittest.TestCase):
                     os.environ.pop("DASHBOARD_PASSWORD", None)
                 backtest.save_config(orig_cfg)
 
+    def test_32_view_only_public_share_mode(self):
+        """Verify Read-Only / View-Only Share Mode blocks mutations & backups while allowing Admin unlock."""
+        def _make_handler(path: str, payload: dict | None = None):
+            h = server.Handler.__new__(server.Handler)
+            raw = json.dumps(payload or {}).encode("utf-8")
+            h.headers = {"Content-Length": str(len(raw))} if payload is not None else {}
+            h.rfile = io.BytesIO(raw)
+            h.wfile = io.BytesIO()
+            h.path = path
+            h.send_response = MagicMock()
+            h.send_header = MagicMock()
+            h.end_headers = MagicMock()
+            return h
+
+        with patch.dict(os.environ, {"VIEW_ONLY_PUBLIC": "1", "DASHBOARD_PASSWORD": "AdminSharePass77"}):
+            orig_load_env = server.load_env
+            server.load_env = lambda: None
+            try:
+                tok = server.expected_session_token("AdminSharePass77")
+
+                # 1. Public visitor GET /api/auth-status & /api/state -> 200 read-only, /api/backup-state -> 403
+                h_auth = _make_handler("/api/auth-status")
+                h_auth.do_GET()
+                h_auth.send_response.assert_called_with(200)
+                a_res = json.loads(h_auth.wfile.getvalue().decode("utf-8"))
+                self.assertTrue(a_res["view_only_public"])
+                self.assertTrue(a_res["read_only"])
+
+                h_st = _make_handler("/api/state")
+                h_st.do_GET()
+                h_st.send_response.assert_called_with(200)
+                st_res = json.loads(h_st.wfile.getvalue().decode("utf-8"))
+                self.assertTrue(st_res["read_only"])
+
+                h_bk = _make_handler("/api/backup-state")
+                h_bk.do_GET()
+                h_bk.send_response.assert_called_with(403)
+
+                # 2. Public visitor mutating POSTs blocked with 403
+                for ep_path, payload in (
+                    ("/api/config", {"epic": "BTCUSD"}),
+                    ("/api/switch-instrument", {"epic": "ETHUSD"}),
+                    ("/api/kill-switch", {"kill": True}),
+                ):
+                    h_mut = _make_handler(ep_path, payload)
+                    h_mut.do_POST()
+                    h_mut.send_response.assert_called_with(403)
+                    m_res = json.loads(h_mut.wfile.getvalue().decode("utf-8"))
+                    self.assertTrue(m_res.get("read_only"))
+
+                # 3. Public visitor read-only /api/optimize allowed
+                h_opt = _make_handler("/api/optimize", {"atr_divisors": [15], "tp_bricks": [3.0], "confirm_minutes": [0]})
+                h_opt.do_POST()
+                h_opt.send_response.assert_called_with(200)
+
+                # 4. Authenticated Admin passes read-only gate on GET /api/backup-state
+                h_adm_bk = _make_handler("/api/backup-state")
+                h_adm_bk.headers["Authorization"] = f"Bearer {tok}"
+                h_adm_bk.do_GET()
+                h_adm_bk.send_response.assert_called_with(200)
+
+                # 5. UI markers present
+                html_src = (Path(backtest.ROOT) / "static" / "index.html").read_text(encoding="utf-8")
+                for marker in ("pill-readonly", "btn-toggle-viewonly", "applyReadOnlyUiState", "/api/save-view-only"):
+                    self.assertIn(marker, html_src)
+            finally:
+                server.load_env = orig_load_env
+
 
 if __name__ == "__main__":
     unittest.main()
