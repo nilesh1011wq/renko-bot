@@ -202,7 +202,7 @@ class BackgroundWatcher:
             self.checks_count += 1
             self.last_check = datetime.now(timezone.utc).isoformat()
             self.last_error = None
-            monitored = summary.get("monitored", 16)
+            monitored = summary.get("monitored", 19)
             open_deals = summary.get("open_deals", 0)
             self.last_status = f"OK ({cap.env.upper()}) — monitored {monitored} mkts | {open_deals} open deals | check #{self.checks_count}"
             if not had_pending and PENDING_FILE.exists():
@@ -317,8 +317,8 @@ def handle_telegram_command(text: str, cfg: dict | None = None) -> str:
             f"/status — Live worker, market & kill-switch state\n"
             f"/positions — Open Capital.com deals & UPL\n"
             f"/pnl or /digest — Daily P&L & Model E attribution\n"
-            f"/dna [EPIC] — 15-Year Optimal DNA settings (all 16 markets)\n"
-            f"/scanner — 16-market active signals summary\n"
+            f"/dna [EPIC] — 15-Year Optimal DNA settings (all 19 markets)\n"
+            f"/scanner — 19-market active signals summary\n"
             f"/pause — Pause 24/7 watcher\n"
             f"/resume — Clear kill switch & start watcher\n"
             f"/flatten — EMERGENCY KILL SWITCH & pause"
@@ -349,7 +349,7 @@ def handle_telegram_command(text: str, cfg: dict | None = None) -> str:
         if target:
             hit = next((r for r in rows if r.get("epic") == target), None)
             if not hit:
-                return f"🧬 No 15Y DNA profile found for '{target}'. Send /dna to see all 16 markets."
+                return f"🧬 No 15Y DNA profile found for '{target}'. Send /dna to see all {len(rows)} markets."
             op = hit.get("optimal_params", {})
             return (
                 f"🧬 {hit['epic']} ({hit['name']}) — 15Y OPTIMAL DNA\n"
@@ -396,7 +396,7 @@ def handle_telegram_command(text: str, cfg: dict | None = None) -> str:
         items = res.get("items", [])
         active = [r for r in items if r.get("signal_type") in ("BUY", "SELL") and not r.get("veto")]
         lines = [
-            f"📊 16-Market Scanner ({fmt_gst()}): {res.get('ready_count', 0)}/16 READY | {len(active)} ACTIVE SIGNALS"
+            f"📊 {len(items)}-Market Scanner ({fmt_gst()}): {res.get('ready_count', 0)}/{len(items)} READY | {len(active)} ACTIVE SIGNALS"
         ]
         for r in (active or items[:6]):
             lines.append(f"• {r.get('epic')}: {r.get('signal')} @ {r.get('price')} ({r.get('filter_status')})")

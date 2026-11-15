@@ -16,6 +16,8 @@ class TestMultiInstrument(unittest.TestCase):
             "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF",
             # Major Indices
             "US500", "US100", "US30", "GER40", "UK100", "JP225",
+            # Crypto (24/7)
+            "BTCUSD", "ETHUSD", "SOLUSD",
         ]
         for epic in required:
             self.assertIn(epic, INSTRUMENT_SPECS, f"Missing spec for {epic}")
@@ -39,6 +41,14 @@ class TestMultiInstrument(unittest.TestCase):
         us500_aliases = resolve_epic_alias("US500")
         self.assertIn("SP500", us500_aliases)
 
+        # Crypto aliases
+        btc_aliases = resolve_epic_alias("BTCUSD")
+        self.assertIn("BITCOIN", btc_aliases)
+        eth_aliases = resolve_epic_alias("ETHUSD")
+        self.assertIn("ETHEREUM", eth_aliases)
+        sol_aliases = resolve_epic_alias("SOLUSD")
+        self.assertIn("SOLANA", sol_aliases)
+
     def test_sample_candle_generation_across_classes(self):
         """Verify realistic candles are generated with correct scale & price levels."""
         # Oil
@@ -55,6 +65,19 @@ class TestMultiInstrument(unittest.TestCase):
         sp_bars, _ = generate_sample_gold_data(epic="US500", days_intraday=3, seed=42)
         self.assertTrue(len(sp_bars) > 0)
         self.assertTrue(4000.0 < sp_bars[-1]["c"] < 8000.0, f"Unexpected US500 price: {sp_bars[-1]['c']}")
+
+        # Crypto (BTCUSD, ETHUSD, SOLUSD)
+        btc_bars, _ = generate_sample_gold_data(epic="BTCUSD", days_intraday=3, seed=42)
+        self.assertTrue(len(btc_bars) > 0)
+        self.assertTrue(40000.0 < btc_bars[-1]["c"] < 150000.0, f"Unexpected BTCUSD price: {btc_bars[-1]['c']}")
+
+        eth_bars, _ = generate_sample_gold_data(epic="ETHUSD", days_intraday=3, seed=42)
+        self.assertTrue(len(eth_bars) > 0)
+        self.assertTrue(1000.0 < eth_bars[-1]["c"] < 10000.0, f"Unexpected ETHUSD price: {eth_bars[-1]['c']}")
+
+        sol_bars, _ = generate_sample_gold_data(epic="SOLUSD", days_intraday=3, seed=42)
+        self.assertTrue(len(sol_bars) > 0)
+        self.assertTrue(50.0 < sol_bars[-1]["c"] < 1000.0, f"Unexpected SOLUSD price: {sol_bars[-1]['c']}")
 
     def test_serialize_backtest_with_oil_and_forex(self):
         """Verify serialize_backtest returns correct digits and brick metrics for other instruments."""
@@ -96,16 +119,17 @@ class TestMultiInstrument(unittest.TestCase):
             self.assertLess(t["brick_size"], 0.05, f"Brick size too large for Forex: {t['brick_size']}")
 
     def test_scanner_engine_all_instruments(self):
-        """Verify multi-instrument scanner evaluates all 16 instruments with correct metadata."""
+        """Verify multi-instrument scanner evaluates all 19 instruments with correct metadata."""
         from scanner import scan_all_instruments, get_cached_or_scan_all
         cfg = load_config()
         res = scan_all_instruments(cfg)
         self.assertIn("items", res)
-        self.assertEqual(len(res["items"]), 16)
+        self.assertEqual(len(res["items"]), 19)
         
         epics = {it["epic"] for it in res["items"]}
         expected_epics = {"GOLD", "SILVER", "OIL_CRUDE", "OIL_BRENT", "EURUSD", "GBPUSD", "USDJPY",
-                          "AUDUSD", "USDCAD", "USDCHF", "US500", "US100", "US30", "GER40", "UK100", "JP225"}
+                          "AUDUSD", "USDCAD", "USDCHF", "US500", "US100", "US30", "GER40", "UK100", "JP225",
+                          "BTCUSD", "ETHUSD", "SOLUSD"}
         self.assertEqual(epics, expected_epics)
 
         for it in res["items"]:
@@ -123,8 +147,12 @@ class TestMultiInstrument(unittest.TestCase):
                 self.assertEqual(it["currency"], "")
                 self.assertEqual(it["pip_factor"], 100)
                 self.assertEqual(it["digits"], 2)
-            elif it["epic"] in ("GOLD", "SILVER", "OIL_CRUDE", "OIL_BRENT"):
+            elif it["epic"] in ("GOLD", "SILVER", "OIL_CRUDE", "OIL_BRENT", "BTCUSD", "ETHUSD", "SOLUSD"):
                 self.assertEqual(it["currency"], "$")
+            if it["epic"] == "BTCUSD":
+                self.assertEqual(it["digits"], 1)
+            elif it["epic"] in ("ETHUSD", "SOLUSD"):
+                self.assertEqual(it["digits"], 2)
 
     def test_step_multi_market_execution(self):
         """Verify step_multi_market runs across all instruments independently without blocking."""

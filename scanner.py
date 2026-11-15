@@ -1,5 +1,5 @@
 """Multi-Market Strategy Scanner.
-Continuously monitors 15 instruments (Metals, Energy, Forex, Indices)
+Continuously monitors 19 instruments (Metals, Energy, Forex, Indices, Crypto)
 evaluating Renko bricks, Supertrend direction, and institutional filter rules.
 """
 from __future__ import annotations
@@ -22,6 +22,7 @@ ALL_SCAN_EPICS = [
     "OIL_CRUDE", "OIL_BRENT",
     "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF",
     "US500", "US100", "US30", "GER40", "UK100", "JP225",
+    "BTCUSD", "ETHUSD", "SOLUSD",
 ]
 
 
@@ -215,7 +216,7 @@ SCAN_TTL_SECONDS = 15.0
 
 
 def scan_all_instruments(base_cfg: dict, cap: Optional[Capital] = None) -> Dict[str, Any]:
-    """Perform a full scan over all 16 supported global instruments."""
+    """Perform a full scan over all 19 supported global instruments."""
     items = []
     buy_signals = 0
     sell_signals = 0

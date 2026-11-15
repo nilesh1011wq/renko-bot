@@ -270,6 +270,7 @@ def build_guide() -> Path:
         "AUDUSD": "USD_BLOC (Max 2)", "USDCAD": "USD_BLOC (Max 2)", "USDCHF": "USD_BLOC (Max 2)",
         "US500": "US_INDICES (Max 2)", "US100": "US_INDICES (Max 2)", "US30": "US_INDICES (Max 2)",
         "GER40": "EU_INDICES (Max 2)", "UK100": "EU_INDICES (Max 2)", "JP225": "Asia Index",
+        "BTCUSD": "CRYPTO (Max 2)", "ETHUSD": "CRYPTO (Max 2)", "SOLUSD": "CRYPTO (Max 2)",
     }
     for epic, sp in INSTRUMENT_SPECS.items():
         inst_rows.append(
@@ -287,6 +288,8 @@ def build_guide() -> Path:
         net15 = float(r.get("net_15y", 0.0))
         edge15 = float(r.get("edge_vs_raw_15y", 0.0))
         net_cls = "pos" if net15 >= 0 else "neg"
+        edge_cls = "pos" if edge15 >= 0 else "neg"
+        edge_str = f"+${edge15:,.0f}" if edge15 >= 0 else f"-${abs(edge15):,.0f}"
         dna_rows.append(
             f"<tr><td><b>{html.escape(str(r.get('epic', '')))}</b></td>"
             f"<td>{html.escape(str(r.get('category', '')))}</td>"
@@ -299,7 +302,7 @@ def build_guide() -> Path:
             f"<td>{r.get('sharpe', 0)}</td>"
             f"<td><b>{r.get('eras_profitable', 0)}/5</b></td>"
             f"<td class='{net_cls}'>${net15:,.0f}</td>"
-            f"<td class='pos'>+${edge15:,.0f}</td></tr>"
+            f"<td class='{edge_cls}'>{edge_str}</td></tr>"
         )
 
     bench_rows = []
@@ -314,7 +317,7 @@ def build_guide() -> Path:
         )
 
     glossary = [
-        ("15Y Optimal DNA", "Per-instrument ATR/Supertrend/Model-E/Session configuration selected across 5 macro regimes (2011–2026) with bid/ask spreads.", "Custom 'recipe' for each of the 16 markets instead of forcing one setting on everything."),
+        ("15Y Optimal DNA", "Per-instrument ATR/Supertrend/Model-E/Session configuration selected across 5 macro regimes (2011–2026) with bid/ask spreads.", "Custom 'recipe' for each of the 19 markets (including BTC, ETH & Solana) instead of forcing one setting on everything."),
         ("ATR (Average True Range)", "Average size of recent daily price swings using Wilder's RMA smoothing.", "Thermometer of market volatility: bigger swings = bigger Renko bricks."),
         ("Brick Size", "Exact price height of one Renko block: round_to_tick(Daily ATR(5) / ATR Divisor).", "Height of each Lego brick on the chart."),
         ("BE (Breakeven Lock)", "Moving the Runner's Stop-Loss to its entry price once Leg 1 (Usual TP) banks profit.", "Locking your seat-belt so a winning trade can NEVER turn into a loser."),
@@ -471,7 +474,7 @@ def build_guide() -> Path:
     <div class="kpi-card"><div class="k-lbl">Alpha vs Raw Strategy</div><div class="k-val">${edge:+.2f}</div></div>
     <div class="kpi-card"><div class="k-lbl">Win Rate / Profit Factor</div><div class="k-val">{sn.get('win_rate_%',0)}% / {sn.get('profit_factor',0)}</div></div>
     <div class="kpi-card"><div class="k-lbl">Sharpe / Calmar Ratio</div><div class="k-val">{sn.get('sharpe',0)} / {sn.get('calmar',0)}</div></div>
-    <div class="kpi-card"><div class="k-lbl">Markets Monitored 24/7</div><div class="k-val">16 Global</div></div>
+    <div class="kpi-card"><div class="k-lbl">Markets Monitored 24/7</div><div class="k-val">19 Global</div></div>
   </div>
 </section>
 
@@ -543,8 +546,8 @@ def build_guide() -> Path:
 
 <div class="page-break"></div>
 <div class="shot-wrap">
-  <img src="{img_scanner}" alt="16 Market Scanner & Presets"/>
-  <div class="shot-cap">Screenshot B — 16-Market Strategy Scanner with Per-Asset Category Profiles &amp; One-Click Auto/Pause Controls</div>
+  <img src="{img_scanner}" alt="19 Market Scanner & Presets"/>
+  <div class="shot-cap">Screenshot B — Multi-Market Strategy Scanner with Per-Asset Category Profiles (Metals, Energy, Forex, Indices, Crypto) &amp; One-Click Auto/Pause Controls</div>
 </div>
 <div class="shot-wrap">
   <img src="{img_journal}" alt="Trade Journal & Brick Hover HUD"/>
@@ -560,14 +563,14 @@ def build_guide() -> Path:
   <tbody>
     <tr><td><b>1. 📋 Trade Journal</b></td><td>Full audit ledger of Executed vs Protected/Filtered signals</td><td>Filter by <b>All</b>, <b>Executed</b>, or <b>⚠️ Slippage &amp; Filtered (<code>FLT-*</code>)</b>. See exact Trigger Price vs Fill Price, Exit Reason (<code>TP_3_BRICKS</code>, <code>SAFETY_STOP</code>), MFE/MAE in bricks, and Gross vs Net P&amp;L. Download <b>📄 Tear-Sheet</b> or <b>📥 CSV</b>.</td></tr>
     <tr><td><b>2. ⚡ Capital.com Live Orders</b></td><td>Real-time broker portfolio &amp; manual override</td><td>Lists every active Capital.com deal (<code>Deal ID</code>, <code>Epic</code>, <code>BUY/SELL</code>, <code>Size</code>, <code>Entry</code>, <code>SL/TP</code>, live floating <b>UPL</b>). Includes an instant per-deal <b>Close</b> button.</td></tr>
-    <tr><td><b>3. 📊 Market Scanner (16 Mkts)</b></td><td>Radar across Metals, Energy, Forex &amp; Global Indices</td><td>Displays live Bid/Ask mid-price, Spread, Brick Size, Run streak, Supertrend, Signal (<code>BUY SIGNAL</code>, <code>SELL SIGNAL</code>, <code>HOLD</code>), and Filter Status (<code>READY</code> or Veto reason). Toggle <b>🟢 AUTO / ⏸ PAUSED</b> per asset or click <b>📊 Load Chart</b>.</td></tr>
+    <tr><td><b>3. 📊 Market Scanner (19 Mkts)</b></td><td>Radar across Metals, Energy, Forex, Indices &amp; Crypto</td><td>Displays live Bid/Ask mid-price, Spread, Brick Size, Run streak, Supertrend, Signal (<code>BUY SIGNAL</code>, <code>SELL SIGNAL</code>, <code>HOLD</code>), and Filter Status (<code>READY</code> or Veto reason). Toggle <b>🟢 AUTO / ⏸ PAUSED</b> per asset or click <b>📊 Load Chart</b>.</td></tr>
     <tr><td><b>4. 📈 Equity Curve (vs Raw)</b></td><td>Visual proof of strategy edge over time</td><td>Plots <b>Pro Net P&amp;L</b> (green solid), <b>Pro Gross before spread</b> (blue dashed), and <b>Raw Unfiltered P&amp;L</b> (amber dashed). Instantly reveals whether protections are adding alpha.</td></tr>
     <tr><td><b>5. 🎲 Monte Carlo Cone (2,500 Runs)</b></td><td>Forward drawdown stress-testing</td><td>Reshuffles your trade sequence 2,500 times with replacement to map <b>P90 Optimistic</b>, <b>P50 Median</b>, and <b>P10 Worst-Case</b> futures so position size matches real risk tolerance.</td></tr>
     <tr><td><b>6. 🎯 TCA &amp; Attribution</b></td><td>Wall-Street Transaction Cost &amp; Leg Analytics</td><td>Compares <b>Leg 1 (Usual 3B-TP)</b> vs <b>Leg 2 (Runner +1B)</b> Win Rate, Gross P&amp;L, Spread Drag ($), and Avg Net/Trade, alongside a ranked count of every blocked trade by Protection Guard. Opens printable Institutional Tear-Sheet.</td></tr>
     <tr><td><b>7. 🔬 Optimizer</b></td><td>One-click 36-combo parameter grid search</td><td>Click <b>▶ Run Grid Search</b> to test <code>ATR Divisor (15/22/32/48) × Usual TP (2B/3B/4B) × Confirm (0m/3m/5m)</code> on the current market, ranked by <b>Calmar Ratio &amp; Net P&amp;L</b>. Click <b>⚡ Apply</b> to load any winning combo into your live strategy immediately.</td></tr>
     <tr><td><b>8. 🔑 Broker Env &amp; Sessions</b></td><td>Control vault for Capital.com, Telegram &amp; Security + Session stats</td><td>Manage Capital.com DEMO/LIVE keys, configure &amp; test <b>@RENKO2026BOT</b> Telegram alerts &amp; Daily Digest, set/clear <b>DASHBOARD_PASSWORD</b>, and analyze win rates across <b>Asian / London / New York (UAE GST)</b> sessions.</td></tr>
     <tr><td><b>9. 📜 Bot Activity Log</b></td><td>Chronological black-box recorder (UAE GST timestamps)</td><td>Every background scan, 5-minute confirmation countdown (<code>CONFIRM_WAIT</code>), Order Open, Runner Arming (<code>WORKING_ORDER</code>), Breakeven Lock (<code>BREAKEVEN_LOCK</code>), and Flatten event with Deal IDs.</td></tr>
-    <tr><td><b>10. 🏆 15Y Matrix &amp; Market Edge (16)</b></td><td>15-Year Per-Instrument DNA &amp; Competitive Benchmark</td><td>Shows each market's tailored parameters across 5 macro eras (2011–2026), 1-click <b>⚡ Load &amp; Apply</b> button, Portfolio Growth vs Raw chart, and full comparison vs TradingView, MT4/MT5, Retail Bots &amp; QuantConnect.</td></tr>
+    <tr><td><b>10. 🏆 15Y Matrix &amp; Market Edge (19)</b></td><td>15-Year Per-Instrument DNA &amp; Competitive Benchmark</td><td>Shows each market's tailored parameters across 5 macro eras (2011–2026), 1-click <b>⚡ Load &amp; Apply</b> button, Portfolio Growth vs Raw chart, and full comparison vs TradingView, MT4/MT5, Retail Bots &amp; QuantConnect.</td></tr>
   </tbody>
 </table>
 
@@ -611,15 +614,15 @@ def build_guide() -> Path:
   <b>4. Expectancy &gt; +0.10R</b> (Positive expected payoff per trade).
 </div>
 
-<!-- SECTION 9: GLOBAL UAE GST SCHEDULE & 16 MARKETS -->
+<!-- SECTION 9: GLOBAL UAE GST SCHEDULE & 19 MARKETS -->
 <div class="page-break"></div>
-<div class="sec-hdr"><div><div class="sec-num">Section 08</div><h2>UAE Gulf Standard Time (GST / UTC+4) Market Schedule &amp; 16-Asset Matrix</h2></div></div>
+<div class="sec-hdr"><div><div class="sec-num">Section 08</div><h2>UAE Gulf Standard Time (GST / UTC+4) Market Schedule &amp; 19-Asset Matrix</h2></div></div>
 {_svg_uae_gst_clock()}
 <table>
   <thead><tr><th>Market / Epic</th><th>Asset Name</th><th>Category</th><th>Quote Unit</th><th>Decimals</th><th>Fallback Brick</th><th>Correlation Guard Cluster</th></tr></thead>
   <tbody>{''.join(inst_rows)}</tbody>
 </table>
-<p style="font-size:9pt; color:#475569;"><b>Tip:</b> Click any of the 4 sidebar Category Buttons (<b>Metals</b>, <b>Energy</b>, <b>Forex</b>, <b>Indices</b>) or toggle <b>Auto on Switch</b> inside the <b>🏆 15-Year Optimal DNA</b> box to load tailored ATR Divisor, Stop, Session, and Spread limits automatically!</p>
+<p style="font-size:9pt; color:#475569;"><b>Tip:</b> Click any of the 5 sidebar Category Buttons (<b>Metals</b>, <b>Energy</b>, <b>Forex</b>, <b>Indices</b>, <b>Crypto</b>) or toggle <b>Auto on Switch</b> inside the <b>🏆 15-Year Optimal DNA</b> box to load tailored ATR Divisor, Stop, Session, and Spread limits automatically!</p>
 
 <!-- SECTION 08B: 15-YEAR PER-INSTRUMENT OPTIMAL DNA MATRIX & MARKET BENCHMARK -->
 <div class="page-break"></div>
@@ -627,11 +630,11 @@ def build_guide() -> Path:
 <div class="insight-grid">
   <div class="box-teen">
     <div class="box-title">🧬 Why Every Market Needs Its Own "Recipe" (Teenager Summary)</div>
-    Gold, Oil, Euro/Dollar, Australian Dollar, and the Nasdaq do NOT move at the same speed or pay the same spread fee. Using one identical setting on every market is like wearing snow boots to a beach! So we tested every market separately across <b>5 real-world market eras from 2011 to 2026</b> (2011–13 Euro Crisis, 2014–16 Oil Crash, 2017–19 Low-Vol, 2020–22 COVID/Rate Hikes, and 2023–26 Gold Super-Cycle &amp; AI Boom). Spread-sensitive pairs like <b>AUDUSD, SILVER &amp; OIL_CRUDE</b> need bigger structural bricks (<code>ATR /7–9</code>), while fast US Indices shine with tighter trailing bricks (<code>ATR /10–12</code>) during <b>London+NY</b>!
+    Gold, Oil, Crypto (BTC/ETH/SOL), Euro/Dollar, Australian Dollar, and the Nasdaq do NOT move at the same speed or pay the same spread fee. Using one identical setting on every market is like wearing snow boots to a beach! So we tested every market separately across <b>5 real-world market eras from 2011 to 2026</b> (2011–13 Euro Crisis, 2014–16 Oil Crash, 2017–19 Low-Vol, 2020–22 COVID/Rate Hikes, and 2023–26 Gold Super-Cycle &amp; AI Boom). Spread-sensitive pairs like <b>AUDUSD, SILVER &amp; OIL_CRUDE</b> need bigger structural bricks (<code>ATR /7–9</code>), while fast US Indices and 24/7 Crypto shine with tailored bricks (<code>ATR /8–12</code>) during optimal hours!
   </div>
   <div class="box-quant">
-    <div class="box-title">📊 15-Year Walk-Forward Portfolio Scorecard (5 Eras × 16 Markets · $50 Risk)</div>
-    • <b>16-Market Combined 15Y Net P&amp;L:</b> <span class="pos">${float(m_sum.get('portfolio_net_15y', 0)):+,.2f}</span> (<span class="pos">+${float(m_sum.get('portfolio_edge_15y', 0)):,.2f} Edge vs Raw</span>)<br/>
+    <div class="box-title">📊 15-Year Walk-Forward Portfolio Scorecard (5 Eras × 19 Markets · $50 Risk)</div>
+    • <b>19-Market Combined 15Y Net P&amp;L:</b> <span class="pos">${float(m_sum.get('portfolio_net_15y', 0)):+,.2f}</span> (<span class="pos">+${float(m_sum.get('portfolio_edge_15y', 0)):,.2f} Edge vs Raw</span>)<br/>
     • <b>Macro Era Consistency:</b> <b>{html.escape(str(m_sum.get('era_win_consistency', '-')))}</b> ({m_sum.get('profitable_era_pct', 0)}% profitable era-market slices)<br/>
     • <b>Portfolio Averages:</b> Profit Factor <b>{m_sum.get('avg_profit_factor', '-')}</b> · Sharpe Ratio <b>{m_sum.get('avg_sharpe', '-')}</b> · Avg Win Rate <b>{m_sum.get('avg_win_rate', '-')}%</b><br/>
     • <b>Honesty Note:</b> Capital.com REST history is bounded on short 1m windows, so long-horizon sweeps use calibrated 5-Era regime stress blocks preserving exact live tick sizes, bid/ask spreads, and slippage rules.
@@ -665,7 +668,7 @@ def build_guide() -> Path:
     • <code>/status</code> — Check active market, watcher state &amp; today's live P&amp;L.<br/>
     • <code>/positions</code> — Inspect every open Capital.com deal &amp; floating UPL.<br/>
     • <code>/pnl</code> or <code>/digest</code> — Instant Model E performance &amp; attribution summary.<br/>
-    • <code>/scanner</code> — See which of the 16 global markets have BUY/SELL signals.<br/>
+    • <code>/scanner</code> — See which of the 19 global markets have BUY/SELL signals.<br/>
     • <code>/dna [EPIC]</code> &amp; <code>/best</code> — Inspect any instrument's 15-Year Optimal DNA or top 5 performers.<br/>
     • <code>/pause</code> | <code>/resume</code> | <code>/flatten</code> — Pause, resume, or trigger Emergency Kill Switch!
   </div>

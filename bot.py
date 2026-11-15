@@ -92,6 +92,9 @@ EPIC_ALIASES = {
     "GER40": ["GER40", "DAX", "DE40"],
     "UK100": ["UK100", "FTSE"],
     "JP225": ["JP225", "NIKKEI"],
+    "BTCUSD": ["BTCUSD", "BITCOIN", "BTC/USD"],
+    "ETHUSD": ["ETHUSD", "ETHEREUM", "ETH/USD"],
+    "SOLUSD": ["SOLUSD", "SOLANA", "SOL/USD"],
 }
 
 

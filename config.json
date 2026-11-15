@@ -68,6 +68,11 @@
         "atr_div": 10.0,
         "st_factor": 1.9,
         "max_spread_frac_of_brick": 0.35
+      },
+      "Crypto": {
+        "atr_div": 10.0,
+        "st_factor": 2.2,
+        "max_spread_frac_of_brick": 0.4
       }
     },
     "ticket_ttl_seconds": 180,
@@ -429,6 +434,72 @@
           "new_york": false
         },
         "sessions_label": "ASI+LON"
+      },
+      "BTCUSD": {
+        "atr_len": 5,
+        "atr_div": 11.0,
+        "st_factor": 2.0,
+        "green_buy": 2,
+        "red_sell": 2,
+        "tp_bricks": 3.0,
+        "runner_offset_bricks": 1.0,
+        "confirm_minutes": 2,
+        "safety_stop_bricks": 3.0,
+        "breakeven_after_bricks": 1.5,
+        "use_htf_filter": false,
+        "max_spread_frac_of_brick": 0.45,
+        "rollover_blackout": true,
+        "macro_blackout": false,
+        "sessions": {
+          "asian": false,
+          "london": true,
+          "new_york": true
+        },
+        "sessions_label": "LON+NY"
+      },
+      "ETHUSD": {
+        "atr_len": 5,
+        "atr_div": 8.0,
+        "st_factor": 2.0,
+        "green_buy": 2,
+        "red_sell": 2,
+        "tp_bricks": 3.0,
+        "runner_offset_bricks": 1.0,
+        "confirm_minutes": 3,
+        "safety_stop_bricks": 3.0,
+        "breakeven_after_bricks": 1.0,
+        "use_htf_filter": false,
+        "max_spread_frac_of_brick": 0.45,
+        "rollover_blackout": true,
+        "macro_blackout": false,
+        "sessions": {
+          "asian": true,
+          "london": true,
+          "new_york": true
+        },
+        "sessions_label": "ALL"
+      },
+      "SOLUSD": {
+        "atr_len": 5,
+        "atr_div": 11.0,
+        "st_factor": 2.0,
+        "green_buy": 2,
+        "red_sell": 2,
+        "tp_bricks": 3.0,
+        "runner_offset_bricks": 1.0,
+        "confirm_minutes": 2,
+        "safety_stop_bricks": 3.0,
+        "breakeven_after_bricks": 1.5,
+        "use_htf_filter": false,
+        "max_spread_frac_of_brick": 0.45,
+        "rollover_blackout": true,
+        "macro_blackout": false,
+        "sessions": {
+          "asian": false,
+          "london": true,
+          "new_york": true
+        },
+        "sessions_label": "LON+NY"
       }
     }
   },

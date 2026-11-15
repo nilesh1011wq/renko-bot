@@ -66,6 +66,9 @@ INSTRUMENT_SPECS = {
     "GER40": {"name": "DAX 40 Index", "category": "Indices", "currency": "", "base_px": 19400.0, "tick": 1.0, "digits": 1, "scale": 19400.0 / 2640.0, "half_sp": 1.5, "fallback_size": 18.0, "pip_factor": 1.0},
     "UK100": {"name": "FTSE 100 Index", "category": "Indices", "currency": "", "base_px": 8200.0, "tick": 1.0, "digits": 1, "scale": 8200.0 / 2640.0, "half_sp": 1.0, "fallback_size": 10.0, "pip_factor": 1.0},
     "JP225": {"name": "Nikkei 225", "category": "Indices", "currency": "", "base_px": 39000.0, "tick": 5.0, "digits": 0, "scale": 39000.0 / 2640.0, "half_sp": 5.0, "fallback_size": 50.0, "pip_factor": 1.0},
+    "BTCUSD": {"name": "Bitcoin / USD", "category": "Crypto", "currency": "$", "base_px": 91500.0, "tick": 0.1, "digits": 1, "scale": 91500.0 / 2640.0, "half_sp": 18.0, "fallback_size": 250.0, "pip_factor": 1.0},
+    "ETHUSD": {"name": "Ethereum / USD", "category": "Crypto", "currency": "$", "base_px": 3150.0, "tick": 0.05, "digits": 2, "scale": 3150.0 / 2640.0, "half_sp": 0.90, "fallback_size": 12.0, "pip_factor": 1.0},
+    "SOLUSD": {"name": "Solana / USD", "category": "Crypto", "currency": "$", "base_px": 195.0, "tick": 0.01, "digits": 2, "scale": 195.0 / 2640.0, "half_sp": 0.08, "fallback_size": 0.80, "pip_factor": 1.0},
 }
 
 

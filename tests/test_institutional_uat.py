@@ -1321,9 +1321,9 @@ class TestInstitutionalUAT(unittest.TestCase):
             server.load_env = lambda: None
             os.environ.pop("DASHBOARD_PASSWORD", None)
             try:
-                # 1. Verify 15Y matrix has all 16 positive instruments & benchmark table
+                # 1. Verify 15Y matrix has all 19 positive instruments & benchmark table
                 matrix = research_15yr_matrix.get_or_build_matrix()
-                self.assertEqual(len(matrix["instruments"]), 16)
+                self.assertEqual(len(matrix["instruments"]), 19)
                 self.assertGreater(matrix["summary"]["portfolio_net_15y"], 500000.0)
                 self.assertTrue(all(r["net_15y"] > 0 for r in matrix["instruments"]))
                 self.assertGreaterEqual(len(matrix.get("competitor_benchmark", [])), 5)
@@ -1339,7 +1339,10 @@ class TestInstitutionalUAT(unittest.TestCase):
                 h_get.do_GET()
                 h_get.send_response.assert_called_with(200)
                 m_res = json.loads(h_get.wfile.getvalue().decode("utf-8"))
-                self.assertEqual(len(m_res["instruments"]), 16)
+                self.assertEqual(len(m_res["instruments"]), 19)
+                self.assertIn("BTCUSD", m_res["profiles_by_epic"])
+                self.assertIn("ETHUSD", m_res["profiles_by_epic"])
+                self.assertIn("SOLUSD", m_res["profiles_by_epic"])
 
                 h_apply = _make_handler("/api/apply-instrument-dna", {"epic": "US100"})
                 h_apply.do_POST()
@@ -1351,6 +1354,7 @@ class TestInstitutionalUAT(unittest.TestCase):
 
                 # 4. Telegram /dna & /best commands
                 self.assertIn("15Y OPTIMAL DNA", server.handle_telegram_command("/dna GOLD"))
+                self.assertIn("15Y OPTIMAL DNA", server.handle_telegram_command("/dna BTCUSD"))
                 self.assertIn("15-YEAR OPTIMAL DNA LEADERBOARD", server.handle_telegram_command("/best"))
 
                 # 5. Phase 7 UI markers present in index.html

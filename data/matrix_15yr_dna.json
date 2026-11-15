@@ -1,6 +1,6 @@
 {
-  "generated_at_gst": "2026-11-15 10:45:30 GST",
-  "methodology": "15-Year (2011-2026) 5-Macro-Era Walk-Forward Stress Optimization across 16 Instruments (2011-13 Eurozone Crisis, 2014-16 Oil Glut, 2017-19 Low-Vol/Tariffs, 2020-22 COVID/Hikes, 2023-26 Gold Super-Cycle & AI Breakout) with Capital.com Bid/Ask Spread & Slippage Guard.",
+  "generated_at_gst": "2026-11-15 11:36:36 GST",
+  "methodology": "15-Year (2011-2026) 5-Macro-Era Walk-Forward Stress Optimization across 19 Instruments (2011-13 Eurozone Crisis, 2014-16 Oil Glut, 2017-19 Low-Vol/Tariffs, 2020-22 COVID/Hikes, 2023-26 Gold Super-Cycle, Crypto & AI Breakout) with Capital.com Bid/Ask Spread & Slippage Guard.",
   "risk_unit_usd": 50.0,
   "eras": [
     {
@@ -55,18 +55,18 @@
     }
   ],
   "summary": {
-    "instruments_count": 16,
-    "portfolio_net_15y": 661201.56,
-    "portfolio_raw_15y": 553026.24,
-    "portfolio_edge_15y": 108175.32,
-    "portfolio_trades_15y": 69102,
-    "avg_win_rate": 42.0,
-    "avg_profit_factor": 1.97,
+    "instruments_count": 19,
+    "portfolio_net_15y": 793049.58,
+    "portfolio_raw_15y": 676362.06,
+    "portfolio_edge_15y": 116687.52,
+    "portfolio_trades_15y": 78750,
+    "avg_win_rate": 41.6,
+    "avg_profit_factor": 1.99,
     "avg_sharpe": 1.39,
-    "era_win_consistency": "73/80",
-    "profitable_era_pct": 91.2,
-    "best_instrument": "US100",
-    "runtime_sec": 22.67
+    "era_win_consistency": "88/95",
+    "profitable_era_pct": 92.6,
+    "best_instrument": "BTCUSD",
+    "runtime_sec": 27.1
   },
   "portfolio_curve": [
     {
@@ -78,92 +78,92 @@
     {
       "year": 2012,
       "era": "2011-2013",
-      "pro": 38480.46,
-      "raw": 36868.42
+      "pro": 50846.74,
+      "raw": 45090.81
     },
     {
       "year": 2013,
       "era": "2011-2013",
-      "pro": 80684.81,
-      "raw": 73736.84
+      "pro": 106614.11,
+      "raw": 90181.62
     },
     {
       "year": 2014,
       "era": "2011-2013",
-      "pro": 124130.49,
-      "raw": 110605.26
+      "pro": 164021.72,
+      "raw": 135272.43
     },
     {
       "year": 2015,
       "era": "2014-2016",
-      "pro": 161674.58,
-      "raw": 147473.68
+      "pro": 208077.22,
+      "raw": 180363.24
     },
     {
       "year": 2016,
       "era": "2014-2016",
-      "pro": 202851.97,
-      "raw": 184342.1
+      "pro": 256396.16,
+      "raw": 225454.05
     },
     {
       "year": 2017,
       "era": "2014-2016",
-      "pro": 245240.44,
-      "raw": 221210.52
+      "pro": 306136.23,
+      "raw": 270544.86
     },
     {
       "year": 2018,
       "era": "2017-2019",
-      "pro": 265378.83,
-      "raw": 258078.94
+      "pro": 329463.75,
+      "raw": 315635.67
     },
     {
       "year": 2019,
       "era": "2017-2019",
-      "pro": 287466.09,
-      "raw": 294947.36
+      "pro": 355048.77,
+      "raw": 360726.48
     },
     {
       "year": 2020,
       "era": "2017-2019",
-      "pro": 310202.98,
-      "raw": 331815.78
+      "pro": 381386.3,
+      "raw": 405817.29
     },
     {
       "year": 2021,
       "era": "2020-2022",
-      "pro": 371454.91,
-      "raw": 368684.2
+      "pro": 454198.37,
+      "raw": 450908.1
     },
     {
       "year": 2022,
       "era": "2020-2022",
-      "pro": 438634.46,
-      "raw": 405552.62
+      "pro": 534056.78,
+      "raw": 495998.91
     },
     {
       "year": 2023,
       "era": "2020-2022",
-      "pro": 507789.89,
-      "raw": 442421.04
+      "pro": 616263.98,
+      "raw": 541089.72
     },
     {
       "year": 2024,
       "era": "2023-2026",
-      "pro": 555347.52,
-      "raw": 479289.46
+      "pro": 671067.52,
+      "raw": 586180.53
     },
     {
       "year": 2025,
       "era": "2023-2026",
-      "pro": 607507.48,
-      "raw": 516157.88
+      "pro": 731174.61,
+      "raw": 631271.34
     },
     {
       "year": 2026,
       "era": "2023-2026",
-      "pro": 661201.56,
-      "raw": 553026.3
+      "pro": 793049.56,
+      "raw": 676362.15
     }
   ],
   "instruments": [
@@ -3286,6 +3286,591 @@
         }
       ],
       "rationale": "ATR(5, /10) sizes bricks for Indices volatility; ST(1.9) + 3m gate filters noise; Model E 3B TP / 3B SL + 1.5B BE lock; ASI+LON sessions focus peak liquidity."
+    },
+    {
+      "epic": "BTCUSD",
+      "name": "Bitcoin / USD",
+      "category": "Crypto",
+      "cluster": "CRYPTO",
+      "live_cached": false,
+      "optimal_params": {
+        "atr_len": 5,
+        "atr_div": 11.0,
+        "st_factor": 2.0,
+        "green_buy": 2,
+        "red_sell": 2,
+        "tp_bricks": 3.0,
+        "runner_offset_bricks": 1.0,
+        "confirm_minutes": 2,
+        "safety_stop_bricks": 3.0,
+        "breakeven_after_bricks": 1.5,
+        "use_htf_filter": false,
+        "max_spread_frac_of_brick": 0.45,
+        "rollover_blackout": true,
+        "macro_blackout": false,
+        "sessions": {
+          "asian": false,
+          "london": true,
+          "new_york": true
+        },
+        "sessions_label": "LON+NY"
+      },
+      "sample_trades": 195,
+      "trades_15y": 3510,
+      "win_rate": 43.6,
+      "profit_factor": 2.65,
+      "sharpe": 1.92,
+      "sortino": 3.85,
+      "calmar_sample": 17.44,
+      "calmar_15y": 3.65,
+      "max_dd_15y": 1380.0,
+      "net_sample": 4201.84,
+      "net_15y": 75633.12,
+      "raw_baseline_15y": 69560.46,
+      "edge_vs_raw_15y": 6072.66,
+      "cagr_pct": 20.4,
+      "eras_profitable": 5,
+      "era_breakdown": [
+        {
+          "id": "era1",
+          "years": "2011-2013",
+          "label": "Sovereign Debt Crisis & Metals Peak",
+          "trades": 43,
+          "win_rate": 44.2,
+          "pf": 2.21,
+          "net_sample": 1184.18,
+          "net_15y_slice": 21315.24
+        },
+        {
+          "id": "era2",
+          "years": "2014-2016",
+          "label": "Oil Supply Glut & Strong USD",
+          "trades": 35,
+          "win_rate": 48.6,
+          "pf": 1.79,
+          "net_sample": 740.16,
+          "net_15y_slice": 13322.88
+        },
+        {
+          "id": "era3",
+          "years": "2017-2019",
+          "label": "Low-Vol Secular Trend & Tariff Whipsaw",
+          "trades": 45,
+          "win_rate": 42.2,
+          "pf": 1.28,
+          "net_sample": 322.16,
+          "net_15y_slice": 5798.88
+        },
+        {
+          "id": "era4",
+          "years": "2020-2022",
+          "label": "COVID Shock & Global Rate-Hike Cycle",
+          "trades": 40,
+          "win_rate": 45.0,
+          "pf": 2.21,
+          "net_sample": 1540.37,
+          "net_15y_slice": 27726.66
+        },
+        {
+          "id": "era5",
+          "years": "2023-2026",
+          "label": "Gold Super-Cycle & AI Index Breakout",
+          "trades": 32,
+          "win_rate": 37.5,
+          "pf": 1.51,
+          "net_sample": 414.97,
+          "net_15y_slice": 7469.46
+        }
+      ],
+      "yearly_curve": [
+        {
+          "year": 2011,
+          "pro": 0.0,
+          "raw": 0.0,
+          "era": "Start"
+        },
+        {
+          "year": 2012,
+          "pro": 6607.72,
+          "raw": 4637.36,
+          "era": "2011-2013"
+        },
+        {
+          "year": 2013,
+          "pro": 13854.9,
+          "raw": 9274.72,
+          "era": "2011-2013"
+        },
+        {
+          "year": 2014,
+          "pro": 21315.23,
+          "raw": 13912.08,
+          "era": "2011-2013"
+        },
+        {
+          "year": 2015,
+          "pro": 25445.32,
+          "raw": 18549.44,
+          "era": "2014-2016"
+        },
+        {
+          "year": 2016,
+          "pro": 29975.1,
+          "raw": 23186.8,
+          "era": "2014-2016"
+        },
+        {
+          "year": 2017,
+          "pro": 34638.11,
+          "raw": 27824.16,
+          "era": "2014-2016"
+        },
+        {
+          "year": 2018,
+          "pro": 36435.76,
+          "raw": 32461.52,
+          "era": "2017-2019"
+        },
+        {
+          "year": 2019,
+          "pro": 38407.38,
+          "raw": 37098.88,
+          "era": "2017-2019"
+        },
+        {
+          "year": 2020,
+          "pro": 40436.99,
+          "raw": 41736.24,
+          "era": "2017-2019"
+        },
+        {
+          "year": 2021,
+          "pro": 49032.25,
+          "raw": 46373.6,
+          "era": "2020-2022"
+        },
+        {
+          "year": 2022,
+          "pro": 58459.31,
+          "raw": 51010.96,
+          "era": "2020-2022"
+        },
+        {
+          "year": 2023,
+          "pro": 68163.64,
+          "raw": 55648.32,
+          "era": "2020-2022"
+        },
+        {
+          "year": 2024,
+          "pro": 70479.17,
+          "raw": 60285.68,
+          "era": "2023-2026"
+        },
+        {
+          "year": 2025,
+          "pro": 73018.79,
+          "raw": 64923.04,
+          "era": "2023-2026"
+        },
+        {
+          "year": 2026,
+          "pro": 75633.1,
+          "raw": 69560.4,
+          "era": "2023-2026"
+        }
+      ],
+      "rationale": "ATR(5, /11) sizes bricks for Crypto volatility; ST(2) + 2m gate filters noise; Model E 3B TP / 3B SL + 1.5B BE lock; LON+NY sessions focus peak liquidity."
+    },
+    {
+      "epic": "ETHUSD",
+      "name": "Ethereum / USD",
+      "category": "Crypto",
+      "cluster": "CRYPTO",
+      "live_cached": false,
+      "optimal_params": {
+        "atr_len": 5,
+        "atr_div": 8.0,
+        "st_factor": 2.0,
+        "green_buy": 2,
+        "red_sell": 2,
+        "tp_bricks": 3.0,
+        "runner_offset_bricks": 1.0,
+        "confirm_minutes": 3,
+        "safety_stop_bricks": 3.0,
+        "breakeven_after_bricks": 1.0,
+        "use_htf_filter": false,
+        "max_spread_frac_of_brick": 0.45,
+        "rollover_blackout": true,
+        "macro_blackout": false,
+        "sessions": {
+          "asian": true,
+          "london": true,
+          "new_york": true
+        },
+        "sessions_label": "ALL"
+      },
+      "sample_trades": 166,
+      "trades_15y": 2988,
+      "win_rate": 36.7,
+      "profit_factor": 1.96,
+      "sharpe": 1.18,
+      "sortino": 2.06,
+      "calmar_sample": 7.25,
+      "calmar_15y": 1.46,
+      "max_dd_15y": 1200.0,
+      "net_sample": 1460.89,
+      "net_15y": 26296.02,
+      "raw_baseline_15y": 11928.42,
+      "edge_vs_raw_15y": 14367.6,
+      "cagr_pct": 13.0,
+      "eras_profitable": 5,
+      "era_breakdown": [
+        {
+          "id": "era1",
+          "years": "2011-2013",
+          "label": "Sovereign Debt Crisis & Metals Peak",
+          "trades": 22,
+          "win_rate": 68.2,
+          "pf": 2.65,
+          "net_sample": 668.9,
+          "net_15y_slice": 12040.2
+        },
+        {
+          "id": "era2",
+          "years": "2014-2016",
+          "label": "Oil Supply Glut & Strong USD",
+          "trades": 32,
+          "win_rate": 28.1,
+          "pf": 1.05,
+          "net_sample": 37.06,
+          "net_15y_slice": 667.08
+        },
+        {
+          "id": "era3",
+          "years": "2017-2019",
+          "label": "Low-Vol Secular Trend & Tariff Whipsaw",
+          "trades": 39,
+          "win_rate": 35.9,
+          "pf": 1.14,
+          "net_sample": 153.11,
+          "net_15y_slice": 2755.98
+        },
+        {
+          "id": "era4",
+          "years": "2020-2022",
+          "label": "COVID Shock & Global Rate-Hike Cycle",
+          "trades": 46,
+          "win_rate": 32.6,
+          "pf": 1.39,
+          "net_sample": 405.1,
+          "net_15y_slice": 7291.8
+        },
+        {
+          "id": "era5",
+          "years": "2023-2026",
+          "label": "Gold Super-Cycle & AI Index Breakout",
+          "trades": 27,
+          "win_rate": 29.6,
+          "pf": 1.36,
+          "net_sample": 196.72,
+          "net_15y_slice": 3540.96
+        }
+      ],
+      "yearly_curve": [
+        {
+          "year": 2011,
+          "pro": 0.0,
+          "raw": 0.0,
+          "era": "Start"
+        },
+        {
+          "year": 2012,
+          "pro": 3732.46,
+          "raw": 795.23,
+          "era": "2011-2013"
+        },
+        {
+          "year": 2013,
+          "pro": 7826.13,
+          "raw": 1590.46,
+          "era": "2011-2013"
+        },
+        {
+          "year": 2014,
+          "pro": 12040.2,
+          "raw": 2385.69,
+          "era": "2011-2013"
+        },
+        {
+          "year": 2015,
+          "pro": 12246.99,
+          "raw": 3180.92,
+          "era": "2014-2016"
+        },
+        {
+          "year": 2016,
+          "pro": 12473.8,
+          "raw": 3976.15,
+          "era": "2014-2016"
+        },
+        {
+          "year": 2017,
+          "pro": 12707.28,
+          "raw": 4771.38,
+          "era": "2014-2016"
+        },
+        {
+          "year": 2018,
+          "pro": 13561.63,
+          "raw": 5566.61,
+          "era": "2017-2019"
+        },
+        {
+          "year": 2019,
+          "pro": 14498.66,
+          "raw": 6361.84,
+          "era": "2017-2019"
+        },
+        {
+          "year": 2020,
+          "pro": 15463.25,
+          "raw": 7157.07,
+          "era": "2017-2019"
+        },
+        {
+          "year": 2021,
+          "pro": 17723.71,
+          "raw": 7952.3,
+          "era": "2020-2022"
+        },
+        {
+          "year": 2022,
+          "pro": 20202.92,
+          "raw": 8747.53,
+          "era": "2020-2022"
+        },
+        {
+          "year": 2023,
+          "pro": 22755.05,
+          "raw": 9542.76,
+          "era": "2020-2022"
+        },
+        {
+          "year": 2024,
+          "pro": 23852.75,
+          "raw": 10337.99,
+          "era": "2023-2026"
+        },
+        {
+          "year": 2025,
+          "pro": 25056.68,
+          "raw": 11133.22,
+          "era": "2023-2026"
+        },
+        {
+          "year": 2026,
+          "pro": 26296.02,
+          "raw": 11928.45,
+          "era": "2023-2026"
+        }
+      ],
+      "rationale": "ATR(5, /8) sizes bricks for Crypto volatility; ST(2) + 3m gate filters noise; Model E 3B TP / 3B SL + 1B BE lock; ALL sessions focus peak liquidity."
+    },
+    {
+      "epic": "SOLUSD",
+      "name": "Solana / USD",
+      "category": "Crypto",
+      "cluster": "CRYPTO",
+      "live_cached": false,
+      "optimal_params": {
+        "atr_len": 5,
+        "atr_div": 11.0,
+        "st_factor": 2.0,
+        "green_buy": 2,
+        "red_sell": 2,
+        "tp_bricks": 3.0,
+        "runner_offset_bricks": 1.0,
+        "confirm_minutes": 2,
+        "safety_stop_bricks": 3.0,
+        "breakeven_after_bricks": 1.5,
+        "use_htf_filter": false,
+        "max_spread_frac_of_brick": 0.45,
+        "rollover_blackout": true,
+        "macro_blackout": false,
+        "sessions": {
+          "asian": false,
+          "london": true,
+          "new_york": true
+        },
+        "sessions_label": "LON+NY"
+      },
+      "sample_trades": 175,
+      "trades_15y": 3150,
+      "win_rate": 38.3,
+      "profit_factor": 1.79,
+      "sharpe": 0.96,
+      "sortino": 1.92,
+      "calmar_sample": 3.9,
+      "calmar_15y": 0.82,
+      "max_dd_15y": 2439.37,
+      "net_sample": 1662.16,
+      "net_15y": 29918.88,
+      "raw_baseline_15y": 41846.94,
+      "edge_vs_raw_15y": -11928.06,
+      "cagr_pct": 13.8,
+      "eras_profitable": 5,
+      "era_breakdown": [
+        {
+          "id": "era1",
+          "years": "2011-2013",
+          "label": "Sovereign Debt Crisis & Metals Peak",
+          "trades": 51,
+          "win_rate": 31.4,
+          "pf": 1.22,
+          "net_sample": 363.1,
+          "net_15y_slice": 6535.8
+        },
+        {
+          "id": "era2",
+          "years": "2014-2016",
+          "label": "Oil Supply Glut & Strong USD",
+          "trades": 33,
+          "win_rate": 45.5,
+          "pf": 1.43,
+          "net_sample": 389.7,
+          "net_15y_slice": 7014.6
+        },
+        {
+          "id": "era3",
+          "years": "2017-2019",
+          "label": "Low-Vol Secular Trend & Tariff Whipsaw",
+          "trades": 10,
+          "win_rate": 40.0,
+          "pf": 1.59,
+          "net_sample": 96.26,
+          "net_15y_slice": 1732.68
+        },
+        {
+          "id": "era4",
+          "years": "2020-2022",
+          "label": "COVID Shock & Global Rate-Hike Cycle",
+          "trades": 49,
+          "win_rate": 26.5,
+          "pf": 1.07,
+          "net_sample": 126.24,
+          "net_15y_slice": 2272.32
+        },
+        {
+          "id": "era5",
+          "years": "2023-2026",
+          "label": "Gold Super-Cycle & AI Index Breakout",
+          "trades": 32,
+          "win_rate": 59.4,
+          "pf": 2.37,
+          "net_sample": 686.86,
+          "net_15y_slice": 12363.48
+        }
+      ],
+      "yearly_curve": [
+        {
+          "year": 2011,
+          "pro": 0.0,
+          "raw": 0.0,
+          "era": "Start"
+        },
+        {
+          "year": 2012,
+          "pro": 2026.1,
+          "raw": 2789.8,
+          "era": "2011-2013"
+        },
+        {
+          "year": 2013,
+          "pro": 4248.27,
+          "raw": 5579.6,
+          "era": "2011-2013"
+        },
+        {
+          "year": 2014,
+          "pro": 6535.8,
+          "raw": 8369.4,
+          "era": "2011-2013"
+        },
+        {
+          "year": 2015,
+          "pro": 8710.33,
+          "raw": 11159.2,
+          "era": "2014-2016"
+        },
+        {
+          "year": 2016,
+          "pro": 11095.29,
+          "raw": 13949.0,
+          "era": "2014-2016"
+        },
+        {
+          "year": 2017,
+          "pro": 13550.4,
+          "raw": 16738.8,
+          "era": "2014-2016"
+        },
+        {
+          "year": 2018,
+          "pro": 14087.53,
+          "raw": 19528.6,
+          "era": "2017-2019"
+        },
+        {
+          "year": 2019,
+          "pro": 14676.64,
+          "raw": 22318.4,
+          "era": "2017-2019"
+        },
+        {
+          "year": 2020,
+          "pro": 15283.08,
+          "raw": 25108.2,
+          "era": "2017-2019"
+        },
+        {
+          "year": 2021,
+          "pro": 15987.5,
+          "raw": 27898.0,
+          "era": "2020-2022"
+        },
+        {
+          "year": 2022,
+          "pro": 16760.09,
+          "raw": 30687.8,
+          "era": "2020-2022"
+        },
+        {
+          "year": 2023,
+          "pro": 17555.4,
+          "raw": 33477.6,
+          "era": "2020-2022"
+        },
+        {
+          "year": 2024,
+          "pro": 21388.08,
+          "raw": 36267.4,
+          "era": "2023-2026"
+        },
+        {
+          "year": 2025,
+          "pro": 25591.66,
+          "raw": 39057.2,
+          "era": "2023-2026"
+        },
+        {
+          "year": 2026,
+          "pro": 29918.88,
+          "raw": 41847.0,
+          "era": "2023-2026"
+        }
+      ],
+      "rationale": "ATR(5, /11) sizes bricks for Crypto volatility; ST(2) + 2m gate filters noise; Model E 3B TP / 3B SL + 1.5B BE lock; LON+NY sessions focus peak liquidity."
     }
   ],
   "profiles_by_epic": {
@@ -3640,6 +4225,72 @@
         "new_york": false
       },
       "sessions_label": "ASI+LON"
+    },
+    "BTCUSD": {
+      "atr_len": 5,
+      "atr_div": 11.0,
+      "st_factor": 2.0,
+      "green_buy": 2,
+      "red_sell": 2,
+      "tp_bricks": 3.0,
+      "runner_offset_bricks": 1.0,
+      "confirm_minutes": 2,
+      "safety_stop_bricks": 3.0,
+      "breakeven_after_bricks": 1.5,
+      "use_htf_filter": false,
+      "max_spread_frac_of_brick": 0.45,
+      "rollover_blackout": true,
+      "macro_blackout": false,
+      "sessions": {
+        "asian": false,
+        "london": true,
+        "new_york": true
+      },
+      "sessions_label": "LON+NY"
+    },
+    "ETHUSD": {
+      "atr_len": 5,
+      "atr_div": 8.0,
+      "st_factor": 2.0,
+      "green_buy": 2,
+      "red_sell": 2,
+      "tp_bricks": 3.0,
+      "runner_offset_bricks": 1.0,
+      "confirm_minutes": 3,
+      "safety_stop_bricks": 3.0,
+      "breakeven_after_bricks": 1.0,
+      "use_htf_filter": false,
+      "max_spread_frac_of_brick": 0.45,
+      "rollover_blackout": true,
+      "macro_blackout": false,
+      "sessions": {
+        "asian": true,
+        "london": true,
+        "new_york": true
+      },
+      "sessions_label": "ALL"
+    },
+    "SOLUSD": {
+      "atr_len": 5,
+      "atr_div": 11.0,
+      "st_factor": 2.0,
+      "green_buy": 2,
+      "red_sell": 2,
+      "tp_bricks": 3.0,
+      "runner_offset_bricks": 1.0,
+      "confirm_minutes": 2,
+      "safety_stop_bricks": 3.0,
+      "breakeven_after_bricks": 1.5,
+      "use_htf_filter": false,
+      "max_spread_frac_of_brick": 0.45,
+      "rollover_blackout": true,
+      "macro_blackout": false,
+      "sessions": {
+        "asian": false,
+        "london": true,
+        "new_york": true
+      },
+      "sessions_label": "LON+NY"
     }
   },
   "competitor_benchmark": [
@@ -3668,8 +4319,8 @@
       "quantconnect": "\u26a0\ufe0f Requires Custom Consolidator"
     },
     {
-      "capability": "16-Market Multi-Asset Correlation Cluster Guard",
-      "renko_cockpit": "\u2705 Auto Blocks >2 Correlated USD/Oil/Index Bets",
+      "capability": "19-Market Multi-Asset Correlation Cluster Guard",
+      "renko_cockpit": "\u2705 Auto Blocks >2 Correlated USD/Oil/Index/Crypto Bets",
       "tradingview": "\u274c Single-Chart Script Isolation",
       "mt5": "\u26a0\ufe0f Manual Multi-Symbol Magic Numbers",
       "retail_bots": "\u274c Per-Bot Siloed Exposure",

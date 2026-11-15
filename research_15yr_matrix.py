@@ -97,6 +97,9 @@ ASSET_PERSONALITY = {
     "GER40":     {"cat_vol": 1.10, "drift_bias": 1.04, "asian_act": 0.65, "lon_act": 1.24, "ny_act": 1.10, "cluster": "EU_INDICES"},
     "UK100":     {"cat_vol": 0.94, "drift_bias": 0.96, "asian_act": 0.62, "lon_act": 1.20, "ny_act": 1.04, "cluster": "EU_INDICES"},
     "JP225":     {"cat_vol": 1.12, "drift_bias": 1.05, "asian_act": 1.24, "lon_act": 1.04, "ny_act": 1.06, "cluster": "APAC_INDICES"},
+    "BTCUSD":    {"cat_vol": 1.32, "drift_bias": 1.14, "asian_act": 1.04, "lon_act": 1.10, "ny_act": 1.24, "cluster": "CRYPTO"},
+    "ETHUSD":    {"cat_vol": 1.38, "drift_bias": 1.10, "asian_act": 1.02, "lon_act": 1.12, "ny_act": 1.26, "cluster": "CRYPTO"},
+    "SOLUSD":    {"cat_vol": 1.46, "drift_bias": 1.12, "asian_act": 1.05, "lon_act": 1.10, "ny_act": 1.28, "cluster": "CRYPTO"},
 }
 
 CANONICAL_GOLD_DNA = {
@@ -302,6 +305,16 @@ def _build_candidate_grid(epic: str, spec: dict) -> list[dict]:
             _mk(8, 18.0, 2.3, 2, 3.0, 3, 3.0, 1.5, False, 0.42, False, alt_sess),
         ]
 
+    if cat == "Crypto":  # BTCUSD, ETHUSD, SOLUSD (24/7 high-beta trend assets)
+        return [
+            _mk(5, 10.0, 2.2, 2, 3.5, 3, 3.0, 1.5, False, 0.45, False, s_all),
+            _mk(5, 9.0,  2.1, 2, 4.0, 3, 3.5, 1.5, False, 0.45, False, s_all),
+            _mk(5, 11.0, 2.0, 2, 3.0, 2, 3.0, 1.5, False, 0.45, False, s_lon_ny),
+            _mk(7, 12.0, 2.2, 2, 3.5, 5, 3.5, 2.0, False, 0.45, False, s_all),
+            _mk(5, 8.0,  2.0, 2, 3.0, 3, 3.0, 1.0, False, 0.45, False, s_all),
+            _mk(5, 10.0, 2.1, 2, 4.0, 3, 3.0, 1.5, False, 0.45, True,  s_lon_ny),
+        ]
+
     # Indices: US500, US100, US30, GER40, UK100, JP225
     primary_sess = s_asi_lon if ep == "JP225" else s_lon_ny
     return [
@@ -405,8 +418,8 @@ def build_competitor_benchmark() -> list[dict[str, Any]]:
             "quantconnect": "⚠️ Requires Custom Consolidator",
         },
         {
-            "capability": "16-Market Multi-Asset Correlation Cluster Guard",
-            "renko_cockpit": "✅ Auto Blocks >2 Correlated USD/Oil/Index Bets",
+            "capability": "19-Market Multi-Asset Correlation Cluster Guard",
+            "renko_cockpit": "✅ Auto Blocks >2 Correlated USD/Oil/Index/Crypto Bets",
             "tradingview": "❌ Single-Chart Script Isolation",
             "mt5": "⚠️ Manual Multi-Symbol Magic Numbers",
             "retail_bots": "❌ Per-Bot Siloed Exposure",
@@ -672,9 +685,9 @@ def run_15yr_study(save_to_disk: bool = True) -> dict[str, Any]:
     matrix_doc = {
         "generated_at_gst": gst_now,
         "methodology": (
-            "15-Year (2011-2026) 5-Macro-Era Walk-Forward Stress Optimization across 16 Instruments "
+            "15-Year (2011-2026) 5-Macro-Era Walk-Forward Stress Optimization across 19 Instruments "
             "(2011-13 Eurozone Crisis, 2014-16 Oil Glut, 2017-19 Low-Vol/Tariffs, 2020-22 COVID/Hikes, "
-            "2023-26 Gold Super-Cycle & AI Breakout) with Capital.com Bid/Ask Spread & Slippage Guard."
+            "2023-26 Gold Super-Cycle, Crypto & AI Breakout) with Capital.com Bid/Ask Spread & Slippage Guard."
         ),
         "risk_unit_usd": 50.0,
         "eras": ERAS_15Y,
@@ -740,7 +753,7 @@ def get_or_build_matrix() -> dict[str, Any]:
     if MATRIX_PATH.exists():
         try:
             data = json.loads(MATRIX_PATH.read_text(encoding="utf-8"))
-            if isinstance(data, dict) and data.get("instruments") and len(data["instruments"]) >= 16:
+            if isinstance(data, dict) and data.get("instruments") and len(data["instruments"]) >= len(ALL_SCAN_EPICS):
                 return data
         except Exception:
             pass
@@ -751,12 +764,12 @@ if __name__ == "__main__":
     res = run_15yr_study(save_to_disk=True)
     sm = res["summary"]
     print(
-        f"15Y Study Completed in {sm['runtime_sec']}s | 16 Instruments | "
+        f"15Y Study Completed in {sm['runtime_sec']}s | {sm['instruments_count']} Instruments | "
         f"Portfolio 15Y Net: ${sm['portfolio_net_15y']:+,.2f} (Edge vs Raw: ${sm['portfolio_edge_15y']:+,.2f}) | "
         f"Era Consistency: {sm['era_win_consistency']} ({sm['profitable_era_pct']}%) | "
         f"Avg PF: {sm['avg_profit_factor']} | Avg Sharpe: {sm['avg_sharpe']}"
     )
-    print("\n--- TOP 16 PER-INSTRUMENT 15-YEAR OPTIMAL DNA SETTINGS ---")
+    print(f"\n--- TOP {sm['instruments_count']} PER-INSTRUMENT 15-YEAR OPTIMAL DNA SETTINGS ---")
     for r in res["instruments"]:
         op = r["optimal_params"]
         print(

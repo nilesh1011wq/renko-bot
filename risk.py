@@ -158,6 +158,7 @@ ASSET_CLUSTERS: dict[str, set[str]] = {
     "ENERGY": {"OIL_CRUDE", "OIL_BRENT"},
     "US_INDICES": {"US500", "US100", "US30"},
     "EU_INDICES": {"GER40", "UK100"},
+    "CRYPTO": {"BTCUSD", "ETHUSD", "SOLUSD"},
 }
 
 _CORR_ALIAS_MAP: dict[str, str] = {
@@ -180,6 +181,12 @@ _CORR_ALIAS_MAP: dict[str, str] = {
     "DE40": "GER40",
     "FTSE": "UK100",
     "NIKKEI": "JP225",
+    "BITCOIN": "BTCUSD",
+    "BTC/USD": "BTCUSD",
+    "ETHEREUM": "ETHUSD",
+    "ETH/USD": "ETHUSD",
+    "SOLANA": "SOLUSD",
+    "SOL/USD": "SOLUSD",
 }
 
 
