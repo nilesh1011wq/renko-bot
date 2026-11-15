@@ -521,15 +521,19 @@ def run_parameter_optimizer(cfg: dict, body: dict | None = None) -> dict:
     if req.get("atr_divisors"):
         divisors = [int(d) for d in req["atr_divisors"]]
     else:
-        default_divs = [8, 10, 12, 15] if cat in ("Crypto", "Indices") else [7, 9, 12, 15]
+        if cat == "Crypto":
+            default_divs = [6, 8, 10, 12]
+        elif cat == "Indices":
+            default_divs = [8, 10, 12, 15]
+        else:
+            default_divs = [7, 9, 12, 15]
         dna_div = int(round(float(base_cfg.get("strategy", {}).get("atr_div", 10))))
         if 4 <= dna_div <= 48 and dna_div not in default_divs:
             # Replace the closest non-extreme divisor or expand/trim to 4 divisors spanning the DNA
             merged = sorted(set(default_divs + [dna_div]))
             while len(merged) > 4:
-                # Drop whichever candidate is furthest from dna_div while keeping endpoints balanced
                 candidates = [x for x in merged if x != dna_div]
-                drop_x = min(candidates, key=lambda x: (abs(x - dna_div), -x))
+                drop_x = min(candidates, key=lambda x: (abs(x - dna_div), x))
                 merged.remove(drop_x)
             divisors = merged
         else:
@@ -567,7 +571,7 @@ def run_parameter_optimizer(cfg: dict, body: dict | None = None) -> dict:
 
     rows.sort(
         key=lambda r: (
-            1 if r["trades"] > 0 else 0,
+            2 if r["trades"] >= 10 else (1 if r["trades"] > 0 else 0),
             r["calmar"],
             r["profit_factor"],
             r["net"],
