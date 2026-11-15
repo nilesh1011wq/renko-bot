@@ -317,6 +317,7 @@ def handle_telegram_command(text: str, cfg: dict | None = None) -> str:
             f"/status — Live worker, market & kill-switch state\n"
             f"/positions — Open Capital.com deals & UPL\n"
             f"/pnl or /digest — Daily P&L & Model E attribution\n"
+            f"/dna [EPIC] — 15-Year Optimal DNA settings (all 16 markets)\n"
             f"/scanner — 16-market active signals summary\n"
             f"/pause — Pause 24/7 watcher\n"
             f"/resume — Clear kill switch & start watcher\n"
@@ -336,6 +337,37 @@ def handle_telegram_command(text: str, cfg: dict | None = None) -> str:
 
     if cmd in ("/pnl", "/digest"):
         return build_daily_telegram_digest(cur_cfg)
+
+    if cmd in ("/dna", "/best"):
+        from research_15yr_matrix import get_or_build_matrix
+        mat = get_or_build_matrix()
+        parts = raw.split()
+        target = parts[1].upper() if len(parts) > 1 else ""
+        if target == "XAUUSD":
+            target = "GOLD"
+        rows = mat.get("instruments", [])
+        if target:
+            hit = next((r for r in rows if r.get("epic") == target), None)
+            if not hit:
+                return f"🧬 No 15Y DNA profile found for '{target}'. Send /dna to see all 16 markets."
+            op = hit.get("optimal_params", {})
+            return (
+                f"🧬 {hit['epic']} ({hit['name']}) — 15Y OPTIMAL DNA\n"
+                f"• ATR({op.get('atr_len')}, /{op.get('atr_div')}) | ST {op.get('st_factor')} | Confirm {op.get('confirm_minutes')}m\n"
+                f"• Model E: TP {op.get('tp_bricks')}B | SL {op.get('safety_stop_bricks')}B | BE {op.get('breakeven_after_bricks')}B | Sess {op.get('sessions_label')}\n"
+                f"• 15Y Proj Net: ${float(hit.get('net_15y', 0)):+,.2f} | WR {hit.get('win_rate')}% | PF {hit.get('profit_factor')} | Sharpe {hit.get('sharpe')} | {hit.get('eras_profitable')}/5 Eras\n"
+                f"• Why: {hit.get('rationale', '')}"
+            )
+        top = sorted(rows, key=lambda x: (x.get("eras_profitable", 0), x.get("net_15y", 0)), reverse=True)[:6]
+        lines = [f"🏆 15-YEAR OPTIMAL DNA LEADERBOARD ({fmt_gst()}):"]
+        for r in top:
+            op = r.get("optimal_params", {})
+            lines.append(
+                f"• {r['epic']}: ATR({op.get('atr_len')},/{op.get('atr_div')}) ST {op.get('st_factor')} TP {op.get('tp_bricks')}B "
+                f"{op.get('sessions_label')} → PF {r.get('profit_factor')} | ${float(r.get('net_15y', 0)):+,.0f} ({r.get('eras_profitable')}/5)"
+            )
+        lines.append("Send /dna <SYMBOL> (e.g. /dna US100) for full details.")
+        return "\n".join(lines)
 
     if cmd == "/positions":
         creds = check_credentials_present()
@@ -522,6 +554,41 @@ def run_parameter_optimizer(cfg: dict, body: dict | None = None) -> dict:
         "scanned_at_gst": fmt_gst(),
         "results": rows,
     }
+
+
+def apply_instrument_dna_to_config(cfg: dict, epic: str) -> dict:
+    """Apply the 15-Year Optimal parameter DNA for `epic` into `cfg` cleanly."""
+    from research_15yr_matrix import get_or_build_matrix
+
+    clean_epic = "GOLD" if str(epic or "GOLD").upper() == "XAUUSD" else str(epic or "GOLD").upper()
+    cfg["epic"] = clean_epic
+    if clean_epic in INSTRUMENT_SPECS:
+        spec = INSTRUMENT_SPECS[clean_epic]
+        cfg["tick"] = spec["tick"]
+        cfg.setdefault("strategy", {})["fallback_size"] = spec["fallback_size"]
+
+    mat = get_or_build_matrix()
+    prof = mat.get("profiles_by_epic", {}).get(clean_epic) or (
+        cfg.get("risk", {}).get("instrument_profiles", {}).get(clean_epic)
+    )
+    applied = {}
+    if isinstance(prof, dict) and prof:
+        cfg.setdefault("strategy", {})
+        cfg.setdefault("risk", {})
+        for sk in ("atr_len", "atr_div", "st_factor", "green_buy", "red_sell",
+                   "tp_bricks", "runner_offset_bricks", "confirm_minutes", "use_htf_filter"):
+            if sk in prof:
+                cfg["strategy"][sk] = prof[sk]
+        for rk in ("safety_stop_bricks", "breakeven_after_bricks", "max_spread_frac_of_brick",
+                   "rollover_blackout", "macro_blackout"):
+            if rk in prof:
+                cfg["risk"][rk] = prof[rk]
+        if isinstance(prof.get("sessions"), dict):
+            cfg["risk"]["sessions"] = copy.deepcopy(prof["sessions"])
+        cfg["risk"]["use_instrument_profiles"] = True
+        cfg["risk"].setdefault("instrument_profiles", {})[clean_epic] = copy.deepcopy(prof)
+        applied = copy.deepcopy(prof)
+    return applied
 
 CLOUD_STATE_DIR = Path(os.environ.get("RENDER_DISK_PATH", str(JOURNAL)))
 CLOUD_STATE_DB = CLOUD_STATE_DIR / "cloud_state.sqlite"
@@ -1444,6 +1511,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(build_cloud_backup_snapshot())
             return
 
+        if u.path == "/api/matrix-15y":
+            from research_15yr_matrix import get_or_build_matrix
+            self._send_json(get_or_build_matrix())
+            return
+
         if u.path == "/api/scanner":
             from scanner import get_cached_or_scan_all
             cfg = load_config()
@@ -1747,6 +1819,22 @@ class Handler(BaseHTTPRequestHandler):
                 })
                 return
 
+            if u.path == "/api/apply-instrument-dna":
+                target_epic = str(body.get("epic", cfg.get("epic", "GOLD"))).upper()
+                applied = apply_instrument_dna_to_config(cfg, target_epic)
+                save_config(cfg)
+                clear_backtest_cache()
+                self._send_json({
+                    "ok": True,
+                    "epic": cfg["epic"],
+                    "applied_dna": applied,
+                    "config": cfg,
+                    "bot": get_bot_status(cfg, skip_network=True),
+                    "backtest": serialize_backtest(cfg, use_cache=False, skip_network=True),
+                    "instrument_specs": INSTRUMENT_SPECS,
+                })
+                return
+
             if u.path == "/api/switch-instrument":
                 target_epic = str(body.get("epic", "GOLD")).upper()
                 if target_epic == "XAUUSD":
@@ -1756,6 +1844,8 @@ class Handler(BaseHTTPRequestHandler):
                     spec = INSTRUMENT_SPECS[target_epic]
                     cfg["tick"] = spec["tick"]
                     cfg["strategy"]["fallback_size"] = spec["fallback_size"]
+                if bool(body.get("apply_dna", False)):
+                    apply_instrument_dna_to_config(cfg, target_epic)
                 save_config(cfg)
 
                 # Decouple broker candle synchronization into a background worker so chart responds in <15ms

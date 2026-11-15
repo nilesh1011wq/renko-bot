@@ -855,6 +855,17 @@
             <button type="button" class="btn-xs" onclick="applyCategoryProfile('Forex', this)">💱 Forex</button>
             <button type="button" class="btn-xs" onclick="applyCategoryProfile('Indices', this)">📊 Indices</button>
           </div>
+          <div class="field full" style="background:rgba(245,158,11,0.08); border:1px solid rgba(245,158,11,0.28); border-radius:6px; padding:6px 8px; margin-top:2px; margin-bottom:2px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:4px; margin-bottom:4px;">
+              <span style="font-size:10.5px; font-weight:700; color:#fbbf24;">🏆 15-Year Optimal DNA</span>
+              <label style="display:inline-flex; align-items:center; gap:3px; font-size:9.5px; color:var(--text-1); cursor:pointer;" title="Automatically load this instrument's 15-Year best settings when switching markets">
+                <input type="checkbox" id="in-auto_dna_switch" checked style="width:12px; height:12px; margin:0;" />
+                Auto on Switch
+              </label>
+            </div>
+            <div id="lbl-active-dna-summary" style="font-size:10px; font-family:var(--font-mono); color:var(--text-1); margin-bottom:5px; line-height:1.35;">Loading 15Y DNA...</div>
+            <button type="button" class="btn-xs" onclick="applyInstrumentDna()" style="width:100%; background:rgba(245,158,11,0.18); border:1px solid rgba(245,158,11,0.45); color:#fde68a; font-weight:700; padding:4px 6px;">⚡ Apply Active Instrument 15Y DNA</button>
+          </div>
           <div class="field">
             <label>Green Bricks → BUY</label>
             <input type="number" id="in-green_buy" value="2" min="1" max="10">
@@ -1172,6 +1183,7 @@
           <button class="dock-tab" onclick="switchDockTab('tab-mc', this)">🎲 Monte Carlo Cone (2,500 Runs)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-tca', this)">🎯 TCA &amp; Attribution</button>
           <button class="dock-tab" onclick="switchDockTab('tab-optimizer', this)">🔬 Optimizer</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-matrix15y', this)" style="color:#f59e0b; font-weight:700;">🏆 15Y Matrix &amp; Market Edge (16)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-sessions', this)">🔑 Broker Env &amp; Sessions</button>
           <button class="dock-tab" onclick="switchDockTab('tab-log', this)">📜 Bot Activity Log</button>
         </div>
@@ -1467,6 +1479,69 @@
               </table>
             </div>
           </div>
+
+          <!-- Tab 7: 15-Year Per-Instrument Matrix & Competitive Edge -->
+          <div id="tab-matrix15y" class="dock-pane">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
+              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span id="matrix15y-summary-pill" class="badge green" style="font-size:10.5px;">Loading 15-Year Study (2011–2026)...</span>
+                <button type="button" id="btn-m15-view-table" class="btn-xs primary" onclick="switchMatrix15yView('table')" style="font-size:10.5px; padding:3px 8px;">📊 16-Market DNA Table</button>
+                <button type="button" id="btn-m15-view-edge" class="btn-xs" onclick="switchMatrix15yView('edge')" style="font-size:10.5px; padding:3px 8px;">🏆 15Y Growth &amp; Market Benchmark</button>
+              </div>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:10px; color:var(--text-2);">5 Macro Regimes (2011–2026) · $50 Risk/Trade · Bid/Ask Spread &amp; Safety Stops</span>
+                <button type="button" class="btn-xs" onclick="applyInstrumentDna()" style="font-size:10.5px; padding:3px 8px; background:rgba(245,158,11,0.2); border:1px solid rgba(245,158,11,0.45); color:#fde68a; font-weight:700;">⚡ Apply Active Instrument 15Y DNA</button>
+              </div>
+            </div>
+
+            <div id="matrix15y-view-table" class="table-wrap" style="max-height:calc(100% - 34px);">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Instrument</th>
+                    <th>Category</th>
+                    <th>Optimal Brick &amp; ST DNA</th>
+                    <th>Model E Exit &amp; Stop</th>
+                    <th>Best Sessions (GST)</th>
+                    <th>15Y Trades</th>
+                    <th>Win %</th>
+                    <th>PF</th>
+                    <th>Sharpe</th>
+                    <th>Calmar</th>
+                    <th>Eras (5)</th>
+                    <th>15Y Net ($50)</th>
+                    <th>Edge vs Raw</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="matrix15y-tbody">
+                  <tr><td colspan="14" style="text-align:center; color:var(--text-2); padding:16px;">Loading 15-Year Per-Instrument Optimal DNA Matrix...</td></tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div id="matrix15y-view-edge" style="display:none; grid-template-columns:1.05fr 1.25fr; gap:10px; height:calc(100% - 34px);">
+              <div style="background:var(--bg-1); border:1px solid var(--border); border-radius:6px; padding:6px 8px; display:flex; flex-direction:column;">
+                <div style="font-size:11px; font-weight:700; color:#fbbf24; margin-bottom:4px;">📈 2011–2026 Walk-Forward Portfolio Growth vs Unfiltered Raw Renko ($10,000 Start · $50/Trade)</div>
+                <canvas id="matrix15y-canvas" style="width:100%; height:100%; flex:1; min-height:130px;"></canvas>
+              </div>
+              <div class="table-wrap" style="max-height:100%;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Institutional Capability</th>
+                      <th style="color:#10b981;">Renko Cockpit (Ours)</th>
+                      <th>TradingView</th>
+                      <th>MT4 / MT5</th>
+                      <th>Retail Bots</th>
+                      <th>QuantConnect</th>
+                    </tr>
+                  </thead>
+                  <tbody id="matrix15y-bench-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1606,17 +1681,19 @@
       showToast(`⚡ Switching to ${cleanEpic}...`);
 
       try {
+        const autoDnaEl = document.getElementById('in-auto_dna_switch');
+        const applyDna = !!(autoDnaEl && autoDnaEl.checked);
         const res = await apiFetch('/api/switch-instrument', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({epic: cleanEpic})
+          body: JSON.stringify({epic: cleanEpic, apply_dna: applyDna})
         });
         if (res.ok) {
           STATE = await res.json();
           CLIENT_STATE_CACHE[cleanEpic] = JSON.parse(JSON.stringify(STATE));
           syncInputsFromConfig(STATE.config);
           renderAll();
-          showToast(`✓ Switched to ${cleanEpic} (${STATE.backtest?.data_summary?.total_bricks || 0} bricks)`);
+          showToast(`✓ Switched to ${cleanEpic}${applyDna ? ' (15Y DNA Loaded)' : ''} (${STATE.backtest?.data_summary?.total_bricks || 0} bricks)`);
         } else {
           showToast(`✕ Failed to switch to ${cleanEpic}`);
         }
@@ -2050,6 +2127,263 @@
       if (elConf) elConf.value = conf;
       await saveAndRun();
       showToast(`⚡ Applied Optimizer Setup: ATR /${div} · TP ${tp}B · Confirm ${conf}m`);
+    }
+
+    let MATRIX_15Y = null;
+    let MATRIX_15Y_VIEW = 'table';
+
+    async function loadMatrix15y() {
+      try {
+        const res = await apiFetch('/api/matrix-15y');
+        if (!res.ok) return;
+        MATRIX_15Y = await res.json();
+        updateActiveDnaBadge();
+        renderMatrix15y();
+      } catch (e) {
+        console.warn('15Y Matrix load error:', e);
+      }
+    }
+
+    function updateActiveDnaBadge() {
+      const el = document.getElementById('lbl-active-dna-summary');
+      if (!el) return;
+      if (!MATRIX_15Y || !Array.isArray(MATRIX_15Y.instruments)) {
+        el.textContent = 'Loading 15Y Optimal DNA...';
+        return;
+      }
+      const activeEpic = (STATE?.config?.epic || 'GOLD').toUpperCase();
+      const row = MATRIX_15Y.instruments.find(r => r.epic === activeEpic);
+      if (!row || !row.optimal_params) {
+        el.textContent = `No 15Y DNA cached for ${activeEpic}`;
+        return;
+      }
+      const p = row.optimal_params;
+      const curDiv = Number(STATE?.config?.strategy?.atr_div ?? p.atr_div);
+      const curTp = Number(STATE?.config?.strategy?.tp_bricks ?? p.tp_bricks);
+      const synced = Math.abs(curDiv - p.atr_div) < 0.05 && Math.abs(curTp - p.tp_bricks) < 0.05;
+      const badge = synced
+        ? '<span style="color:#10b981; font-weight:700;">● DNA ACTIVE</span>'
+        : '<span style="color:#f59e0b; font-weight:700;">○ CUSTOM</span>';
+      el.innerHTML =
+        `${activeEpic} ${badge}<br/>` +
+        `ATR(${p.atr_len},/${p.atr_div}) ST ${p.st_factor} · TP ${p.tp_bricks}B / SL ${p.safety_stop_bricks}B · ${p.confirm_minutes}m · ${p.sessions_label}<br/>` +
+        `<span style="color:#38bdf8;">15Y Net $${Number(row.net_15y).toLocaleString()}</span> · WR ${row.win_rate}% · PF ${row.profit_factor} · Eras ${row.eras_profitable}/5`;
+    }
+
+    function renderMatrix15y() {
+      if (!MATRIX_15Y) return;
+      const s = MATRIX_15Y.summary || {};
+      const pill = document.getElementById('matrix15y-summary-pill');
+      if (pill) {
+        pill.textContent =
+          `16/16 Markets · 15Y Portfolio $${Number(s.portfolio_net_15y || 0).toLocaleString()} ` +
+          `(+$${Number(s.portfolio_edge_15y || 0).toLocaleString()} vs Raw) · ` +
+          `Eras ${s.era_win_consistency || '-'} (${s.profitable_era_pct || 0}%) · Avg PF ${s.avg_profit_factor || '-'}`;
+      }
+
+      const activeEpic = (STATE?.config?.epic || 'GOLD').toUpperCase();
+      const tbody = document.getElementById('matrix15y-tbody');
+      if (tbody && Array.isArray(MATRIX_15Y.instruments)) {
+        tbody.innerHTML = '';
+        for (const r of MATRIX_15Y.instruments) {
+          const p = r.optimal_params || {};
+          const isCur = r.epic === activeEpic;
+          const tr = document.createElement('tr');
+          if (isCur) tr.style.background = 'rgba(245,158,11,0.08)';
+          const netCls = r.net_15y >= 0 ? 'num-pos' : 'num-neg';
+          const edgeCls = r.edge_vs_raw_15y >= 0 ? 'num-pos' : 'num-neg';
+          const eraColor = r.eras_profitable >= 4 ? '#10b981' : (r.eras_profitable >= 3 ? '#f59e0b' : '#ef4444');
+          const beLabel = p.breakeven_after_bricks > 0 ? `BE ${p.breakeven_after_bricks}B` : 'BE +3B Auto';
+          tr.title = r.rationale || '';
+          tr.innerHTML = `
+            <td><b>${r.epic}</b>${isCur ? ' <span class="badge amber" style="font-size:9px;">ACTIVE</span>' : ''}<div style="font-size:9.5px; color:var(--text-2);">${r.name || ''}</div></td>
+            <td><span class="badge" style="font-size:9.5px;">${r.category || ''}</span></td>
+            <td style="font-family:var(--font-mono); font-size:10.5px;">ATR(${p.atr_len},/${p.atr_div}) · ST ${p.st_factor} · GB ${p.green_buy}</td>
+            <td style="font-family:var(--font-mono); font-size:10.5px;">TP ${p.tp_bricks}B / SL ${p.safety_stop_bricks}B · ${beLabel} · ${p.confirm_minutes}m</td>
+            <td><span class="badge green" style="font-size:9.5px;">${p.sessions_label || 'ALL'}</span></td>
+            <td>${Number(r.trades_15y || 0).toLocaleString()}</td>
+            <td>${r.win_rate}%</td>
+            <td style="font-weight:700; color:${r.profit_factor >= 1.5 ? '#10b981' : '#e2e8f0'};">${r.profit_factor}</td>
+            <td>${r.sharpe}</td>
+            <td>${r.calmar_15y}</td>
+            <td style="font-weight:700; color:${eraColor};">${r.eras_profitable}/5</td>
+            <td class="${netCls}" style="font-weight:700;">$${Number(r.net_15y || 0).toLocaleString()}</td>
+            <td class="${edgeCls}">+$${Number(r.edge_vs_raw_15y || 0).toLocaleString()}</td>
+            <td><button type="button" class="success" style="padding:2px 8px; font-size:10px;" onclick="applyInstrumentDna('${r.epic}')">⚡ Load &amp; Apply</button></td>
+          `;
+          tbody.appendChild(tr);
+        }
+      }
+
+      const benchBody = document.getElementById('matrix15y-bench-tbody');
+      if (benchBody && Array.isArray(MATRIX_15Y.competitor_benchmark)) {
+        benchBody.innerHTML = '';
+        for (const b of MATRIX_15Y.competitor_benchmark) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td style="font-weight:600;">${b.capability || ''}</td>
+            <td style="color:#10b981; font-weight:700; font-size:10.5px;">${b.renko_cockpit || ''}</td>
+            <td style="font-size:10.5px; color:var(--text-1);">${b.tradingview || ''}</td>
+            <td style="font-size:10.5px; color:var(--text-1);">${b.mt5 || ''}</td>
+            <td style="font-size:10.5px; color:var(--text-1);">${b.retail_bots || ''}</td>
+            <td style="font-size:10.5px; color:var(--text-1);">${b.quantconnect || ''}</td>
+          `;
+          benchBody.appendChild(tr);
+        }
+      }
+
+      if (MATRIX_15Y_VIEW === 'edge') {
+        setTimeout(() => drawMatrix15yChart(), 20);
+      }
+    }
+
+    function switchMatrix15yView(mode) {
+      MATRIX_15Y_VIEW = mode;
+      const vTbl = document.getElementById('matrix15y-view-table');
+      const vEdge = document.getElementById('matrix15y-view-edge');
+      const bTbl = document.getElementById('btn-m15-view-table');
+      const bEdge = document.getElementById('btn-m15-view-edge');
+      if (mode === 'edge') {
+        if (vTbl) vTbl.style.display = 'none';
+        if (vEdge) vEdge.style.display = 'grid';
+        if (bTbl) bTbl.classList.remove('primary');
+        if (bEdge) bEdge.classList.add('primary');
+        setTimeout(() => drawMatrix15yChart(), 20);
+      } else {
+        if (vTbl) vTbl.style.display = 'block';
+        if (vEdge) vEdge.style.display = 'none';
+        if (bTbl) bTbl.classList.add('primary');
+        if (bEdge) bEdge.classList.remove('primary');
+      }
+    }
+
+    function drawMatrix15yChart() {
+      const canvas = document.getElementById('matrix15y-canvas');
+      if (!canvas || !MATRIX_15Y || !Array.isArray(MATRIX_15Y.portfolio_curve)) return;
+      const curve = MATRIX_15Y.portfolio_curve;
+      if (curve.length < 2) return;
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      const W = Math.max(320, rect.width || 560);
+      const H = Math.max(150, rect.height || 220);
+      canvas.width = W * dpr;
+      canvas.height = H * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, W, H);
+
+      const padL = 62, padR = 16, padT = 18, padB = 26;
+      const pw = W - padL - padR;
+      const ph = H - padT - padB;
+      const startEq = 10000;
+      const proVals = curve.map(pt => startEq + (Number(pt.pro) || 0));
+      const rawVals = curve.map(pt => startEq + (Number(pt.raw) || 0));
+      const minV = Math.min(...proVals, ...rawVals, startEq);
+      const maxV = Math.max(...proVals, ...rawVals, startEq + 1000);
+      const span = Math.max(100, maxV - minV);
+      const xOf = (i) => padL + (i / (curve.length - 1)) * pw;
+      const yOf = (v) => padT + ph - ((v - minV) / span) * ph;
+
+      // Grid lines
+      ctx.strokeStyle = 'rgba(148,163,184,0.12)';
+      ctx.lineWidth = 1;
+      ctx.font = '10px monospace';
+      ctx.fillStyle = '#94a3b8';
+      for (let g = 0; g <= 4; g++) {
+        const val = minV + (span * g) / 4;
+        const y = yOf(val);
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(W - padR, y);
+        ctx.stroke();
+        ctx.fillText(`$${Math.round(val / 1000)}k`, 6, y + 3);
+      }
+
+      // Raw baseline dashed curve
+      ctx.save();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      rawVals.forEach((v, i) => {
+        const x = xOf(i), y = yOf(v);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      ctx.restore();
+
+      // Pro filtered curve fill + stroke
+      ctx.beginPath();
+      proVals.forEach((v, i) => {
+        const x = xOf(i), y = yOf(v);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      const grad = ctx.createLinearGradient(0, padT, 0, padT + ph);
+      grad.addColorStop(0, 'rgba(16,185,129,0.28)');
+      grad.addColorStop(1, 'rgba(16,185,129,0.02)');
+      ctx.lineTo(xOf(curve.length - 1), padT + ph);
+      ctx.lineTo(xOf(0), padT + ph);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      ctx.beginPath();
+      proVals.forEach((v, i) => {
+        const x = xOf(i), y = yOf(v);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 2.4;
+      ctx.stroke();
+
+      // Year labels (sparse)
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '10px monospace';
+      for (let i = 0; i < curve.length; i += 3) {
+        ctx.fillText(String(curve[i].year), xOf(i) - 12, H - 8);
+      }
+      ctx.fillText('2026', xOf(curve.length - 1) - 18, H - 8);
+
+      // Legend
+      ctx.fillStyle = '#10b981';
+      ctx.fillRect(padL + 8, padT + 2, 10, 3);
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillText(`Pro 15Y DNA ($${Math.round(proVals[proVals.length - 1]).toLocaleString()})`, padL + 22, padT + 6);
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillRect(padL + 8, padT + 14, 10, 2);
+      ctx.fillText(`Raw Unfiltered ($${Math.round(rawVals[rawVals.length - 1]).toLocaleString()})`, padL + 22, padT + 18);
+    }
+
+    async function applyInstrumentDna(targetEpic) {
+      const epic = (targetEpic || (STATE && STATE.config && STATE.config.epic) || 'GOLD').toUpperCase();
+      showToast(`🏆 Loading 15Y Optimal DNA for ${epic}...`);
+      try {
+        const res = await apiFetch('/api/apply-instrument-dna', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({epic})
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          showToast(`✕ Failed to apply 15Y DNA for ${epic}: ${data.error || res.status}`);
+          return;
+        }
+        STATE = {
+          config: data.config,
+          bot: data.bot,
+          backtest: data.backtest,
+          instrument_specs: data.instrument_specs
+        };
+        CLIENT_STATE_CACHE[epic] = JSON.parse(JSON.stringify(STATE));
+        syncInputsFromConfig(STATE.config);
+        renderAll();
+        updateActiveDnaBadge();
+        renderMatrix15y();
+        const d = data.applied_dna || {};
+        showToast(`🏆 Applied ${epic} 15Y DNA: ATR(${d.atr_len},/${d.atr_div}) ST ${d.st_factor} · TP ${d.tp_bricks}B · ${d.sessions_label || 'ALL'}`);
+      } catch (err) {
+        showToast(`✕ Error applying 15Y DNA: ${err.message}`);
+      }
     }
 
     async function loadState() {
@@ -2652,6 +2986,9 @@
         setTimeout(() => drawEquityChart(STATE.backtest.equity_curve, STATE.backtest.raw_curve), 20);
       } else if (tabId === 'tab-mc' && STATE && STATE.backtest) {
         setTimeout(() => drawMonteCarloChart(STATE.backtest.montecarlo), 20);
+      } else if (tabId === 'tab-matrix15y') {
+        if (!MATRIX_15Y) loadMatrix15y();
+        else setTimeout(() => { renderMatrix15y(); drawMatrix15yChart(); }, 20);
       }
     }
 
@@ -3105,6 +3442,7 @@
             logBody.appendChild(tr);
           }
         }
+        if (typeof updateActiveDnaBadge === 'function') updateActiveDnaBadge();
       } catch (err) {
         console.error('Error in renderAll:', err);
       }
@@ -4046,6 +4384,7 @@
 
     loadState().then(() => {
       fetchScannerData();
+      loadMatrix15y();
       initLiveSsePulse();
     });
     // Continuously scan all instruments in background every 25 seconds & sync cloud backup

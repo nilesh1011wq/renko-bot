@@ -51,6 +51,20 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
         if "max_spread_frac_of_brick" in cat_prof:
             cfg["risk"]["max_spread_frac_of_brick"] = float(cat_prof["max_spread_frac_of_brick"])
 
+    inst_profiles = r_cfg.get("instrument_profiles", {})
+    inst_prof = inst_profiles.get(epic.upper(), {}) if isinstance(inst_profiles, dict) else {}
+    if r_cfg.get("use_instrument_profiles", False) and inst_prof:
+        for sk in ("atr_len", "atr_div", "st_factor", "green_buy", "red_sell",
+                   "tp_bricks", "runner_offset_bricks", "confirm_minutes", "use_htf_filter"):
+            if sk in inst_prof:
+                cfg["strategy"][sk] = inst_prof[sk]
+        for rk in ("safety_stop_bricks", "breakeven_after_bricks", "max_spread_frac_of_brick",
+                   "rollover_blackout", "macro_blackout"):
+            if rk in inst_prof:
+                cfg["risk"][rk] = inst_prof[rk]
+        if isinstance(inst_prof.get("sessions"), dict):
+            cfg["risk"]["sessions"] = copy.deepcopy(inst_prof["sessions"])
+
     # 1. Fetch / ensure data
     bars, days = ensure_data(cfg)
     if not bars:
@@ -126,14 +140,14 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
     auto_enabled = epic.upper() not in disabled_epics
 
     veto_reason = None
-    if in_blackout:
+    if not auto_enabled:
+        veto_reason = "Auto-Trade Paused"
+    elif in_blackout:
         veto_reason = "Rollover Blackout (00:45–02:15 GST)"
     elif in_macro_blk:
         veto_reason = "US Macro News Blackout"
     elif not session_ok:
         veto_reason = f"{sess.title()} Session Filtered"
-    elif not auto_enabled:
-        veto_reason = "Auto-Trade Paused"
     elif spread_veto:
         veto_reason = f"Spread Wide ({cur_spread} > {round(max_sp_frac*bs, digits)})"
 
@@ -157,6 +171,12 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
         signal_label = f"Trend Shift ({'G:'+str(g_run) if g_run else 'R:'+str(r_run)})"
 
     filter_status = "READY" if not veto_reason else veto_reason
+    dna_summary = (
+        f"ATR({cfg['strategy'].get('atr_len', 5)},/{cfg['strategy'].get('atr_div', 15):g}) · "
+        f"ST {cfg['strategy'].get('st_factor', 2.1):g} · "
+        f"TP {cfg['strategy'].get('tp_bricks', 3):g}B · "
+        f"{cfg['strategy'].get('confirm_minutes', 0)}m"
+    )
 
     return {
         "epic": epic,
@@ -178,6 +198,8 @@ def scan_single_instrument(epic: str, base_cfg: dict, cap: Optional[Capital] = N
         "veto": veto_reason,
         "auto_enabled": auto_enabled,
         "category_profile": cat_prof,
+        "instrument_profile": inst_prof,
+        "dna_summary": dna_summary,
         "total_bricks": eng.brick_cnt,
         "time": now_utc.isoformat(),
     }

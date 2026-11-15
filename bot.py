@@ -693,6 +693,18 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                         inst_cfg["strategy"]["st_factor"] = float(cat_prof["st_factor"])
                     if "max_spread_frac_of_brick" in cat_prof:
                         inst_cfg["risk"]["max_spread_frac_of_brick"] = float(cat_prof["max_spread_frac_of_brick"])
+                inst_prof = (r_cfg.get("instrument_profiles") or {}).get(epic.upper(), {})
+                if r_cfg.get("use_instrument_profiles", False) and epic.upper() != "GOLD" and isinstance(inst_prof, dict):
+                    for sk in ("atr_len", "atr_div", "st_factor", "green_buy", "red_sell",
+                               "tp_bricks", "runner_offset_bricks", "confirm_minutes", "use_htf_filter"):
+                        if sk in inst_prof:
+                            inst_cfg["strategy"][sk] = inst_prof[sk]
+                    for rk in ("safety_stop_bricks", "breakeven_after_bricks", "max_spread_frac_of_brick",
+                               "rollover_blackout", "macro_blackout"):
+                        if rk in inst_prof:
+                            inst_cfg["risk"][rk] = inst_prof[rk]
+                    if isinstance(inst_prof.get("sessions"), dict):
+                        inst_cfg["risk"]["sessions"] = copy.deepcopy(inst_prof["sessions"])
 
             epic_positions = positions_by_epic.get(epic, [])
             if epic_positions:

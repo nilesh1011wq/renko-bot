@@ -1288,6 +1288,85 @@ class TestInstitutionalUAT(unittest.TestCase):
                 else:
                     os.environ.pop("DASHBOARD_PASSWORD", None)
 
+    def test_31_phase7_15yr_dna_matrix_and_apply_endpoint(self):
+        """Phase 7: 15-Year Per-Instrument DNA matrix, scanner/API wiring, Telegram /dna & /best, and UI markers."""
+        import copy
+        import tempfile
+        from unittest.mock import MagicMock
+        import research_15yr_matrix
+        import scanner
+
+        orig_cfg = copy.deepcopy(backtest.load_config())
+        orig_root = server.ROOT
+        orig_db = server.CLOUD_STATE_DB
+        orig_load_env = server.load_env
+        orig_pw = os.environ.get("DASHBOARD_PASSWORD")
+
+        def _make_handler(path: str, payload: dict | None = None):
+            h = server.Handler.__new__(server.Handler)
+            raw = json.dumps(payload or {}).encode("utf-8")
+            h.headers = {"Content-Length": str(len(raw))} if payload is not None else {}
+            h.rfile = io.BytesIO(raw)
+            h.wfile = io.BytesIO()
+            h.path = path
+            h.send_response = MagicMock()
+            h.send_header = MagicMock()
+            h.end_headers = MagicMock()
+            return h
+
+        with tempfile.TemporaryDirectory() as tmpd:
+            tmp = Path(tmpd)
+            server.ROOT = tmp
+            server.CLOUD_STATE_DB = tmp / "cloud_state.sqlite"
+            server.load_env = lambda: None
+            os.environ.pop("DASHBOARD_PASSWORD", None)
+            try:
+                # 1. Verify 15Y matrix has all 16 positive instruments & benchmark table
+                matrix = research_15yr_matrix.get_or_build_matrix()
+                self.assertEqual(len(matrix["instruments"]), 16)
+                self.assertGreater(matrix["summary"]["portfolio_net_15y"], 500000.0)
+                self.assertTrue(all(r["net_15y"] > 0 for r in matrix["instruments"]))
+                self.assertGreaterEqual(len(matrix.get("competitor_benchmark", [])), 5)
+
+                # 2. Scanner retains category_profile (test_26 parity) + adds per-instrument 15Y DNA
+                eur_scan = scanner.scan_single_instrument("EURUSD", orig_cfg, cap=None)
+                self.assertEqual(eur_scan["category_profile"]["atr_div"], orig_cfg["risk"]["category_profiles"]["Forex"]["atr_div"])
+                self.assertIn("instrument_profile", eur_scan)
+                self.assertIn("dna_summary", eur_scan)
+
+                # 3. GET /api/matrix-15y & POST /api/apply-instrument-dna
+                h_get = _make_handler("/api/matrix-15y")
+                h_get.do_GET()
+                h_get.send_response.assert_called_with(200)
+                m_res = json.loads(h_get.wfile.getvalue().decode("utf-8"))
+                self.assertEqual(len(m_res["instruments"]), 16)
+
+                h_apply = _make_handler("/api/apply-instrument-dna", {"epic": "US100"})
+                h_apply.do_POST()
+                h_apply.send_response.assert_called_with(200)
+                ap_res = json.loads(h_apply.wfile.getvalue().decode("utf-8"))
+                self.assertTrue(ap_res["ok"])
+                self.assertEqual(ap_res["epic"], "US100")
+                self.assertEqual(ap_res["config"]["strategy"]["atr_div"], m_res["profiles_by_epic"]["US100"]["atr_div"])
+
+                # 4. Telegram /dna & /best commands
+                self.assertIn("15Y OPTIMAL DNA", server.handle_telegram_command("/dna GOLD"))
+                self.assertIn("15-YEAR OPTIMAL DNA LEADERBOARD", server.handle_telegram_command("/best"))
+
+                # 5. Phase 7 UI markers present in index.html
+                html_src = (Path(backtest.ROOT) / "static" / "index.html").read_text(encoding="utf-8")
+                for marker in ("tab-matrix15y", "applyInstrumentDna", "matrix15y-canvas", "in-auto_dna_switch", "matrix15y-bench-tbody"):
+                    self.assertIn(marker, html_src)
+            finally:
+                server.ROOT = orig_root
+                server.CLOUD_STATE_DB = orig_db
+                server.load_env = orig_load_env
+                if orig_pw is not None:
+                    os.environ["DASHBOARD_PASSWORD"] = orig_pw
+                else:
+                    os.environ.pop("DASHBOARD_PASSWORD", None)
+                backtest.save_config(orig_cfg)
+
 
 if __name__ == "__main__":
     unittest.main()
