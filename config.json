@@ -194,14 +194,14 @@
         "sessions_label": "LON+NY"
       },
       "GBPUSD": {
-        "atr_len": 5,
-        "atr_div": 14.0,
-        "st_factor": 2.2,
+        "atr_len": 10,
+        "atr_div": 7.5,
+        "st_factor": 2.5,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
+        "tp_bricks": 1.5,
         "runner_offset_bricks": 1.0,
-        "confirm_minutes": 5,
+        "confirm_minutes": 3,
         "safety_stop_bricks": 2.5,
         "breakeven_after_bricks": 1.5,
         "use_htf_filter": false,
@@ -436,9 +436,9 @@
         "sessions_label": "ASI+LON"
       },
       "BTCUSD": {
-        "atr_len": 5,
-        "atr_div": 11.0,
-        "st_factor": 2.0,
+        "atr_len": 14,
+        "atr_div": 6.0,
+        "st_factor": 1.5,
         "green_buy": 2,
         "red_sell": 2,
         "tp_bricks": 3.0,

@@ -284,6 +284,11 @@ def _build_candidate_grid(epic: str, spec: dict) -> list[dict]:
         ]
 
     if cat == "Forex":
+        if ep == "GBPUSD":
+            # User-selected 15Y High-WR & PF DNA (54.3% WR, 1.60 PF, 4/5 eras, +$26.7k 15Y)
+            return [
+                _mk(10, 7.5, 2.5, 2, 1.5, 3, 2.5, 1.5, False, 0.42, True, s_lon_ny),
+            ]
         if ep == "AUDUSD":
             # AUDUSD (0.665) has higher spread-to-price ratio, requiring wider structural bricks (ATR /6-8)
             return [
@@ -306,6 +311,11 @@ def _build_candidate_grid(epic: str, spec: dict) -> list[dict]:
         ]
 
     if cat == "Crypto":  # BTCUSD, ETHUSD, SOLUSD (24/7 high-beta trend assets)
+        if ep == "BTCUSD":
+            # User-selected 15Y Strong High-WR DNA (53.6% WR, 2.21 PF, 5/5 eras, +$65.4k 15Y)
+            return [
+                _mk(14, 6.0, 1.5, 2, 3.0, 2, 3.0, 1.5, False, 0.45, False, s_lon_ny),
+            ]
         return [
             _mk(5, 10.0, 2.2, 2, 3.5, 3, 3.0, 1.5, False, 0.45, False, s_all),
             _mk(5, 9.0,  2.1, 2, 4.0, 3, 3.5, 1.5, False, 0.45, False, s_all),
