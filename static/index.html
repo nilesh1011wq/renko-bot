@@ -158,12 +158,19 @@
       overflow: hidden;
       margin: 0;
       padding: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .topbar {
+      flex-shrink: 0;
     }
     .layout {
       display: grid;
-      grid-template-columns: 290px 1fr;
-      height: calc(100vh - 44px);
-      max-height: calc(100vh - 44px);
+      grid-template-columns: 315px 1fr;
+      flex: 1;
+      min-height: 0;
+      height: auto;
+      max-height: none;
       overflow: hidden;
     }
     @media (max-width: 1100px) {
@@ -174,16 +181,20 @@
     .sidebar {
       background: var(--bg-1);
       border-right: 1px solid var(--border);
-      padding: 8px;
+      padding: 8px 10px 95px 10px; /* guarantees smooth scrolling down to the extreme bottom */
       overflow-y: auto;
+      overflow-x: hidden;
       height: 100%;
       max-height: 100%;
       display: flex;
       flex-direction: column;
       gap: 8px;
+      width: 315px;
+      min-width: 315px;
+      box-sizing: border-box;
     }
     @media (max-width: 1100px) {
-      .sidebar { max-height: 240px; border-right: none; border-bottom: 1px solid var(--border); }
+      .sidebar { width: 100%; min-width: 100%; max-height: 320px; border-right: none; border-bottom: 1px solid var(--border); }
     }
     .panel {
       background: var(--bg-2);
@@ -1169,6 +1180,12 @@
               <button type="button" class="btn-xs" onclick="scrollChartBricks(25)" title="Scroll backward into past history (25 bricks)">◀ Past</button>
               <button type="button" class="btn-xs" id="btn-chart-live" onclick="resetChartToLive()" style="display:none; background:#0284c7; color:#fff; font-weight:700;" title="Jump to Real-Time latest bricks">▶▶ Live</button>
               <button type="button" class="btn-xs" onclick="scrollChartBricks(-25)" title="Scroll forward toward real-time">Next ▶</button>
+            </div>
+            <!-- Dedicated Renko Chart Zoom Controls -->
+            <div class="density-group" style="display:flex; align-items:center; gap:2px;" title="Zoom Renko Chart">
+              <button type="button" class="btn-xs" onclick="zoomChart(-1)" title="Zoom In (larger bricks, fewer bars)">🔍+ In</button>
+              <button type="button" class="btn-xs" onclick="zoomChart(1)" title="Zoom Out (more bricks, macro view)">🔍- Out</button>
+              <button type="button" class="btn-xs" onclick="resetChartZoom()" title="Reset Zoom to 80 bricks">⟲</button>
             </div>
             <div class="density-group">
               <button type="button" class="btn-xs" onclick="setBrickDensity(50, this)">50</button>
@@ -3096,6 +3113,37 @@
     let CURRENT_BRICK_COUNT = 80;
     let CHART_SCROLL_OFFSET = 0; // 0 = viewing real-time / latest bricks; > 0 = scrolled backward into history
 
+    function zoomChart(dir) {
+      const presets = [25, 40, 60, 80, 120, 180, 250, 400];
+      let cur = CURRENT_BRICK_COUNT;
+      if (dir < 0) {
+        const smaller = presets.filter(p => p < cur);
+        CURRENT_BRICK_COUNT = smaller.length ? smaller[smaller.length - 1] : Math.max(15, cur - 15);
+      } else {
+        const larger = presets.filter(p => p > cur);
+        CURRENT_BRICK_COUNT = larger.length ? larger[0] : Math.min(500, cur + 30);
+      }
+      document.querySelectorAll('.density-group button').forEach(b => {
+        b.classList.toggle('active', b.textContent.trim() == CURRENT_BRICK_COUNT);
+      });
+      if (CURRENT_RENKO_DATA && CURRENT_RENKO_DATA.bricks) {
+        drawRenkoChart(CURRENT_RENKO_DATA.bricks, CURRENT_RENKO_DATA.trades, CURRENT_RENKO_DATA.filtered);
+      }
+      showToast(`🔍 Zoom: ${CURRENT_BRICK_COUNT} bricks visible`);
+    }
+
+    function resetChartZoom() {
+      CURRENT_BRICK_COUNT = 80;
+      CHART_SCROLL_OFFSET = 0;
+      document.querySelectorAll('.density-group button').forEach(b => {
+        b.classList.toggle('active', b.textContent.trim() === '80');
+      });
+      if (CURRENT_RENKO_DATA && CURRENT_RENKO_DATA.bricks) {
+        drawRenkoChart(CURRENT_RENKO_DATA.bricks, CURRENT_RENKO_DATA.trades, CURRENT_RENKO_DATA.filtered);
+      }
+      showToast('⟲ Zoom reset to default (80 bricks)');
+    }
+
     function setBrickDensity(count, btn) {
       CURRENT_BRICK_COUNT = count;
       document.querySelectorAll('.density-group button').forEach(b => b.classList.remove('active'));
@@ -4443,17 +4491,20 @@
         const count = Math.min(CURRENT_BRICK_COUNT, total);
 
         if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-          // Trackpad horizontal swipe: swipe left scrolls forward, swipe right scrolls backward
+          // Trackpad horizontal swipe: scroll time horizontally
           const delta = Math.round(e.deltaX / 10);
           CHART_SCROLL_OFFSET = Math.max(0, Math.min(total - count, CHART_SCROLL_OFFSET - delta));
-        } else if (e.ctrlKey || e.metaKey) {
-          // Pinch-to-zoom / Ctrl+Wheel: adjust brick density
-          const zoomChange = Math.sign(e.deltaY) * 5;
-          CURRENT_BRICK_COUNT = Math.max(20, Math.min(300, CURRENT_BRICK_COUNT + zoomChange));
-        } else {
-          // Standard vertical wheel: scroll up (deltaY < 0) scrolls backward into history, down scrolls to live
+        } else if (e.shiftKey) {
+          // Shift+Wheel: horizontal time navigation
           const wheelDelta = Math.sign(e.deltaY) * Math.max(1, Math.round(Math.abs(e.deltaY) / 25));
           CHART_SCROLL_OFFSET = Math.max(0, Math.min(total - count, CHART_SCROLL_OFFSET - wheelDelta));
+        } else {
+          // Wheel on Renko canvas: zoom in / zoom out smoothly
+          const zoomChange = Math.sign(e.deltaY) * 10;
+          CURRENT_BRICK_COUNT = Math.max(15, Math.min(450, CURRENT_BRICK_COUNT + zoomChange));
+          document.querySelectorAll('.density-group button').forEach(b => {
+            b.classList.toggle('active', b.textContent.trim() == CURRENT_BRICK_COUNT);
+          });
         }
 
         drawRenkoChart(CURRENT_RENKO_DATA.bricks, CURRENT_RENKO_DATA.trades, CURRENT_RENKO_DATA.filtered);
