@@ -558,6 +558,7 @@ class TestInstitutionalUAT(unittest.TestCase):
 
         cfg = copy.deepcopy(backtest.load_config())
         cfg["active_instrument"] = "GOLD"
+        cfg["strategy"]["atr_div"] = 15.0
         cfg["strategy"]["confirm_minutes"] = 5
         cfg["strategy"]["dual_order_mode"] = True
         cfg["strategy"]["tp_bricks"] = 3.0
@@ -647,6 +648,7 @@ class TestInstitutionalUAT(unittest.TestCase):
         cfg = copy.deepcopy(backtest.load_config())
         cfg["epic"] = "GOLD"
         cfg["mode"] = "auto"
+        cfg["strategy"]["atr_div"] = 15.0
         cfg["strategy"]["confirm_minutes"] = 5
         cfg["strategy"]["one_trade_per_run"] = True
         cfg["strategy"]["grid_anchor"] = False
