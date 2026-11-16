@@ -504,7 +504,7 @@ def build_guide() -> Path:
   <div class="box-quant">
     <div class="box-title">📐 Exact Quantitative Formulas (No Black Boxes)</div>
     • <b>Daily Wilder ATR(5):</b> Uses completed prior daily candles only (zero lookahead bias) with Wilder RMA smoothing.<br/>
-    • <b>Dynamic Brick Size:</b> <code>brick_size = round_to_tick(Daily ATR(5) / ATR_Divisor)</code>. Gold uses Divisor <code>15</code> (~$6–$7 bricks); Scalp/FX/Indices adapt via Category Profiles.<br/>
+    • <b>Dynamic Brick Size:</b> <code>brick_size = round_to_tick(Daily ATR(5) / ATR_Divisor)</code>. Gold uses Divisor <code>15</code> (~60–70 pip bricks; Gold 1 pip = $0.10). Brick sizes are shown in <b>pips</b> for Forex &amp; Gold and in <b>$</b> for Silver, Oil, Indices &amp; Crypto; Scalp/FX/Indices adapt via Category Profiles.<br/>
     • <b>Supertrend (Len 1, Factor 2.1):</b> Computed natively on completed Renko brick True Ranges (ATR = brick range), producing an institutional staircase Stop/Reverse regime line.
   </div>
 </div>

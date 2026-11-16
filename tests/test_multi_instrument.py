@@ -26,6 +26,16 @@ class TestMultiInstrument(unittest.TestCase):
             self.assertGreater(spec["tick"], 0)
             self.assertGreater(spec["fallback_size"], 0)
 
+    def test_brick_size_pips_for_forex_and_gold(self):
+        """Brick size shows in pips for Forex & Gold (Gold 1 pip = $0.10), in $ for others."""
+        from backtest import format_brick_size
+        self.assertEqual(format_brick_size(6.61, "GOLD"), "66.1 pips")
+        self.assertEqual(format_brick_size(6.61, "XAUUSD"), "66.1 pips")
+        self.assertEqual(format_brick_size(0.0012, "EURUSD"), "12.0 pips")
+        self.assertEqual(format_brick_size(0.15, "USDJPY"), "15.0 pips")
+        self.assertEqual(format_brick_size(0.08, "SILVER"), "$0.080")
+        self.assertEqual(format_brick_size(250.0, "BTCUSD"), "$250.0")
+
     def test_alias_resolution(self):
         """Verify broker alias mapping works for Oil, Forex, and Indices."""
         # Crude oil aliases
@@ -149,6 +159,10 @@ class TestMultiInstrument(unittest.TestCase):
                 self.assertEqual(it["digits"], 2)
             elif it["epic"] in ("GOLD", "SILVER", "OIL_CRUDE", "OIL_BRENT", "BTCUSD", "ETHUSD", "SOLUSD"):
                 self.assertEqual(it["currency"], "$")
+            if it["epic"] == "GOLD":
+                self.assertEqual(it["pip_factor"], 10)
+            elif it["epic"] in ("SILVER", "OIL_CRUDE", "OIL_BRENT", "BTCUSD", "ETHUSD", "SOLUSD", "US500", "US100", "US30", "GER40", "UK100", "JP225"):
+                self.assertEqual(it["pip_factor"], 1)
             if it["epic"] == "BTCUSD":
                 self.assertEqual(it["digits"], 1)
             elif it["epic"] in ("ETHUSD", "SOLUSD"):

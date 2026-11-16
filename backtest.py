@@ -49,8 +49,8 @@ def load_bars(path):
 
 
 INSTRUMENT_SPECS = {
-    "GOLD": {"name": "Gold / USD", "category": "Metals", "currency": "$", "base_px": 2640.0, "tick": 0.01, "digits": 2, "scale": 1.0, "half_sp": 0.14, "fallback_size": 3.50, "pip_factor": 1.0},
-    "XAUUSD": {"name": "Gold / USD", "category": "Metals", "currency": "$", "base_px": 2640.0, "tick": 0.01, "digits": 2, "scale": 1.0, "half_sp": 0.14, "fallback_size": 3.50, "pip_factor": 1.0},
+    "GOLD": {"name": "Gold / USD", "category": "Metals", "currency": "$", "base_px": 2640.0, "tick": 0.01, "digits": 2, "scale": 1.0, "half_sp": 0.14, "fallback_size": 3.50, "pip_factor": 10.0},
+    "XAUUSD": {"name": "Gold / USD", "category": "Metals", "currency": "$", "base_px": 2640.0, "tick": 0.01, "digits": 2, "scale": 1.0, "half_sp": 0.14, "fallback_size": 3.50, "pip_factor": 10.0},
     "SILVER": {"name": "Silver / USD", "category": "Metals", "currency": "$", "base_px": 31.50, "tick": 0.001, "digits": 3, "scale": 31.5 / 2640.0, "half_sp": 0.01, "fallback_size": 0.08, "pip_factor": 1.0},
     "OIL_CRUDE": {"name": "Crude Oil (WTI)", "category": "Energy", "currency": "$", "base_px": 72.00, "tick": 0.01, "digits": 2, "scale": 72.0 / 2640.0, "half_sp": 0.03, "fallback_size": 0.20, "pip_factor": 1.0},
     "OIL_BRENT": {"name": "Brent Crude Oil", "category": "Energy", "currency": "$", "base_px": 76.00, "tick": 0.01, "digits": 2, "scale": 76.0 / 2640.0, "half_sp": 0.03, "fallback_size": 0.20, "pip_factor": 1.0},
@@ -70,6 +70,23 @@ INSTRUMENT_SPECS = {
     "ETHUSD": {"name": "Ethereum / USD", "category": "Crypto", "currency": "$", "base_px": 3150.0, "tick": 0.05, "digits": 2, "scale": 3150.0 / 2640.0, "half_sp": 0.90, "fallback_size": 12.0, "pip_factor": 1.0},
     "SOLUSD": {"name": "Solana / USD", "category": "Crypto", "currency": "$", "base_px": 195.0, "tick": 0.01, "digits": 2, "scale": 195.0 / 2640.0, "half_sp": 0.08, "fallback_size": 0.80, "pip_factor": 1.0},
 }
+
+
+def format_brick_size(bs: float, epic: str) -> str:
+    """Display brick size in pips for Forex & Gold (pip_factor > 1), else in price/$ units.
+
+    Gold: 1 pip = $0.10 (pip_factor 10) -> $6.61 brick = 66.1 pips.
+    Forex: 1 pip = 0.0001 (JPY 0.01). Display only; engine maths stay in raw price.
+    """
+    spec = INSTRUMENT_SPECS.get(str(epic or "GOLD").upper(), INSTRUMENT_SPECS["GOLD"])
+    pf = float(spec.get("pip_factor", 1.0) or 1.0)
+    try:
+        v = float(bs or 0.0)
+    except (TypeError, ValueError):
+        return "--"
+    if pf > 1.0:
+        return f"{v * pf:.1f} pips"
+    return f"{spec.get('currency', '$')}{v:.{spec.get('digits', 2)}f}"
 
 
 def generate_sample_gold_data(epic="GOLD", res="MINUTE", days_intraday=12, seed=42):

@@ -1661,7 +1661,7 @@
       if (isIndex) return { name: ep, category: 'Indices', digits: 1, currency: '$', pip_factor: 1 };
       if (isBtc) return { name: ep, category: 'Crypto', digits: 1, currency: '$', pip_factor: 1 };
       if (isCrypto) return { name: ep, category: 'Crypto', digits: 2, currency: '$', pip_factor: 1 };
-      return { name: ep, category: 'Metals', digits: 2, currency: '$', pip_factor: 1 };
+      return { name: ep, category: 'Metals', digits: 2, currency: '$', pip_factor: 10 };  // Gold: 1 pip = $0.10
     }
 
     function getInstrumentDigits(epic) {
@@ -1688,12 +1688,10 @@
       const spec = getSpec(epic);
       const d = spec.digits;
       const num = Number(val).toFixed(d);
-      if (spec.pip_factor === 10000) {
-        const pips = (Number(val) * 10000).toFixed(1);
-        return `${num} (${pips} pips)`;
-      } else if (spec.pip_factor === 100) {
-        const pips = (Number(val) * 100).toFixed(1);
-        return `${num} (${pips} pips)`;
+      // Forex & Gold: always show brick size in pips (Gold 1 pip = $0.10, FX 0.0001 / JPY 0.01).
+      const pf = Number(spec.pip_factor || 1);
+      if (pf > 1) {
+        return `${(Number(val) * pf).toFixed(1)} pips`;
       }
       return spec.currency + num;
     }
@@ -2241,7 +2239,7 @@
             tr.innerHTML = `
               <td><b>#${r.rank}</b></td>
               <td>/${r.atr_div}</td>
-              <td>${r.brick_size}</td>
+              <td>${fmtBrickSize(r.brick_size, data.epic)}</td>
               <td>${r.tp_bricks}B</td>
               <td>${r.confirm_minutes}m</td>
               <td>${r.trades}</td>
@@ -3449,7 +3447,7 @@
             }
             const elSub = document.getElementById('ticket-sub');
             if (elSub) {
-              elSub.textContent = `Target: Capital.com ${creds.env ? creds.env.toUpperCase() : 'DEMO'} | Stop: ${t.safety_stop} | Brick Size: $${t.brick_size} | Expires: ${t.expires_at ? fmtGst(t.expires_at, 'time') : 'soon'}`;
+              elSub.textContent = `Target: Capital.com ${creds.env ? creds.env.toUpperCase() : 'DEMO'} | Stop: ${t.safety_stop} | Brick Size: ${fmtBrickSize(t.brick_size, t.epic)} | Expires: ${t.expires_at ? fmtGst(t.expires_at, 'time') : 'soon'}`;
             }
           } else {
             banner.className = 'ticket-card';

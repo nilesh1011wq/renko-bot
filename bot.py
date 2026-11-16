@@ -12,7 +12,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from backtest import load_config, pick, INSTRUMENT_SPECS
+from backtest import load_config, pick, INSTRUMENT_SPECS, format_brick_size
 from capital_api import Capital, CapitalError, RES_MINUTES, SSL_CTX
 from renko import DailyAtr, Params, RenkoEngine, brick_size_from_atr, round_to_tick
 from risk import (check_correlation_allowed, check_entry_allowed, compute_size, kill_switch_active,
@@ -527,7 +527,7 @@ def _step_once_impl(cap: Capital, cfg: dict):
         need_scan_log = True
 
     if need_scan_log:
-        status_note = f"G:{eng.green_run} R:{eng.red_run} | ST:{st_label} | Brick:${bs:.2f} | Sig:{d.action or 'Waiting'}"
+        status_note = f"G:{eng.green_run} R:{eng.red_run} | ST:{st_label} | Brick:{format_brick_size(bs, epic)} | Sig:{d.action or 'Waiting'}"
         lc_px = round_to_tick(eng.last_close, tick) if eng.last_close is not None else None
         log_event("SCAN", st_label, 0.0, lc_px, None, "", note=status_note)
 
@@ -744,7 +744,7 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 elif last_n > 0:
                     need_scan_log = True
                 if need_scan_log:
-                    status_note = f"[{epic}] G:{eng.green_run} R:{eng.red_run} | ST:{st_label} | Brick:${bs:.2f} | Sig:{d.action or 'Waiting'}"
+                    status_note = f"[{epic}] G:{eng.green_run} R:{eng.red_run} | ST:{st_label} | Brick:{format_brick_size(bs, epic)} | Sig:{d.action or 'Waiting'}"
                     lc_px = round_to_tick(eng.last_close, tick) if eng.last_close is not None else None
                     log_event("SCAN", st_label, 0.0, lc_px, None, "", note=status_note)
 
