@@ -104,13 +104,13 @@ ASSET_PERSONALITY = {
 
 CANONICAL_GOLD_DNA = {
     "atr_len": 5,
-    "atr_div": 15.0,
+    "atr_div": 9.0,
     "st_factor": 2.1,
     "green_buy": 2,
     "red_sell": 2,
-    "tp_bricks": 3.0,
+    "tp_bricks": 2.0,
     "runner_offset_bricks": 1.0,
-    "confirm_minutes": 5,
+    "confirm_minutes": 2,
     "safety_stop_bricks": 3.0,
     "breakeven_after_bricks": 0.0,
     "use_htf_filter": False,
