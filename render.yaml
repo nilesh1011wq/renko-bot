@@ -10,9 +10,11 @@ services:
       - key: CAPITAL_ENV
         value: demo
       - key: AUTO_START_WATCHER
-        value: "false"
+        value: "true"
+      - key: VIEW_ONLY_PUBLIC
+        value: "1"
       - key: DASHBOARD_PASSWORD
-        sync: false
+        value: "1978"
       - key: CAPITAL_API_KEY
         sync: false
       - key: CAPITAL_IDENTIFIER

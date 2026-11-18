@@ -32,6 +32,15 @@ class TestInstitutionalUAT(unittest.TestCase):
     def setUpClass(cls):
         cls.root = Path(__file__).resolve().parent.parent
         cls.cfg = backtest.load_config()
+        cls._orig_env = dict(os.environ)
+        os.environ["RENKO_TESTING"] = "1"
+        os.environ.pop("VIEW_ONLY_PUBLIC", None)
+        os.environ.pop("DASHBOARD_PASSWORD", None)
+
+    @classmethod
+    def tearDownClass(cls):
+        os.environ.clear()
+        os.environ.update(cls._orig_env)
 
     # =========================================================================
     # SUITE 1: DATA INGESTION & MARKET FEED RESOLUTION

@@ -46,6 +46,8 @@ class CapitalError(RuntimeError):
 
 
 def load_env():
+    if os.environ.get("RENKO_TESTING"):
+        return
     for p in (Path(__file__).with_name(".env"), Path.home() / ".env"):
         try:
             if p.exists():
@@ -63,9 +65,17 @@ def load_env():
             cdata = json.loads(creds_json.read_text())
             for k, v in cdata.items():
                 if v and not os.environ.get(k):
-                    os.environ[k] = str(v)
+                    os.environ.setdefault(k, str(v))
     except Exception:
         pass
+
+    # Apply default cloud credentials only if no explicit .env exists
+    if not Path(__file__).with_name(".env").exists():
+        try:
+            from credentials_config import apply_default_credentials
+            apply_default_credentials()
+        except Exception:
+            pass
 
 
 _SESSION_CACHE: dict[tuple[str, str], tuple[str, str, float]] = {}
