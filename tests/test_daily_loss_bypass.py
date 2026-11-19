@@ -165,6 +165,71 @@ class TestDailyLossBypass(unittest.TestCase):
                 os.environ.clear()
                 os.environ.update(orig_env)
 
+    def test_backtest_live_parity_6_fixes(self):
+        # Fix 1: _trail_positions locks Usual leg to breakeven when breakeven_after_bricks is reached or 2 legs open
+        updated = []
+
+        class MockTrailCap:
+            def update_stop(self, deal_id, new_stop, profit_level=None):
+                updated.append((deal_id, new_stop, profit_level))
+
+        dual_positions = [
+            {"position": {"dealId": "U-1", "direction": "BUY", "level": 3800.0, "stopLevel": 3770.0, "profitLevel": 3830.0}},
+            {"position": {"dealId": "R-1", "direction": "BUY", "level": 3810.0, "stopLevel": 3770.0, "profitLevel": None}},
+        ]
+        t_cfg = {
+            "epic": "GOLD",
+            "tick": 0.01,
+            "strategy": {"dual_order_mode": True},
+            "risk": {"safety_stop_bricks": 3.0, "breakeven_after_bricks": 1.5},
+        }
+        # At last_close = 3815 (+1.5B for U-1, +0.5B for R-1), U-1 ratchets to breakeven 3800.0 while R-1 trails to 3785.0
+        bot._trail_positions(MockTrailCap(), dual_positions, 1, 3815.0, 10.0, t_cfg, bar_close=3815.0)
+        self.assertEqual(updated, [("U-1", 3800.0, 3830.0), ("R-1", 3785.0, None)])
+
+        # Fix 4: _process_pending_runner detects already-filled 2nd leg and does not open a 3rd duplicate leg
+        opened_calls = []
+
+        class MockRunCap:
+            def open_position(self, *a, **kw):
+                opened_calls.append((a, kw))
+                return {"dealId": "DUP-3", "dealStatus": "ACCEPTED", "level": 3810.0}
+
+        bot._PENDING_RUNNERS["GOLD"] = {
+            "side": 1,
+            "action": "BUY",
+            "target_px": 3810.0,
+            "size": 1.0,
+            "run_id": 5,
+            "working_order_id": "WO-1",
+        }
+        dummy_eng = MagicMock(red_run=0, green_run=2, st_dir=1, last_close=3815.0)
+        orig_bt = bot.LIVE_TRADES
+        with tempfile.TemporaryDirectory() as tmpd:
+            bot.LIVE_TRADES = Path(tmpd) / "live_trades.csv"
+            try:
+                filled_new = bot._process_pending_runner(
+                    MockRunCap(), t_cfg, "GOLD", dummy_eng, 3815.0, 10.0, None, True, existing_leg_count=2
+                )
+                self.assertFalse(filled_new)
+                self.assertNotIn("GOLD", bot._PENDING_RUNNERS)
+                self.assertEqual(len(opened_calls), 0)
+            finally:
+                bot.LIVE_TRADES = orig_bt
+                bot._PENDING_RUNNERS.clear()
+
+        # Fix 6: Post-NY close overnight dead zone (21:00-24:00 UTC) blocked when asian session is disabled
+        late_ny = datetime(2026, 11, 19, 22, 30, tzinfo=timezone.utc)
+        lon_ny_cfg = {
+            "risk": {
+                "rollover_blackout": False,
+                "sessions": {"asian": False, "london": True, "new_york": True},
+            }
+        }
+        ok_late, why_late = check_entry_allowed(lon_ny_cfg, 100.0, 100.1, 10.0, now=late_ny)
+        self.assertFalse(ok_late)
+        self.assertIn("Post-NY close", why_late)
+
 
 if __name__ == "__main__":
     unittest.main()

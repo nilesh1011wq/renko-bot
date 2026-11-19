@@ -122,6 +122,8 @@ def check_entry_allowed(cfg: dict, bid: float | None, ask: float | None, brick_s
     sess = session_of(t_now)
     if not sessions.get(sess, True):
         return False, f"BLOCK: Session '{sess}' is disabled in config"
+    if not sessions.get("asian", True) and t_now.hour >= 21:
+        return False, "BLOCK: Post-NY close overnight dead zone (21:00-07:00 UTC) disabled with Asian session"
 
     count, pnl = today_stats(trades_csv, t_now)
 

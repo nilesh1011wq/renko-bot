@@ -2042,6 +2042,22 @@ class Handler(BaseHTTPRequestHandler):
                             cfg["risk"].setdefault("sessions", {}).update(rv)
                         else:
                             cfg["risk"][rk] = rv
+                iprofs = cfg.get("risk", {}).get("instrument_profiles")
+                if isinstance(iprofs, dict):
+                    prof_key = "GER40" if (new_epic == "DE40" and "DE40" not in iprofs and "GER40" in iprofs) else new_epic
+                    if prof_key in iprofs and isinstance(iprofs[prof_key], dict):
+                        if "strategy" in body and isinstance(body["strategy"], dict):
+                            for sk in ("atr_len", "atr_div", "st_factor", "green_buy", "red_sell",
+                                       "tp_bricks", "runner_offset_bricks", "confirm_minutes", "use_htf_filter"):
+                                if sk in body["strategy"]:
+                                    iprofs[prof_key][sk] = cfg["strategy"][sk]
+                        if "risk" in body and isinstance(body["risk"], dict):
+                            for rk in ("safety_stop_bricks", "breakeven_after_bricks", "max_spread_frac_of_brick",
+                                       "rollover_blackout", "macro_blackout"):
+                                if rk in body["risk"]:
+                                    iprofs[prof_key][rk] = cfg["risk"][rk]
+                            if "sessions" in body["risk"] and isinstance(body["risk"]["sessions"], dict):
+                                iprofs[prof_key]["sessions"] = copy.deepcopy(cfg["risk"]["sessions"])
                 save_config(cfg)
                 clear_backtest_cache()
                 self._send_json({

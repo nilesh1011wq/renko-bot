@@ -171,10 +171,37 @@ def warmup_engine(cap: Capital, cfg: dict, allow_synthetic: bool = True):
         days = _DAYS_CACHE[orig_epic][1]
 
     cache_key = f"{orig_epic}:{res}"
-    if cache_key in _BARS_CACHE and now_ts - _BARS_CACHE[cache_key][0] < _BARS_CACHE_TTL:
-        _, cached_bars, cached_cand = _BARS_CACHE[cache_key]
-        bars = cached_bars
-        cfg["epic"] = cached_cand
+    cached_entry = _BARS_CACHE.get(cache_key)
+    if cached_entry is not None:
+        cached_ts, cached_bars, cached_cand = cached_entry
+        if now_ts - cached_ts < _BARS_CACHE_TTL and int(now_ts // 60) == int(cached_ts // 60):
+            bars = cached_bars
+            cfg["epic"] = cached_cand
+        elif len(cached_bars) >= 50 and (end - cached_bars[-1]["t"]) < timedelta(hours=12):
+            try:
+                fetch_start = max(end - timedelta(days=5), cached_bars[-1]["t"] - timedelta(minutes=5))
+                delta_bars = cap.prices(cached_cand, res, fetch_start, end)
+                if delta_bars:
+                    if len(delta_bars) >= 40 and delta_bars[0]["t"] <= cached_bars[0]["t"] + timedelta(minutes=5):
+                        merged = delta_bars
+                    else:
+                        cutoff = end - timedelta(days=5, hours=2)
+                        by_t = {b["t"]: b for b in cached_bars if b["t"] >= cutoff}
+                        for b in delta_bars:
+                            by_t[b["t"]] = b
+                        merged = [by_t[k] for k in sorted(by_t)]
+                    bars = merged
+                    cfg["epic"] = cached_cand
+                    _BARS_CACHE[cache_key] = (now_ts, merged, cached_cand)
+                    if not days:
+                        try:
+                            days = cap.prices(cached_cand, "DAY", end - timedelta(days=35), end)
+                            if days:
+                                _DAYS_CACHE[orig_epic] = (now_ts, days)
+                        except Exception:
+                            pass
+            except Exception:
+                bars = []
 
     if not bars:
         for cand in resolve_epic_alias(orig_epic):
@@ -249,13 +276,15 @@ def broker_position(cap: Capital, epic: str, return_raw: bool = False):
 
 
 def _trail_positions(cap: Capital, positions: list[dict], pos_dir: int,
-                     last_close: float | None, bs: float, cfg: dict) -> list[dict]:
+                     last_close: float | None, bs: float, cfg: dict,
+                     bar_close: float | None = None) -> list[dict]:
     """Trail stops per position individually while preserving any existing profitLevel (TP)."""
     if pos_dir == 0 or not positions or last_close is None:
         return []
     epic = cfg["epic"]
     new_stop = safety_stop_level(pos_dir, last_close, bs, cfg)
     dual_mode = bool(cfg.get("strategy", {}).get("dual_order_mode", False))
+    be_bricks = float(cfg.get("risk", {}).get("breakeven_after_bricks", 0.0))
     actions = []
     for p in positions:
         pos_info = p.get("position", {})
@@ -265,14 +294,22 @@ def _trail_positions(cap: Capital, positions: list[dict], pos_dir: int,
         p_stop = pos_info.get("stopLevel")
         p_tp = pos_info.get("profitLevel")
         candidate_stop = new_stop
-        # Live Runner Breakeven Ratchet: once USUAL (with TP) has exited and only Runner (no TP) remains
-        if dual_mode and len(positions) == 1 and p_tp is None and bs > 0:
-            entry_lvl = pos_info.get("level")
-            if entry_lvl is not None:
-                entry_f = float(entry_lvl)
-                if (last_close - entry_f) * pos_dir >= bs:
-                    be_stop = round_to_tick(entry_f, cfg["tick"])
-                    candidate_stop = max(candidate_stop, be_stop) if pos_dir > 0 else min(candidate_stop, be_stop)
+        entry_lvl = pos_info.get("level")
+        if entry_lvl is not None and bs > 0:
+            entry_f = float(entry_lvl)
+            be_stop = round_to_tick(entry_f, cfg["tick"])
+            ref_move = (last_close - entry_f) * pos_dir
+            if bar_close is not None:
+                ref_move = max(ref_move, (bar_close - entry_f) * pos_dir)
+            # 1) Explicit breakeven_after_bricks from risk / 15Y DNA profile (Usual & Runner legs)
+            if be_bricks > 0 and ref_move >= be_bricks * bs:
+                candidate_stop = max(candidate_stop, be_stop) if pos_dir > 0 else min(candidate_stop, be_stop)
+            # 2) Once +1B Runner leg has triggered (2+ legs open), lock Usual leg (with TP) to breakeven at >= 1B
+            elif dual_mode and len(positions) >= 2 and p_tp is not None and ref_move >= bs:
+                candidate_stop = max(candidate_stop, be_stop) if pos_dir > 0 else min(candidate_stop, be_stop)
+            # 3) Live Runner Breakeven Ratchet: once USUAL (with TP) has exited and only Runner (no TP) remains
+            elif dual_mode and len(positions) == 1 and p_tp is None and (last_close - entry_f) * pos_dir >= bs:
+                candidate_stop = max(candidate_stop, be_stop) if pos_dir > 0 else min(candidate_stop, be_stop)
         if should_trail_stop(pos_dir, p_stop, candidate_stop, cfg["tick"]):
             try:
                 try:
@@ -312,18 +349,22 @@ def place_runner_working_order(cap: Capital, cfg: dict, action: str, target_px: 
     return None
 
 
-def cancel_runner_working_order(cap: Capital, epic: str, runner_dict: dict | None):
-    """Cancel an active native broker working order for an unfilled +1B Runner."""
+def cancel_runner_working_order(cap: Capital, epic: str, runner_dict: dict | None) -> bool:
+    """Cancel an active native broker working order for an unfilled +1B Runner.
+    Returns True if cancelled cleanly (or no working order id), False if delete failed (e.g. already filled)."""
     if not runner_dict:
-        return
+        return True
     wo_id = runner_dict.get("working_order_id")
     if wo_id and hasattr(cap, "delete_working_order"):
         try:
             cap.delete_working_order(str(wo_id))
             log_event("CANCEL_WO", runner_dict.get("action", ""), runner_dict.get("size", 0.0),
                       None, None, str(wo_id), note=f"[{epic}] Cancelled native +1B STOP")
+            return True
         except Exception as e:
             print(f"[{epic}] Could not cancel working order {wo_id}: {e}")
+            return False
+    return True
 
 
 def _arm_runner_order(cap: Capital, cfg: dict, orig_epic: str, action: str, side_val: int,
@@ -343,22 +384,56 @@ def _arm_runner_order(cap: Capital, cfg: dict, orig_epic: str, action: str, side
 
 def _process_pending_runner(cap: Capital, cfg: dict, epic: str, eng: RenkoEngine,
                             last_c: float, bs: float, d_action: str | None,
-                            can_open: bool, working_ids: set[str] | None = None) -> bool:
-    """Evaluate pending +1B Runner trigger or cancellation; returns True if a runner filled."""
+                            can_open: bool, working_ids: set[str] | None = None,
+                            existing_leg_count: int = 0) -> bool:
+    """Evaluate pending +1B Runner trigger or cancellation; returns True if a new runner filled."""
     if epic not in _PENDING_RUNNERS:
         return False
     runner = _PENDING_RUNNERS[epic]
     tick = cfg["tick"]
+    wo_id = runner.get("working_order_id")
+
+    # 1. If 2+ legs are already open on the broker, the native working order has already filled
+    if existing_leg_count >= 2:
+        _PENDING_RUNNERS.pop(epic, None)
+        log_event("RUNNER_FILLED", runner["action"], runner["size"], runner["target_px"], None,
+                  str(wo_id or ""), note=f"[{epic}] Native +1B STOP triggered on broker")
+        return False
+
+    # 2. If a native working order was placed and is no longer among active working orders (and 1 leg is still open)
+    if wo_id and existing_leg_count >= 1:
+        active_ids = working_ids
+        if active_ids is None and hasattr(cap, "working_orders"):
+            try:
+                active_ids = {str(w.get("workingOrderData", {}).get("dealId", "")) for w in cap.working_orders()}
+            except Exception:
+                active_ids = None
+        if active_ids is not None and str(wo_id) not in active_ids:
+            _PENDING_RUNNERS.pop(epic, None)
+            log_event("RUNNER_FILLED", runner["action"], runner["size"], runner["target_px"], None,
+                      str(wo_id), note=f"[{epic}] Native +1B STOP triggered on broker")
+            return True
+
+    # 3. Cancel unfilled runner on brick reversal or when entering a disabled session / overnight dead zone
+    now_utc = datetime.now(timezone.utc)
+    sessions = cfg.get("risk", {}).get("sessions", {"asian": True, "london": True, "new_york": True})
+    from risk import session_of
+    sess_disabled = (
+        not sessions.get(session_of(now_utc), True)
+        or (not sessions.get("asian", True) and now_utc.hour >= 21)
+    )
     rev_cond = (
         (runner["side"] > 0 and (eng.red_run >= 1 or eng.st_dir != 1))
         or (runner["side"] < 0 and (eng.green_run >= 1 or eng.st_dir != -1))
         or d_action in ("EXIT", "COVER")
+        or sess_disabled
     )
     if rev_cond:
         _PENDING_RUNNERS.pop(epic, None)
         cancel_runner_working_order(cap, epic, runner)
+        reason_tag = "session_closed" if sess_disabled else "cancelled"
         log_event("BLOCKED", runner["action"], runner["size"], round_to_tick(last_c, tick), None,
-                  note=f"[{epic}] runner_+1b_unfilled (cancelled)")
+                  note=f"[{epic}] runner_+1b_unfilled ({reason_tag})")
         return False
 
     triggered = (
@@ -369,19 +444,18 @@ def _process_pending_runner(cap: Capital, cfg: dict, epic: str, eng: RenkoEngine
         return False
 
     _PENDING_RUNNERS.pop(epic, None)
-    wo_id = runner.get("working_order_id")
     if wo_id:
-        active_ids = working_ids
-        if active_ids is None and hasattr(cap, "working_orders"):
-            try:
-                active_ids = {str(w.get("workingOrderData", {}).get("dealId", "")) for w in cap.working_orders()}
-            except Exception:
-                active_ids = set()
-        if active_ids is not None and str(wo_id) not in active_ids:
+        cancelled_ok = cancel_runner_working_order(cap, epic, runner)
+        if not cancelled_ok:
+            # Working order could not be cancelled because it already filled on Capital.com
             log_event("RUNNER_FILLED", runner["action"], runner["size"], runner["target_px"], None,
                       str(wo_id), note=f"[{epic}] Native +1B STOP triggered on broker")
             return True
-        cancel_runner_working_order(cap, epic, runner)
+        _, live_dids, _, _ = broker_position(cap, epic)
+        if len(live_dids) >= 2:
+            log_event("RUNNER_FILLED", runner["action"], runner["size"], runner["target_px"], None,
+                      str(wo_id), note=f"[{epic}] Native +1B STOP triggered on broker")
+            return True
 
     execute_decision(cap, cfg, runner["action"], False, eng.last_close, bs, [],
                      size=runner["size"], profit_level=None, note_tag="RUNNER +1B")
@@ -507,12 +581,12 @@ def _step_once_impl(cap: Capital, cfg: dict):
             continue
     bid, ask = mkt.get("bid"), mkt.get("offer")
 
-    _trail_positions(cap, epic_positions, pos_dir, eng.last_close, bs, cfg)
+    last_c = closed_bars[-1]["c"]
+    _trail_positions(cap, epic_positions, pos_dir, eng.last_close, bs, cfg, bar_close=last_c)
 
     if eng.p.one_trade_per_run and _HANDLED_RUNS.get(epic) == eng.run_id:
         eng.mark_run_traded()
 
-    last_c = closed_bars[-1]["c"]
     d = eng.decide(pos_dir, last_n, bar_close=last_c, brick_size=bs)
     last_bar_t = closed_bars[-1]["t"].isoformat()
     st_label = "BULL" if eng.st_dir == 1 else "BEAR"
@@ -536,7 +610,7 @@ def _step_once_impl(cap: Capital, cfg: dict):
     if bar_age_sec > max_bar_age:
         return
 
-    _process_pending_runner(cap, cfg, epic, eng, last_c, bs, d.action, True)
+    _process_pending_runner(cap, cfg, epic, eng, last_c, bs, d.action, True, existing_leg_count=len(epic_positions))
 
     if pos_dir != 0 and (d.action in ("EXIT", "COVER") or (d.reverse and d.action in ("BUY", "SELL"))):
         _close_epic_positions(cap, epic, deal_ids, d.action or "REVERSE_CLOSE", total_sz)
@@ -564,17 +638,19 @@ def _step_once_impl(cap: Capital, cfg: dict):
             _HANDLED_RUNS[epic] = pc["run_id"]
             d.action = pc["action"]
             d.reverse = False
-            d.trigger_brick_px = round_to_tick(last_c, tick)
+            saved_trig = pc.get("trigger_px")
+            d.trigger_brick_px = saved_trig if saved_trig is not None else round_to_tick(eng.last_close if eng.last_close is not None else last_c, tick)
         else:
             return
     elif d.action in ("BUY", "SELL") and confirm_minutes > 0 and pos_dir == 0:
+        lc_px = round_to_tick(eng.last_close, tick) if eng.last_close is not None else round_to_tick(last_c, tick)
         _PENDING_CONFIRM[epic] = {
             "side": 1 if d.action == "BUY" else -1,
             "action": d.action,
             "t0_epoch": time.time(),
             "run_id": eng.run_id,
+            "trigger_px": lc_px,
         }
-        lc_px = round_to_tick(eng.last_close, tick) if eng.last_close is not None else None
         log_event("CONFIRM_WAIT", d.action, 0.0, lc_px, None, "",
                   note=f"[{epic}] Waiting {confirm_minutes}m confirmation")
         return
@@ -696,8 +772,9 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                         inst_cfg["strategy"]["st_factor"] = float(cat_prof["st_factor"])
                     if "max_spread_frac_of_brick" in cat_prof:
                         inst_cfg["risk"]["max_spread_frac_of_brick"] = float(cat_prof["max_spread_frac_of_brick"])
-                inst_prof = (r_cfg.get("instrument_profiles") or {}).get(epic.upper(), {})
-                if r_cfg.get("use_instrument_profiles", False) and epic.upper() != "GOLD" and isinstance(inst_prof, dict):
+                i_profs = r_cfg.get("instrument_profiles") or {}
+                inst_prof = i_profs.get(epic.upper()) or (i_profs.get("GER40") if epic.upper() == "DE40" else None) or {}
+                if r_cfg.get("use_instrument_profiles", False) and isinstance(inst_prof, dict) and inst_prof:
                     for sk in ("atr_len", "atr_div", "st_factor", "green_buy", "red_sell",
                                "tp_bricks", "runner_offset_bricks", "confirm_minutes", "use_htf_filter"):
                         if sk in inst_prof:
@@ -724,14 +801,14 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 continue
 
             tick = inst_cfg["tick"]
+            last_c = closed_bars[-1]["c"]
             # Trailing safety stop per position while preserving any broker profitLevel (TP)
-            actions_taken.extend(_trail_positions(cap, epic_positions, pos_dir, eng.last_close, bs, inst_cfg))
+            actions_taken.extend(_trail_positions(cap, epic_positions, pos_dir, eng.last_close, bs, inst_cfg, bar_close=last_c))
 
             if eng.p.one_trade_per_run and _HANDLED_RUNS.get(epic) == eng.run_id:
                 eng.mark_run_traded()
 
             # Strategy decision on the confirmed candle
-            last_c = closed_bars[-1]["c"]
             d = eng.decide(pos_dir, last_n, bar_close=last_c, brick_size=bs)
             last_bar_t = closed_bars[-1]["t"].isoformat()
             st_label = "BULL" if eng.st_dir == 1 else "BEAR"
@@ -760,7 +837,8 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 r_act = _PENDING_RUNNERS[epic]["action"]
                 r_sz = _PENDING_RUNNERS[epic]["size"]
                 if _process_pending_runner(cap, inst_cfg, epic, eng, last_c, bs, d.action,
-                                           total_open_count < max_portfolio, working_ids=working_ids):
+                                           total_open_count < max_portfolio, working_ids=working_ids,
+                                           existing_leg_count=len(epic_positions)):
                     total_open_count += 1
                     actions_taken.append({"epic": epic, "action": f"{r_act}_RUNNER", "size": r_sz})
 
@@ -798,7 +876,8 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                     _HANDLED_RUNS[epic] = pc["run_id"]
                     d.action = pc["action"]
                     d.reverse = False
-                    d.trigger_brick_px = round_to_tick(last_c, tick)
+                    saved_trig = pc.get("trigger_px")
+                    d.trigger_brick_px = saved_trig if saved_trig is not None else round_to_tick(eng.last_close if eng.last_close is not None else last_c, tick)
                 else:
                     continue
             elif d.action in ("BUY", "SELL") and confirm_minutes > 0 and pos_dir == 0:
@@ -807,13 +886,20 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                     print(f"[{epic}] Confirmation skipped: {corr_reason}")
                     log_event("BLOCKED", d.action, 0.0, d.trigger_brick_px, None, note=f"[{epic}] {corr_reason}")
                     continue
+                lc_px = round_to_tick(eng.last_close, tick) if eng.last_close is not None else round_to_tick(last_c, tick)
+                t0_now = time.time()
+                if last_n > 0:
+                    bar_delta_sec = RES_MINUTES.get(inst_cfg.get("resolution", "MINUTE"), 1) * 60
+                    bar_close_ts = closed_bars[-1]["t"].timestamp() + bar_delta_sec
+                    if 0 <= (t0_now - bar_close_ts) < confirm_minutes * 60:
+                        t0_now = bar_close_ts
                 _PENDING_CONFIRM[epic] = {
                     "side": 1 if d.action == "BUY" else -1,
                     "action": d.action,
-                    "t0_epoch": time.time(),
+                    "t0_epoch": t0_now,
                     "run_id": eng.run_id,
+                    "trigger_px": lc_px,
                 }
-                lc_px = round_to_tick(eng.last_close, tick) if eng.last_close is not None else None
                 log_event("CONFIRM_WAIT", d.action, 0.0, lc_px, None, "",
                           note=f"[{epic}] Waiting {confirm_minutes}m confirmation")
                 continue
