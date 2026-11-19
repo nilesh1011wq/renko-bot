@@ -832,6 +832,7 @@
       <button id="btn-watcher" class="success" onclick="toggleWatcher()">▶ Start 24/7 Watcher</button>
       <button onclick="simulateTicket('BUY')" title="Test Semi-Auto BUY Ticket">+ Sim BUY</button>
       <button onclick="simulateTicket('SELL')" title="Test Semi-Auto SELL Ticket">+ Sim SELL</button>
+      <button id="btn-lossbypass" class="warning" onclick="toggleLossBypass()" title="Admin override: ignore the daily-loss limit for today only (auto-expires 00:00 UTC)">Loss Limit: ON</button>
       <button id="btn-kill" class="danger" onclick="toggleKillSwitch()">FLATTEN / KILL SWITCH</button>
     </div>
   </header>
@@ -3097,6 +3098,22 @@
       showToast(data.message || 'Done');
     }
 
+    async function toggleLossBypass() {
+      const on = !!STATE?.bot?.daily_loss_bypass;
+      if (!on && !confirm('Bypass the daily-loss limit for the rest of today? Losses will no longer stop new entries. It auto-expires at 00:00 UTC.')) return;
+      const res = await apiFetch('/api/daily-loss-bypass', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({active: !on})
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error || 'Admin login required'); return; }
+      STATE.bot = data.bot;
+      renderAll();
+      showToast(data.message);
+      syncCloudBackupToBrowser();
+    }
+
     async function toggleKillSwitch() {
       const currentlyActive = STATE?.bot?.kill_switch;
       const res = await apiFetch('/api/kill-switch', {
@@ -3468,6 +3485,17 @@
           } else {
             pwBadge.textContent = 'OPEN ACCESS';
             pwBadge.className = 'badge amber';
+          }
+        }
+
+        const lossBtn = document.getElementById('btn-lossbypass');
+        if (lossBtn) {
+          if (bot.daily_loss_bypass) {
+            lossBtn.textContent = '⚠ LOSS LIMIT BYPASSED (click to enforce)';
+            lossBtn.className = 'danger';
+          } else {
+            lossBtn.textContent = 'Loss Limit: ON ($' + (bot.max_daily_loss || 0) + ')';
+            lossBtn.className = 'warning';
           }
         }
 
@@ -4547,6 +4575,20 @@
             if (p.pending_ticket !== undefined) STATE.bot.pending_ticket = p.pending_ticket;
             if (p.today_trades !== undefined) STATE.bot.today_trades = p.today_trades;
             if (p.today_pnl !== undefined) STATE.bot.today_pnl = p.today_pnl;
+            if (p.max_daily_loss !== undefined) STATE.bot.max_daily_loss = p.max_daily_loss;
+            if (p.daily_loss_bypass !== undefined) {
+              STATE.bot.daily_loss_bypass = p.daily_loss_bypass;
+              const lossBtn = document.getElementById('btn-lossbypass');
+              if (lossBtn) {
+                if (p.daily_loss_bypass) {
+                  lossBtn.textContent = '⚠ LOSS LIMIT BYPASSED (click to enforce)';
+                  lossBtn.className = 'danger';
+                } else {
+                  lossBtn.textContent = 'Loss Limit: ON ($' + (STATE.bot.max_daily_loss || 0) + ')';
+                  lossBtn.className = 'warning';
+                }
+              }
+            }
             if (p.live_tick && p.live_tick.mid) {
               STATE.bot.market = Object.assign(STATE.bot.market || {}, p.live_tick);
               const activeEpic = (STATE.bot.market.epic || STATE?.config?.epic || 'GOLD').toUpperCase();

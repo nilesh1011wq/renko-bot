@@ -93,6 +93,15 @@ def today_stats(trades_csv: Path | None = None, now: datetime | None = None) -> 
     return count, round(pnl, 2)
 
 
+def daily_loss_bypass_active(r_cfg: dict, now: datetime | None = None) -> bool:
+    """Admin override for the daily-loss block. Valid only for the UTC day it was enabled
+    (stored as risk.daily_loss_bypass_date = 'YYYY-MM-DD'), so it auto-expires at 00:00 UTC."""
+    d = str(r_cfg.get("daily_loss_bypass_date") or "")
+    if not d:
+        return False
+    return d == (now or datetime.now(timezone.utc)).strftime("%Y-%m-%d")
+
+
 def check_entry_allowed(cfg: dict, bid: float | None, ask: float | None, brick_size: float,
                         trades_csv: Path | None = None, now: datetime | None = None,
                         trig_px: float | None = None, side: int | None = None) -> tuple[bool, str]:
@@ -121,7 +130,8 @@ def check_entry_allowed(cfg: dict, bid: float | None, ask: float | None, brick_s
         return False, f"BLOCK: Max trades per day reached ({count}/{max_trades})"
 
     max_loss = r_cfg.get("max_daily_loss", 0)
-    if max_loss and max_loss > 0 and pnl <= -abs(max_loss):
+    if (max_loss and max_loss > 0 and pnl <= -abs(max_loss)
+            and not daily_loss_bypass_active(r_cfg, t_now)):
         return False, f"BLOCK: Daily loss limit reached ({pnl:.2f} <= -{abs(max_loss):.2f})"
 
     max_spread_frac = r_cfg.get("max_spread_frac_of_brick", 0)

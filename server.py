@@ -45,7 +45,7 @@ from bot import (LIVE_TRADES, PENDING_FILE, _PENDING_CONFIRM, _PENDING_RUNNERS, 
 from capital_api import (WS_URL, Capital, CapitalError, CapitalTickStreamer, RES_MINUTES, SSL_CTX,
                          get_live_tick, load_env, update_live_tick)
 from montecarlo import run_montecarlo
-from risk import kill_switch_active, set_kill_switch, today_stats
+from risk import daily_loss_bypass_active, kill_switch_active, set_kill_switch, today_stats
 
 ROOT = Path(__file__).parent
 STATIC = ROOT / "static"
@@ -1346,6 +1346,8 @@ def get_bot_status(cfg: dict, skip_network: bool = False) -> dict:
         "live": bool(cfg.get("live", False)),
         "today_trades": cnt,
         "today_pnl": pnl,
+        "max_daily_loss": float(cfg.get("risk", {}).get("max_daily_loss", 0) or 0),
+        "daily_loss_bypass": daily_loss_bypass_active(cfg.get("risk", {})),
         "pending_ticket": pending,
         "pending_confirm": dict(_PENDING_CONFIRM),
         "pending_runners": dict(_PENDING_RUNNERS),
@@ -1573,6 +1575,8 @@ class Handler(BaseHTTPRequestHandler):
                 "kill_switch": kill_switch_active(),
                 "today_trades": cnt,
                 "today_pnl": pnl,
+                "max_daily_loss": float(cfg.get("risk", {}).get("max_daily_loss", 0) or 0),
+                "daily_loss_bypass": daily_loss_bypass_active(cfg.get("risk", {})),
                 "pending_ticket": pending_ticket,
                 "pending_confirm": dict(_PENDING_CONFIRM),
                 "pending_runners": dict(_PENDING_RUNNERS),
@@ -2249,6 +2253,24 @@ class Handler(BaseHTTPRequestHandler):
                             msg += f" (Closed {closed_count} open deals across account)"
                         except Exception as e:
                             msg += f" (Broker flatten note: {e})"
+                self._send_json({"ok": True, "message": msg, "bot": get_bot_status(cfg)})
+                return
+
+            if u.path == "/api/daily-loss-bypass":
+                active = bool(body.get("active", True))
+                if active:
+                    cfg.setdefault("risk", {})["daily_loss_bypass_date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                    msg = "Daily-loss limit BYPASSED for the rest of today (auto-expires 00:00 UTC)."
+                else:
+                    cfg.setdefault("risk", {}).pop("daily_loss_bypass_date", None)
+                    msg = "Daily-loss limit ENFORCED again."
+                save_config(cfg)
+                build_cloud_backup_snapshot(cfg)
+                try:
+                    from bot import log_event
+                    log_event("LOSS_BYPASS", "ON" if active else "OFF", 0.0, None, None, "", note=msg)
+                except Exception:
+                    pass
                 self._send_json({"ok": True, "message": msg, "bot": get_bot_status(cfg)})
                 return
 
