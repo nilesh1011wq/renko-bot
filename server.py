@@ -322,14 +322,24 @@ def build_daily_telegram_digest(cfg: dict | None = None) -> str:
     runner = tca.get("runner", {})
     w_state = "RUNNING" if WATCHER.running else "PAUSED"
     mode_lbl = str(cur_cfg.get("mode", "auto")).upper()
+    is_dual = bool(cur_cfg.get("strategy", {}).get("dual_order_mode", False))
+    if is_dual:
+        leg_block = (
+            f"— Model E Strategy Window —\n"
+            f"• Usual TP: {usual.get('trades', 0)} tr | WR {usual.get('win_rate_%', 0)}% | ${float(usual.get('net', 0)):+.2f}\n"
+            f"• Runner +1B: {runner.get('trades', 0)} tr | WR {runner.get('win_rate_%', 0)}% | ${float(runner.get('net', 0)):+.2f}\n"
+        )
+    else:
+        leg_block = (
+            f"— Single-Order Strategy Exit Window —\n"
+            f"• Single Leg: {usual.get('trades', 0)} tr | WR {usual.get('win_rate_%', 0)}% | ${float(usual.get('net', 0)):+.2f}\n"
+        )
     return (
         f"📊 RENKO CLOUD DAILY DIGEST ({fmt_gst()})\n"
         f"• Market: {cur_cfg.get('epic', 'GOLD')} ({cur_cfg.get('resolution', 'MINUTE')})\n"
         f"• Bot: {w_state} | Mode: {mode_lbl} | KillSwitch: {'ON' if kill_switch_active() else 'OFF'}\n"
         f"• Today's Live Trades: {cnt} | Realized P&L: ${float(pnl):+.2f}\n"
-        f"— Model E Strategy Window —\n"
-        f"• Usual 3B-TP: {usual.get('trades', 0)} tr | WR {usual.get('win_rate_%', 0)}% | ${float(usual.get('net', 0)):+.2f}\n"
-        f"• Runner +1B: {runner.get('trades', 0)} tr | WR {runner.get('win_rate_%', 0)}% | ${float(runner.get('net', 0)):+.2f}\n"
+        f"{leg_block}"
         f"• Combined Net: ${float(sn.get('net', 0)):+.2f} | PF {sn.get('profit_factor', 0)} | "
         f"Sharpe {sn.get('sharpe', 0)} | Calmar {sn.get('calmar', 0)} | 95% VaR -${float(sn.get('daily_var_95', 0)):.2f}"
     )
@@ -642,19 +652,25 @@ def apply_instrument_dna_to_config(cfg: dict, epic: str) -> dict:
     if isinstance(prof, dict) and prof:
         cfg.setdefault("strategy", {})
         cfg.setdefault("risk", {})
+        keep_single = not bool(cfg["strategy"].get("dual_order_mode", False))
+        prof_copy = copy.deepcopy(prof)
+        if keep_single:
+            prof_copy["dual_order_mode"] = False
+            prof_copy["tp_bricks"] = 0.0
+            prof_copy["runner_offset_bricks"] = 0.0
         for sk in ("atr_len", "atr_div", "st_factor", "green_buy", "red_sell",
-                   "tp_bricks", "runner_offset_bricks", "confirm_minutes", "use_htf_filter"):
-            if sk in prof:
-                cfg["strategy"][sk] = prof[sk]
+                   "dual_order_mode", "tp_bricks", "runner_offset_bricks", "confirm_minutes", "use_htf_filter"):
+            if sk in prof_copy:
+                cfg["strategy"][sk] = prof_copy[sk]
         for rk in ("safety_stop_bricks", "breakeven_after_bricks", "max_spread_frac_of_brick",
                    "rollover_blackout", "macro_blackout"):
-            if rk in prof:
-                cfg["risk"][rk] = prof[rk]
-        if isinstance(prof.get("sessions"), dict):
-            cfg["risk"]["sessions"] = copy.deepcopy(prof["sessions"])
+            if rk in prof_copy:
+                cfg["risk"][rk] = prof_copy[rk]
+        if isinstance(prof_copy.get("sessions"), dict):
+            cfg["risk"]["sessions"] = copy.deepcopy(prof_copy["sessions"])
         cfg["risk"]["use_instrument_profiles"] = True
-        cfg["risk"].setdefault("instrument_profiles", {})[clean_epic] = copy.deepcopy(prof)
-        applied = copy.deepcopy(prof)
+        cfg["risk"].setdefault("instrument_profiles", {})[clean_epic] = copy.deepcopy(prof_copy)
+        applied = copy.deepcopy(prof_copy)
     return applied
 
 CLOUD_STATE_DIR = Path(os.environ.get("RENDER_DISK_PATH", str(JOURNAL)))
@@ -1024,13 +1040,20 @@ def render_tearsheet_html(cfg: dict, bt: dict) -> str:
     edge = round(float(sn.get("net", 0.0)) - float(raw_sn.get("net", 0.0)), 2)
 
     leg_rows = ""
-    for lbl, st_leg in (
-        ("Leg 1: USUAL (3B-TP / Single)", tca.get("usual", {})),
+    is_dual_ts = bool(strat.get("dual_order_mode", False))
+    leg_tuples = (
+        ("Leg 1: USUAL (Fixed TP)", tca.get("usual", {})),
         ("Leg 2: RUNNER (+1B Continuation)", tca.get("runner", {})),
         ("Combined Pro Strategy (Net)", {"trades": sn.get("trades", 0), "win_rate_%": sn.get("win_rate_%", 0),
                                           "gross": sg.get("net", 0), "spread_cost": tca.get("costs", {}).get("total_spread_cost", 0),
                                           "net": sn.get("net", 0), "avg_net": sn.get("avg_trade", 0)}),
-    ):
+    ) if is_dual_ts else (
+        ("Single-Order (Strategy Exit)", tca.get("usual", {})),
+        ("Combined Strategy (Net)", {"trades": sn.get("trades", 0), "win_rate_%": sn.get("win_rate_%", 0),
+                                      "gross": sg.get("net", 0), "spread_cost": tca.get("costs", {}).get("total_spread_cost", 0),
+                                      "net": sn.get("net", 0), "avg_net": sn.get("avg_trade", 0)}),
+    )
+    for lbl, st_leg in leg_tuples:
         leg_rows += (
             f"<tr><td><b>{html.escape(lbl)}</b></td>"
             f"<td>{st_leg.get('trades', 0)}</td>"
@@ -2048,7 +2071,7 @@ class Handler(BaseHTTPRequestHandler):
                     if prof_key in iprofs and isinstance(iprofs[prof_key], dict):
                         if "strategy" in body and isinstance(body["strategy"], dict):
                             for sk in ("atr_len", "atr_div", "st_factor", "green_buy", "red_sell",
-                                       "tp_bricks", "runner_offset_bricks", "confirm_minutes", "use_htf_filter"):
+                                       "dual_order_mode", "tp_bricks", "runner_offset_bricks", "confirm_minutes", "use_htf_filter"):
                                 if sk in body["strategy"]:
                                     iprofs[prof_key][sk] = cfg["strategy"][sk]
                         if "risk" in body and isinstance(body["risk"], dict):

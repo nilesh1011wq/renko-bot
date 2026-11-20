@@ -509,7 +509,7 @@
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 1.5,
         "use_htf_filter": false,
-        "max_spread_frac_of_brick": 0.45,
+        "max_spread_frac_of_brick": 0.55,
         "rollover_blackout": true,
         "macro_blackout": false,
         "sessions": {

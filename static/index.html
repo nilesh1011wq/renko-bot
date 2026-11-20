@@ -990,22 +990,22 @@
           <span>Broker Safety Stop in Backtest</span>
           <input type="checkbox" id="in-safety_stop_in_backtest" checked>
         </div>
-        <div class="check-row" title="Model E: split entry into Usual (3B fixed TP) + Runner (+1B continuation)">
-          <span>Dual-Order Mode (3B TP + +1B Runner)</span>
-          <input type="checkbox" id="in-dual_order_mode" checked>
+        <div class="check-row" title="Model E: split entry into Usual (fixed TP) + Runner (+1B continuation); OFF = Single-Order Strategy Exit">
+          <span>Dual-Order Mode (Fixed TP + Runner)</span>
+          <input type="checkbox" id="in-dual_order_mode">
         </div>
         <div class="form-grid" style="margin-top:8px;">
           <div class="field" title="Minutes to confirm brick + ST hold before entering (0=instant)">
             <label>Time Confirm (Mins)</label>
-            <input type="number" id="in-confirm_minutes" value="5" min="0" max="30">
+            <input type="number" id="in-confirm_minutes" value="2" min="0" max="30">
           </div>
-          <div class="field" title="Fixed Take Profit in bricks for the Usual leg in Dual-Order Mode">
-            <label>Usual TP (Brk)</label>
-            <input type="number" id="in-tp_bricks" value="3.0" step="0.5" min="1">
+          <div class="field" title="Fixed Take Profit in bricks (0 = disabled, profit booking via strategy exit)">
+            <label>Fixed TP (Brk, 0=Off)</label>
+            <input type="number" id="in-tp_bricks" value="0.0" step="0.5" min="0">
           </div>
-          <div class="field" title="Breakout offset in bricks for the pending Runner order">
+          <div class="field" title="Breakout offset in bricks for pending Runner order (0 = disabled)">
             <label>Runner Offset (+Brk)</label>
-            <input type="number" id="in-runner_offset_bricks" value="1.0" step="0.25" min="0.25">
+            <input type="number" id="in-runner_offset_bricks" value="0.0" step="0.25" min="0">
           </div>
           <div class="field" title="Skip news spike candles that print more than N bricks in 1 bar (0=off)">
             <label>Max Bricks / Bar</label>
@@ -2825,8 +2825,8 @@
       document.getElementById('in-grid_anchor').checked = !!s.grid_anchor;
       document.getElementById('in-dual_order_mode').checked = !!s.dual_order_mode;
       document.getElementById('in-confirm_minutes').value = s.confirm_minutes ?? 0;
-      document.getElementById('in-tp_bricks').value = s.tp_bricks ?? 3.0;
-      document.getElementById('in-runner_offset_bricks').value = s.runner_offset_bricks ?? 1.0;
+      document.getElementById('in-tp_bricks').value = s.tp_bricks ?? 0.0;
+      document.getElementById('in-runner_offset_bricks').value = s.runner_offset_bricks ?? 0.0;
       document.getElementById('in-max_bricks_on_entry_bar').value = s.max_bricks_on_entry_bar ?? 0;
       document.getElementById('in-max_overshoot_bricks').value = s.max_overshoot_bricks ?? 0;
 
@@ -2883,8 +2883,8 @@
           grid_anchor: document.getElementById('in-grid_anchor').checked,
           confirm_minutes: parseInt(document.getElementById('in-confirm_minutes').value, 10) || 0,
           dual_order_mode: document.getElementById('in-dual_order_mode').checked,
-          tp_bricks: parseFloat(document.getElementById('in-tp_bricks').value) || 3.0,
-          runner_offset_bricks: parseFloat(document.getElementById('in-runner_offset_bricks').value) || 1.0,
+          tp_bricks: (() => { const v = parseFloat(document.getElementById('in-tp_bricks').value); return Number.isFinite(v) ? v : 0.0; })(),
+          runner_offset_bricks: (() => { const v = parseFloat(document.getElementById('in-runner_offset_bricks').value); return Number.isFinite(v) ? v : 0.0; })(),
           max_bricks_on_entry_bar: parseInt(document.getElementById('in-max_bricks_on_entry_bar').value, 10),
           max_overshoot_bricks: parseFloat(document.getElementById('in-max_overshoot_bricks').value),
         },
@@ -2926,10 +2926,10 @@
         document.getElementById('in-grid_anchor').checked = true;
         document.getElementById('in-rollover_blackout').checked = true;
         document.getElementById('in-safety_stop_in_backtest').checked = true;
-        document.getElementById('in-dual_order_mode').checked = true;
-        document.getElementById('in-confirm_minutes').value = 5;
-        document.getElementById('in-tp_bricks').value = 3.0;
-        document.getElementById('in-runner_offset_bricks').value = 1.0;
+        document.getElementById('in-dual_order_mode').checked = false;
+        document.getElementById('in-confirm_minutes').value = 2;
+        document.getElementById('in-tp_bricks').value = 0.0;
+        document.getElementById('in-runner_offset_bricks').value = 0.0;
         document.getElementById('in-max_bricks_on_entry_bar').value = 3;
         document.getElementById('in-max_overshoot_bricks').value = 1.5;
         document.getElementById('in-safety_stop_bricks').value = 3.0;
@@ -3685,10 +3685,21 @@
       const legBody = document.getElementById('tca-legs-tbody');
       if (legBody) {
         legBody.innerHTML = '';
-        const rows = [
-          ['Leg 1: USUAL (3B-TP / Single)', usual],
+        const isDual = !!(STATE && STATE.config && STATE.config.strategy && STATE.config.strategy.dual_order_mode);
+        const rows = isDual ? [
+          ['Leg 1: USUAL (Fixed TP)', usual],
           ['Leg 2: RUNNER (+1B Continuation)', runner],
           ['Combined Pro Strategy (Net)', {
+            trades: sn.trades ?? 0,
+            'win_rate_%': sn['win_rate_%'] ?? 0,
+            gross: sg.net ?? costs.total_gross ?? 0,
+            spread_cost: costs.total_spread_cost ?? 0,
+            net: sn.net ?? costs.total_net ?? 0,
+            avg_net: sn.avg_trade ?? 0
+          }],
+        ] : [
+          ['Single-Order (Strategy Exit)', usual],
+          ['Combined Strategy (Net)', {
             trades: sn.trades ?? 0,
             'win_rate_%': sn['win_rate_%'] ?? 0,
             gross: sg.net ?? costs.total_gross ?? 0,
