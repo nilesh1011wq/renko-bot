@@ -213,10 +213,12 @@ class Capital:
         r = self._req("POST", "/positions", body)
         return self.confirm(r["dealReference"])
 
-    def update_stop(self, deal_id, stop_level, profit_level=None):
+    def update_stop(self, deal_id, stop_level, profit_level=None, clear_tp=False):
         body = {"stopLevel": stop_level}
         if profit_level is not None:
             body["profitLevel"] = profit_level
+        elif clear_tp:
+            body["profitLevel"] = None
         return self._req("PUT", "/positions/" + deal_id, body)
 
     def close_position(self, deal_id):

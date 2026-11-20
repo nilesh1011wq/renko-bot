@@ -698,15 +698,16 @@ def _step_once_impl(cap: Capital, cfg: dict):
     else:
         _HANDLED_RUNS[epic] = eng.run_id
         dual_mode = bool(cfg.get("strategy", {}).get("dual_order_mode", False))
-        if d.action in ("BUY", "SELL") and dual_mode:
+        tp_bricks = float(cfg.get("strategy", {}).get("tp_bricks", 0.0))
+        if d.action in ("BUY", "SELL") and dual_mode and tp_bricks > 0:
             side_val = 1 if d.action == "BUY" else -1
-            tp_bricks = float(cfg.get("strategy", {}).get("tp_bricks", 3.0))
             tp_lvl = round_to_tick(last_c + side_val * tp_bricks * bs, tick)
             execute_decision(cap, cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz,
                              profit_level=tp_lvl, note_tag=f"USUAL {tp_bricks:g}B-TP")
             _arm_runner_order(cap, cfg, epic, d.action, side_val, last_c, eng.last_close, bs, sz, eng.run_id)
         else:
-            execute_decision(cap, cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz)
+            execute_decision(cap, cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz,
+                             note_tag="SINGLE STRATEGY-EXIT")
 
 
 def match_position_to_epic(pos_epic: str, all_epics: list[str]) -> str:
@@ -776,7 +777,7 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 inst_prof = i_profs.get(epic.upper()) or (i_profs.get("GER40") if epic.upper() == "DE40" else None) or {}
                 if r_cfg.get("use_instrument_profiles", False) and isinstance(inst_prof, dict) and inst_prof:
                     for sk in ("atr_len", "atr_div", "st_factor", "green_buy", "red_sell",
-                               "tp_bricks", "runner_offset_bricks", "confirm_minutes", "use_htf_filter"):
+                               "dual_order_mode", "tp_bricks", "runner_offset_bricks", "confirm_minutes", "use_htf_filter"):
                         if sk in inst_prof:
                             inst_cfg["strategy"][sk] = inst_prof[sk]
                     for rk in ("safety_stop_bricks", "breakeven_after_bricks", "max_spread_frac_of_brick",
@@ -983,14 +984,15 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                     _RECENT_ENTRIES[epic] = now_epoch
                     _HANDLED_RUNS[epic] = eng.run_id
                     dual_mode = bool(inst_cfg.get("strategy", {}).get("dual_order_mode", False))
-                    if dual_mode:
-                        tp_bricks = float(inst_cfg.get("strategy", {}).get("tp_bricks", 3.0))
+                    tp_bricks = float(inst_cfg.get("strategy", {}).get("tp_bricks", 0.0))
+                    if dual_mode and tp_bricks > 0:
                         tp_lvl = round_to_tick(last_c + side_val * tp_bricks * bs, tick)
                         execute_decision(cap, inst_cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz,
                                          profit_level=tp_lvl, note_tag=f"USUAL {tp_bricks:g}B-TP")
                         _arm_runner_order(cap, inst_cfg, epic, d.action, side_val, last_c, eng.last_close, bs, sz, eng.run_id)
                     else:
-                        execute_decision(cap, inst_cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz)
+                        execute_decision(cap, inst_cfg, d.action, d.reverse, eng.last_close, bs, deal_ids, size=sz,
+                                         note_tag="SINGLE STRATEGY-EXIT")
                     total_open_count += 1
                     raw_pos.append({"market": {"epic": epic}, "position": {"direction": d.action}})
                     actions_taken.append({"epic": epic, "action": d.action, "size": sz})

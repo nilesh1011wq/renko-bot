@@ -11,3 +11,4 @@ data/*.json
 journal/*.csv
 journal/*.json
 journal/*.log
+journal/*.sqlite

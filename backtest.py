@@ -237,8 +237,8 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
                     [pick(d, "l", price) for d in days], [pick(d, "c", price) for d in days], p.atr_len)
     eng = RenkoEngine(p)
     confirm_mins = int(p.confirm_minutes) if use_stop else 0
-    dual_mode = bool(p.dual_order_mode) and use_stop
-    tp_bricks = float(p.tp_bricks) if p.tp_bricks > 0 else 3.0
+    dual_mode = bool(p.dual_order_mode) and use_stop and float(p.tp_bricks) > 0
+    tp_bricks = float(p.tp_bricks) if p.tp_bricks > 0 else 0.0
     runner_offset = float(p.runner_offset_bricks) if p.runner_offset_bricks > 0 else 1.0
 
     pos, stop, trade, trades = 0, None, None, []

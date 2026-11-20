@@ -1,5 +1,5 @@
 {
-  "_comment": "Native Python Renko ATR Strategy + Pro Trader filters, 5-Min Confirmation & Model E Dual-Order Execution.",
+  "_comment": "Native Python Renko ATR Strategy + Pro Trader filters, Confirmation & Single-Order Strategy Exit Execution.",
   "epic": "GOLD",
   "resolution": "MINUTE",
   "price": "mid",
@@ -29,9 +29,9 @@
     "max_overshoot_bricks": 1.5,
     "grid_anchor": true,
     "confirm_minutes": 2,
-    "dual_order_mode": true,
-    "tp_bricks": 2.0,
-    "runner_offset_bricks": 1.0,
+    "dual_order_mode": false,
+    "tp_bricks": 0.0,
+    "runner_offset_bricks": 0.0,
     "use_htf_filter": false,
     "htf_bricks": 8
   },
@@ -89,8 +89,8 @@
         "st_factor": 2.1,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 2.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 0.0,
@@ -103,7 +103,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "ALL"
+        "sessions_label": "ALL",
+        "dual_order_mode": false
       },
       "SILVER": {
         "atr_len": 5,
@@ -111,8 +112,8 @@
         "st_factor": 2.0,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 4.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 1.5,
@@ -125,7 +126,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "OIL_CRUDE": {
         "atr_len": 5,
@@ -133,8 +135,8 @@
         "st_factor": 2.0,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 4.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 1.5,
@@ -147,7 +149,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "OIL_BRENT": {
         "atr_len": 5,
@@ -155,8 +158,8 @@
         "st_factor": 2.2,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 4.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
         "safety_stop_bricks": 3.5,
         "breakeven_after_bricks": 1.5,
@@ -169,7 +172,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "EURUSD": {
         "atr_len": 7,
@@ -177,8 +181,8 @@
         "st_factor": 2.0,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 2.5,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
         "safety_stop_bricks": 2.5,
         "breakeven_after_bricks": 1.5,
@@ -191,7 +195,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "GBPUSD": {
         "atr_len": 10,
@@ -199,8 +204,8 @@
         "st_factor": 2.5,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 1.5,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
         "safety_stop_bricks": 2.5,
         "breakeven_after_bricks": 1.5,
@@ -213,7 +218,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "USDJPY": {
         "atr_len": 5,
@@ -221,8 +227,8 @@
         "st_factor": 2.1,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.5,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 5,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 2.0,
@@ -235,7 +241,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "ALL"
+        "sessions_label": "ALL",
+        "dual_order_mode": false
       },
       "AUDUSD": {
         "atr_len": 5,
@@ -243,8 +250,8 @@
         "st_factor": 2.0,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 2.5,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 1.5,
@@ -257,7 +264,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "USDCAD": {
         "atr_len": 7,
@@ -265,8 +273,8 @@
         "st_factor": 2.0,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 2.5,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
         "safety_stop_bricks": 2.5,
         "breakeven_after_bricks": 1.5,
@@ -279,7 +287,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "USDCHF": {
         "atr_len": 5,
@@ -287,8 +296,8 @@
         "st_factor": 2.2,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 5,
         "safety_stop_bricks": 2.5,
         "breakeven_after_bricks": 1.5,
@@ -301,7 +310,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "US500": {
         "atr_len": 7,
@@ -309,8 +319,8 @@
         "st_factor": 1.8,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 1.5,
@@ -323,7 +333,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "US100": {
         "atr_len": 5,
@@ -331,8 +342,8 @@
         "st_factor": 1.9,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 1.5,
@@ -345,7 +356,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "US30": {
         "atr_len": 7,
@@ -353,8 +365,8 @@
         "st_factor": 2.1,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 4.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 5,
         "safety_stop_bricks": 3.5,
         "breakeven_after_bricks": 2.0,
@@ -367,7 +379,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "GER40": {
         "atr_len": 7,
@@ -375,8 +388,8 @@
         "st_factor": 1.8,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 1.5,
@@ -389,7 +402,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "UK100": {
         "atr_len": 7,
@@ -397,8 +411,8 @@
         "st_factor": 1.8,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 1.5,
@@ -411,7 +425,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "JP225": {
         "atr_len": 5,
@@ -419,8 +434,8 @@
         "st_factor": 1.9,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 1.5,
@@ -433,7 +448,8 @@
           "london": true,
           "new_york": false
         },
-        "sessions_label": "ASI+LON"
+        "sessions_label": "ASI+LON",
+        "dual_order_mode": false
       },
       "BTCUSD": {
         "atr_len": 14,
@@ -441,8 +457,8 @@
         "st_factor": 1.5,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 1.5,
@@ -455,7 +471,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "ETHUSD": {
         "atr_len": 5,
@@ -463,8 +480,8 @@
         "st_factor": 2.0,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 1.0,
@@ -477,7 +494,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "ALL"
+        "sessions_label": "ALL",
+        "dual_order_mode": false
       },
       "SOLUSD": {
         "atr_len": 5,
@@ -485,8 +503,8 @@
         "st_factor": 2.0,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 1.5,
@@ -499,7 +517,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       }
     }
   },
