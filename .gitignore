@@ -12,3 +12,4 @@ journal/*.csv
 journal/*.json
 journal/*.log
 journal/*.sqlite
+data/cache_1y/

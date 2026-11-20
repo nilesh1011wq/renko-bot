@@ -146,6 +146,7 @@ class TestSimulate(unittest.TestCase):
 class TestRisk(unittest.TestCase):
     def test_safety_stop_and_trailing(self):
         cfg = backtest.load_config()
+        cfg["risk"]["safety_stop_bricks"] = 3.0
         self.assertEqual(risk.safety_stop_level(1, 2700.0, 5.0, cfg), 2685.0)
         self.assertEqual(risk.safety_stop_level(-1, 2700.0, 5.0, cfg), 2715.0)
         self.assertTrue(risk.should_trail_stop(1, 2680.0, 2685.0, 0.01))
