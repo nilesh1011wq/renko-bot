@@ -572,6 +572,7 @@ class TestInstitutionalUAT(unittest.TestCase):
         cfg["strategy"]["dual_order_mode"] = True
         cfg["strategy"]["tp_bricks"] = 3.0
         cfg["strategy"]["runner_offset_bricks"] = 1.0
+        cfg["risk"]["sessions"] = {"asian": True, "london": True, "new_york": True}
 
         res = server.serialize_backtest(cfg, skip_network=True)
         trades = res["trades"]

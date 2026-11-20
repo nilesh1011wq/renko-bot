@@ -45,12 +45,35 @@ def in_macro_blackout(t: datetime) -> bool:
     return (13 * 60 + 25) <= hm <= (13 * 60 + 35) or (18 * 60 + 55) <= hm <= (19 * 60 + 10)
 
 
-def compute_size(cfg: dict, brick_size: float) -> float:
-    """Compute position size in oz/units: either fixed or risk_usd / (2 * brick_size)."""
+# Reference USD value of 1 unit of quote currency for non-USD-quoted instruments
+_DEFAULT_QUOTE_TO_USD = {
+    "USDJPY": 1.0 / 155.0,
+    "JP225": 1.0 / 155.0,
+    "USDCAD": 1.0 / 1.39,
+    "USDCHF": 1.0 / 0.88,
+    "GER40": 1.09,
+    "DE40": 1.09,
+    "UK100": 1.29,
+}
+
+
+def quote_to_usd(epic: str | None, price: float | None = None) -> float:
+    """Return USD value of 1.0 unit of the instrument's quote currency."""
+    ep = str(epic or "").upper().replace("/", "")
+    if ep in ("USDJPY", "USDCAD", "USDCHF"):
+        if price is not None and float(price) > 0:
+            return 1.0 / float(price)
+        return _DEFAULT_QUOTE_TO_USD[ep]
+    return _DEFAULT_QUOTE_TO_USD.get(ep, 1.0)
+
+
+def compute_size(cfg: dict, brick_size: float, price: float | None = None) -> float:
+    """Compute position size in units, converting non-USD quote currencies into USD risk."""
     if cfg.get("sizing_mode", "fixed") == "risk_usd" and brick_size > 0:
         risk_usd = float(cfg.get("risk_per_trade_usd", 50.0))
         stop_bricks = max(2.0, float(cfg.get("risk", {}).get("safety_stop_bricks", 3.0)))
-        raw = risk_usd / (stop_bricks * brick_size)
+        q2u = quote_to_usd(cfg.get("epic"), price=price)
+        raw = risk_usd / (stop_bricks * brick_size * q2u)
         return max(0.1, round(raw, 2))
     return float(cfg.get("size", 1.0))
 

@@ -77,7 +77,7 @@
     },
     "ticket_ttl_seconds": 180,
     "sessions": {
-      "asian": true,
+      "asian": false,
       "london": true,
       "new_york": true
     },
@@ -99,11 +99,11 @@
         "rollover_blackout": true,
         "macro_blackout": false,
         "sessions": {
-          "asian": true,
+          "asian": false,
           "london": true,
           "new_york": true
         },
-        "sessions_label": "ALL",
+        "sessions_label": "LON+NY",
         "dual_order_mode": false
       },
       "SILVER": {
@@ -237,11 +237,11 @@
         "rollover_blackout": true,
         "macro_blackout": true,
         "sessions": {
-          "asian": true,
+          "asian": false,
           "london": true,
           "new_york": true
         },
-        "sessions_label": "ALL",
+        "sessions_label": "LON+NY",
         "dual_order_mode": false
       },
       "AUDUSD": {
@@ -490,11 +490,11 @@
         "rollover_blackout": true,
         "macro_blackout": false,
         "sessions": {
-          "asian": true,
+          "asian": false,
           "london": true,
           "new_york": true
         },
-        "sessions_label": "ALL",
+        "sessions_label": "LON+NY",
         "dual_order_mode": false
       },
       "SOLUSD": {

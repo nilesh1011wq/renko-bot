@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from renko import DailyAtr, Params, RenkoEngine, brick_size_from_atr
-from risk import compute_size, in_macro_blackout, in_rollover_blackout, session_of
+from risk import compute_size, in_macro_blackout, in_rollover_blackout, quote_to_usd, session_of
 
 ROOT = Path(__file__).parent
 DATA = ROOT / "data"
@@ -258,7 +258,7 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
             bid_c, ask_c = r.get("c_bid"), r.get("c_ask")
             half_sp = ((ask_c - bid_c) / 2.0) if (bid_c is not None and ask_c is not None) else 0.0
             exe_px = (base_px + half_sp) if side > 0 else (base_px - half_sp)
-        sz = compute_size(cfg, bs)
+        sz = compute_size(cfg, bs, price=base_px)
         trig = trig_px if trig_px is not None else base_px
         overshoot = round((base_px - trig) * side, digits)
         tp_px = round(base_px + side * tp_b * bs, digits) if tp_b else None
@@ -289,6 +289,7 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
         if exec_px is None:
             e = r.get("c_bid") if side > 0 else r.get("c_ask")
             exec_px = e if e is not None else px
+        q2u = quote_to_usd(cfg.get("epic"), price=px)
         leg_obj.update(
             exit_time=r["t"],
             exit_brick_idx=eng.brick_cnt - 1,
@@ -297,8 +298,8 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
             why_out=why,
             mfe_bricks=round(leg_obj["mfe_px"] / bs_val, 2),
             mae_bricks=round(leg_obj["mae_px"] / bs_val, 2),
-            gross=round((px - leg_obj["entry"]) * side * sz, 2),
-            net=round((exec_px - leg_obj["entry_exec"]) * side * sz, 2),
+            gross=round((px - leg_obj["entry"]) * side * sz * q2u, 2),
+            net=round((exec_px - leg_obj["entry_exec"]) * side * sz * q2u, 2),
         )
         trades.append(leg_obj)
 

@@ -466,7 +466,7 @@ def execute_decision(cap: Capital, cfg: dict, action: str, reverse: bool,
                      last_close: float, bs: float, deal_ids: list[str], size: float | None = None,
                      profit_level: float | None = None, note_tag: str = ""):
     epic = cfg["epic"]
-    sz = size if size is not None else compute_size(cfg, bs)
+    sz = size if size is not None else compute_size(cfg, bs, price=last_close)
     if action in ("EXIT", "COVER") or (reverse and deal_ids):
         for did in deal_ids:
             try:
@@ -630,7 +630,7 @@ def _step_once_impl(cap: Capital, cfg: dict):
         if not still_ok:
             _PENDING_CONFIRM.pop(epic, None)
             _HANDLED_RUNS[epic] = pc["run_id"]
-            log_event("BLOCKED", pc["action"], compute_size(cfg, bs), round_to_tick(last_c, tick), None,
+            log_event("BLOCKED", pc["action"], compute_size(cfg, bs, price=last_c), round_to_tick(last_c, tick), None,
                       note=f"[{epic}] 5m_confirm_failed")
             return
         if time.time() >= pc["t0_epoch"] + confirm_minutes * 60:
@@ -658,7 +658,7 @@ def _step_once_impl(cap: Capital, cfg: dict):
     if not d.action:
         return
 
-    sz = compute_size(cfg, bs)
+    sz = compute_size(cfg, bs, price=last_c)
     if d.action in ("BUY", "SELL"):
         side_val = 1 if d.action == "BUY" else (-1 if d.action == "SELL" else 0)
         ok, reason = check_entry_allowed(cfg, bid, ask, bs, trig_px=d.trigger_brick_px, side=side_val)
@@ -869,7 +869,7 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 if not still_ok:
                     _PENDING_CONFIRM.pop(epic, None)
                     _HANDLED_RUNS[epic] = pc["run_id"]
-                    log_event("BLOCKED", pc["action"], compute_size(inst_cfg, bs), round_to_tick(last_c, tick), None,
+                    log_event("BLOCKED", pc["action"], compute_size(inst_cfg, bs, price=last_c), round_to_tick(last_c, tick), None,
                               note=f"[{epic}] 5m_confirm_failed")
                     continue
                 if time.time() >= pc["t0_epoch"] + confirm_minutes * 60:
@@ -940,7 +940,7 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                         continue
                 bid, ask = mkt.get("bid"), mkt.get("offer")
 
-                sz = compute_size(inst_cfg, bs)
+                sz = compute_size(inst_cfg, bs, price=last_c)
                 side_val = 1 if d.action == "BUY" else (-1 if d.action == "SELL" else 0)
                 ok, reason = check_entry_allowed(inst_cfg, bid, ask, bs, trig_px=d.trigger_brick_px, side=side_val)
                 if not ok:
