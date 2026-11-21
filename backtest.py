@@ -457,7 +457,7 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
                     "action": pending_confirm["action"],
                     "side": ps,
                     "trig_px": pending_confirm["trigger_px"],
-                    "slip_ref_px": eng.last_close,
+                    "slip_ref_px": pending_confirm["trigger_px"],
                     "confirmed_wait": True,
                 }
                 pending_confirm = None
@@ -497,7 +497,7 @@ def simulate(bars, days, cfg, use_stop=True, start=None, end=None):
             elif max_sp_frac > 0 and bs > 0 and spread > max_sp_frac * bs:
                 veto = f"spread ({spread:.{digits}f})"
             elif max_slip_frac > 0 and bs > 0 and slip_ref is not None:
-                eff_slip_frac = max(max_slip_frac, 1.0) if ready_entry.get("confirmed_wait") else max_slip_frac
+                eff_slip_frac = max(max_slip_frac, float(p.max_overshoot_bricks or 0.75)) if ready_entry.get("confirmed_wait") else max_slip_frac
                 slip = (c - slip_ref) * ready_entry["side"]
                 if slip > eff_slip_frac * bs:
                     veto = f"slippage ({slip/bs:.2f} brk)"
