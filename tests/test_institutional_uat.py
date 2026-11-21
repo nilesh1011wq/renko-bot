@@ -667,6 +667,7 @@ class TestInstitutionalUAT(unittest.TestCase):
         cfg["strategy"]["max_bricks_on_entry_bar"] = 3
         cfg["strategy"]["grid_anchor"] = False
         cfg["risk"]["rollover_blackout"] = False
+        cfg["risk"]["max_slippage_bricks"] = 1.5
         cfg["risk"]["max_daily_loss"] = 0
         cfg["risk"]["max_trades_per_day"] = 0
         cfg["risk"]["sessions"] = {"asian": True, "london": True, "new_york": True}
@@ -1465,6 +1466,49 @@ class TestInstitutionalUAT(unittest.TestCase):
                     self.assertIn(marker, html_src)
             finally:
                 server.load_env = orig_load_env
+
+    def test_33_audit_5_critical_fixes(self):
+        """Verify BTCUSD fractional sizing, J225 JPY alias conversion, broker SL daily loss limit, and session pre-check."""
+        from datetime import datetime, timezone
+        import risk
+        from renko import Params, RenkoEngine
+
+        # 1. BTCUSD fractional sizing (exact ~$50 risk instead of 0.1 clamp = $136 risk)
+        btc_cfg = {"epic": "BTCUSD", "sizing_mode": "risk_usd", "risk_per_trade_usd": 50.0,
+                   "risk": {"safety_stop_bricks": 2.5}}
+        btc_sz = risk.compute_size(btc_cfg, brick_size=464.0, price=57783.0)
+        self.assertAlmostEqual(btc_sz, 0.043, places=3)
+
+        # 2. J225 broker alias resolves to JPY quote_to_usd (1/155) instead of 1.0
+        j225_cfg = {"epic": "J225", "sizing_mode": "risk_usd", "risk_per_trade_usd": 50.0,
+                    "risk": {"safety_stop_bricks": 2.5}}
+        j225_sz = risk.compute_size(j225_cfg, brick_size=50.0, price=39000.0)
+        self.assertGreater(j225_sz, 50.0)
+        self.assertAlmostEqual(j225_sz * 2.5 * 50.0 * risk.quote_to_usd("J225"), 50.0, delta=0.5)
+
+        # 3. Broker-side stop-out P&L enforces max_daily_loss even when CSV is empty
+        lim_cfg = {"risk": {"max_daily_loss": 250.0, "sessions": {"asian": True, "london": True, "new_york": True}}}
+        t_lon = datetime(2026, 11, 21, 10, 0, tzinfo=timezone.utc)
+        ok, reason = risk.check_entry_allowed(lim_cfg, 100.0, 100.1, 1.0, now=t_lon, broker_pnl=-260.0)
+        self.assertFalse(ok)
+        self.assertIn("Daily loss limit", reason)
+
+        # 4. Session pre-check blocks disabled Asian session before confirm timer
+        sess_cfg = {"risk": {"sessions": {"asian": False, "london": True, "new_york": True}}}
+        t_asia = datetime(2026, 11, 21, 3, 0, tzinfo=timezone.utc)
+        ok_s, r_s = risk.check_session_and_schedule_allowed(sess_cfg, now=t_asia)
+        self.assertFalse(ok_s)
+        self.assertIn("asian", r_s.lower())
+
+        # 5. Multi-brick gap spike (> max_bricks_on_entry_bar) locks the run via mark_run_traded
+        eng = RenkoEngine(Params(green_buy=2, use_st=False, one_trade_per_run=True, max_bricks_on_entry_bar=2))
+        eng.on_bar(t_lon, 100.0, 100.0, 100.0, 1.0)
+        n_b = eng.on_bar(t_lon, 104.0, 100.0, 104.0, 1.0)
+        self.assertGreater(n_b, 2)
+        d = eng.decide(0, n_b, bar_close=104.0, brick_size=1.0)
+        self.assertEqual(d.action, "")
+        self.assertIn("news_spike", d.filtered_reason)
+        self.assertEqual(eng.last_traded_run_id, eng.run_id)
 
 
 if __name__ == "__main__":

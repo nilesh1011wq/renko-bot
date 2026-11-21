@@ -15,8 +15,9 @@ from pathlib import Path
 from backtest import load_config, pick, INSTRUMENT_SPECS, format_brick_size
 from capital_api import Capital, CapitalError, RES_MINUTES, SSL_CTX
 from renko import DailyAtr, Params, RenkoEngine, brick_size_from_atr, round_to_tick
-from risk import (check_correlation_allowed, check_entry_allowed, compute_size, kill_switch_active,
-                  safety_stop_level, set_kill_switch, should_trail_stop, today_stats)
+from risk import (check_correlation_allowed, check_entry_allowed, check_session_and_schedule_allowed,
+                  compute_size, fetch_broker_today_pnl, kill_switch_active, safety_stop_level,
+                  set_kill_switch, should_trail_stop, today_stats)
 
 ROOT = Path(__file__).parent
 JOURNAL = ROOT / "journal"
@@ -643,15 +644,20 @@ def _step_once_impl(cap: Capital, cfg: dict):
         else:
             return
     elif d.action in ("BUY", "SELL") and confirm_minutes > 0 and pos_dir == 0:
-        lc_px = round_to_tick(eng.last_close, tick) if eng.last_close is not None else round_to_tick(last_c, tick)
+        sched_ok, sched_reason = check_session_and_schedule_allowed(cfg)
+        if not sched_ok:
+            print(f"[{epic}] Confirmation skipped: {sched_reason}")
+            return
+        trig_src = d.trigger_brick_px if d.trigger_brick_px is not None else (eng.last_close if eng.last_close is not None else last_c)
+        trig_px = round_to_tick(trig_src, tick)
         _PENDING_CONFIRM[epic] = {
             "side": 1 if d.action == "BUY" else -1,
             "action": d.action,
             "t0_epoch": time.time(),
             "run_id": eng.run_id,
-            "trigger_px": lc_px,
+            "trigger_px": trig_px,
         }
-        log_event("CONFIRM_WAIT", d.action, 0.0, lc_px, None, "",
+        log_event("CONFIRM_WAIT", d.action, 0.0, trig_px, None, "",
                   note=f"[{epic}] Waiting {confirm_minutes}m confirmation")
         return
 
@@ -661,9 +667,12 @@ def _step_once_impl(cap: Capital, cfg: dict):
     sz = compute_size(cfg, bs, price=last_c)
     if d.action in ("BUY", "SELL"):
         side_val = 1 if d.action == "BUY" else (-1 if d.action == "SELL" else 0)
-        ok, reason = check_entry_allowed(cfg, bid, ask, bs, trig_px=d.trigger_brick_px, side=side_val)
+        ok, reason = check_entry_allowed(cfg, bid, ask, bs, trig_px=d.trigger_brick_px, side=side_val,
+                                         broker_pnl=fetch_broker_today_pnl(cap))
         if not ok:
             print(reason)
+            if "slippage" in reason.lower():
+                _HANDLED_RUNS[epic] = eng.run_id
             px_log = bid if d.action == "SELL" else ask
             log_event("BLOCKED", d.action, sz, round_to_tick(px_log, tick) if px_log is not None else None, None, note=reason)
             return
@@ -882,12 +891,16 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                 else:
                     continue
             elif d.action in ("BUY", "SELL") and confirm_minutes > 0 and pos_dir == 0:
+                sched_ok, sched_reason = check_session_and_schedule_allowed(inst_cfg)
+                if not sched_ok:
+                    continue
                 corr_ok, corr_reason = check_correlation_allowed(epic, 1 if d.action == "BUY" else -1, raw_pos, inst_cfg)
                 if not corr_ok:
                     print(f"[{epic}] Confirmation skipped: {corr_reason}")
                     log_event("BLOCKED", d.action, 0.0, d.trigger_brick_px, None, note=f"[{epic}] {corr_reason}")
                     continue
-                lc_px = round_to_tick(eng.last_close, tick) if eng.last_close is not None else round_to_tick(last_c, tick)
+                trig_src = d.trigger_brick_px if d.trigger_brick_px is not None else (eng.last_close if eng.last_close is not None else last_c)
+                trig_px = round_to_tick(trig_src, tick)
                 t0_now = time.time()
                 if last_n > 0:
                     bar_delta_sec = RES_MINUTES.get(inst_cfg.get("resolution", "MINUTE"), 1) * 60
@@ -899,9 +912,9 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
                     "action": d.action,
                     "t0_epoch": t0_now,
                     "run_id": eng.run_id,
-                    "trigger_px": lc_px,
+                    "trigger_px": trig_px,
                 }
-                log_event("CONFIRM_WAIT", d.action, 0.0, lc_px, None, "",
+                log_event("CONFIRM_WAIT", d.action, 0.0, trig_px, None, "",
                           note=f"[{epic}] Waiting {confirm_minutes}m confirmation")
                 continue
 
@@ -942,9 +955,12 @@ def step_multi_market(cap: Capital, cfg: dict, epics: list[str] | None = None) -
 
                 sz = compute_size(inst_cfg, bs, price=last_c)
                 side_val = 1 if d.action == "BUY" else (-1 if d.action == "SELL" else 0)
-                ok, reason = check_entry_allowed(inst_cfg, bid, ask, bs, trig_px=d.trigger_brick_px, side=side_val)
+                ok, reason = check_entry_allowed(inst_cfg, bid, ask, bs, trig_px=d.trigger_brick_px, side=side_val,
+                                                 broker_pnl=fetch_broker_today_pnl(cap))
                 if not ok:
                     print(f"[{epic}] Entry blocked: {reason}")
+                    if "slippage" in reason.lower():
+                        _HANDLED_RUNS[epic] = eng.run_id
                     if d.action:
                         px_log = bid if d.action == "SELL" else ask
                         log_event("BLOCKED", d.action, sz, round_to_tick(px_log, tick) if px_log is not None else None,

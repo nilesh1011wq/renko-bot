@@ -49,11 +49,36 @@ def in_macro_blackout(t: datetime) -> bool:
 _DEFAULT_QUOTE_TO_USD = {
     "USDJPY": 1.0 / 155.0,
     "JP225": 1.0 / 155.0,
+    "J225": 1.0 / 155.0,
+    "JPN225": 1.0 / 155.0,
+    "NIKKEI": 1.0 / 155.0,
+    "NI225": 1.0 / 155.0,
     "USDCAD": 1.0 / 1.39,
     "USDCHF": 1.0 / 0.88,
     "GER40": 1.09,
     "DE40": 1.09,
+    "DAX": 1.09,
     "UK100": 1.29,
+    "FTSE": 1.29,
+}
+
+# Verified Capital.com minimum deal sizes (prevents 2.7x over-risking on high-priced assets like BTCUSD)
+_MIN_DEAL_SIZE = {
+    "BTCUSD": 0.001,
+    "BTC/USD": 0.001,
+    "BITCOIN": 0.001,
+    "ETHUSD": 0.001,
+    "ETH/USD": 0.001,
+    "ETHEREUM": 0.001,
+    "GOLD": 0.01,
+    "XAUUSD": 0.01,
+    "US100": 0.01,
+    "US30": 0.01,
+    "US500": 0.01,
+    "GER40": 0.01,
+    "DE40": 0.01,
+    "UK100": 0.01,
+    "FTSE": 0.01,
 }
 
 
@@ -72,9 +97,12 @@ def compute_size(cfg: dict, brick_size: float, price: float | None = None) -> fl
     if cfg.get("sizing_mode", "fixed") == "risk_usd" and brick_size > 0:
         risk_usd = float(cfg.get("risk_per_trade_usd", 50.0))
         stop_bricks = max(2.0, float(cfg.get("risk", {}).get("safety_stop_bricks", 3.0)))
-        q2u = quote_to_usd(cfg.get("epic"), price=price)
+        ep = str(cfg.get("epic") or "").upper().replace("/", "")
+        q2u = quote_to_usd(ep, price=price)
         raw = risk_usd / (stop_bricks * brick_size * q2u)
-        return max(0.1, round(raw, 2))
+        min_sz = _MIN_DEAL_SIZE.get(ep, 0.1)
+        prec = 3 if (min_sz < 0.01 and raw < 1.0) else 2
+        return max(min_sz, round(raw, prec))
     return float(cfg.get("size", 1.0))
 
 
@@ -125,30 +153,69 @@ def daily_loss_bypass_active(r_cfg: dict, now: datetime | None = None) -> bool:
     return d == (now or datetime.now(timezone.utc)).strftime("%Y-%m-%d")
 
 
-def check_entry_allowed(cfg: dict, bid: float | None, ask: float | None, brick_size: float,
-                        trades_csv: Path | None = None, now: datetime | None = None,
-                        trig_px: float | None = None, side: int | None = None) -> tuple[bool, str]:
-    """Check whether a new entry (BUY or SELL) is permitted by risk rules."""
+_BROKER_PNL_CACHE: dict[str, tuple[float, float]] = {}
+
+
+def fetch_broker_today_pnl(cap, now: datetime | None = None, ttl_sec: float = 60.0) -> float | None:
+    """Fetch today's realized TRADE P&L directly from Capital.com (includes broker-side SL hits)."""
+    if cap is None or not hasattr(cap, "_req"):
+        return None
+    import time as _time
+    t_now = now or datetime.now(timezone.utc)
+    day_str = t_now.strftime("%Y-%m-%d")
+    cached = _BROKER_PNL_CACHE.get(day_str)
+    now_ts = _time.time()
+    if cached and (now_ts - cached[0]) < ttl_sec:
+        return cached[1]
+    try:
+        tx = cap._req("GET", f"/history/transactions?from={day_str}T00:00:00&type=TRADE")
+        rows = tx.get("transactions", []) if isinstance(tx, dict) else []
+        total = 0.0
+        for r in rows:
+            if str(r.get("status", "")).upper() in ("PROCESSED", ""):
+                try:
+                    total += float(r.get("size") or 0.0)
+                except (TypeError, ValueError):
+                    pass
+        total = round(total, 2)
+        _BROKER_PNL_CACHE[day_str] = (now_ts, total)
+        return total
+    except Exception:
+        return cached[1] if cached else None
+
+
+def check_session_and_schedule_allowed(cfg: dict, now: datetime | None = None) -> tuple[bool, str]:
+    """Fast pre-check of kill switch, blackout windows, and enabled sessions (used before arming confirm timers)."""
     if kill_switch_active():
         return False, "BLOCK: Kill switch (STOP file) is active"
-
     r_cfg = cfg.get("risk", {})
     t_now = now or datetime.now(timezone.utc)
-
     if r_cfg.get("rollover_blackout") and in_rollover_blackout(t_now):
         return False, "BLOCK: Daily Gold rollover blackout window (20:45-22:15 UTC)"
-
     if r_cfg.get("macro_blackout", False) and in_macro_blackout(t_now):
         return False, "BLOCK: US Macro News Blackout window (13:25-13:35 / 18:55-19:10 UTC)"
-
     sessions = r_cfg.get("sessions", {"asian": True, "london": True, "new_york": True})
     sess = session_of(t_now)
     if not sessions.get(sess, True):
         return False, f"BLOCK: Session '{sess}' is disabled in config"
     if not sessions.get("asian", True) and t_now.hour >= 21:
         return False, "BLOCK: Post-NY close overnight dead zone (21:00-07:00 UTC) disabled with Asian session"
+    return True, "PASS"
 
-    count, pnl = today_stats(trades_csv, t_now)
+
+def check_entry_allowed(cfg: dict, bid: float | None, ask: float | None, brick_size: float,
+                        trades_csv: Path | None = None, now: datetime | None = None,
+                        trig_px: float | None = None, side: int | None = None,
+                        broker_pnl: float | None = None) -> tuple[bool, str]:
+    """Check whether a new entry (BUY or SELL) is permitted by risk rules."""
+    t_now = now or datetime.now(timezone.utc)
+    sched_ok, sched_reason = check_session_and_schedule_allowed(cfg, t_now)
+    if not sched_ok:
+        return False, sched_reason
+
+    r_cfg = cfg.get("risk", {})
+    count, csv_pnl = today_stats(trades_csv, t_now)
+    pnl = min(csv_pnl, float(broker_pnl)) if broker_pnl is not None else csv_pnl
 
     max_trades = r_cfg.get("max_trades_per_day", 0)
     if max_trades and max_trades > 0 and count >= max_trades:
@@ -216,6 +283,9 @@ _CORR_ALIAS_MAP: dict[str, str] = {
     "DE40": "GER40",
     "FTSE": "UK100",
     "NIKKEI": "JP225",
+    "J225": "JP225",
+    "JPN225": "JP225",
+    "NI225": "JP225",
     "BITCOIN": "BTCUSD",
     "BTC/USD": "BTCUSD",
     "ETHEREUM": "ETHUSD",
