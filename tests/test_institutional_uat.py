@@ -663,6 +663,8 @@ class TestInstitutionalUAT(unittest.TestCase):
         cfg["strategy"]["atr_div"] = 15.0
         cfg["strategy"]["confirm_minutes"] = 5
         cfg["strategy"]["one_trade_per_run"] = True
+        cfg["strategy"]["max_overshoot_bricks"] = 1.5
+        cfg["strategy"]["max_bricks_on_entry_bar"] = 3
         cfg["strategy"]["grid_anchor"] = False
         cfg["risk"]["rollover_blackout"] = False
         cfg["risk"]["max_daily_loss"] = 0

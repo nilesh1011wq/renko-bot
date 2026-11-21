@@ -260,6 +260,8 @@ class RenkoEngine:
                 return Decision("", filtered_reason="one_trade_per_run", trigger_brick_px=trig_px, filtered_action=act_candidate)
 
             if p.max_bricks_on_entry_bar > 0 and new_bricks > p.max_bricks_on_entry_bar:
+                if p.one_trade_per_run:
+                    self.mark_run_traded()
                 if position < 0 and short_exit:
                     return Decision("COVER", filtered_reason=f"news_spike ({new_bricks} bricks)", trigger_brick_px=trig_px, filtered_action=act_candidate)
                 if position > 0 and long_exit:
