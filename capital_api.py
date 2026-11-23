@@ -166,16 +166,33 @@ class Capital:
         cur = start
         while cur < end:
             nxt = min(cur + step, end)
-            q = urllib.parse.urlencode({"resolution": resolution, "max": max_n,
-                                        "from": cur.strftime("%Y-%m-%dT%H:%M:%S"),
-                                        "to": nxt.strftime("%Y-%m-%dT%H:%M:%S")})
+            params = {
+                "resolution": resolution,
+                "max": max_n,
+                "from": cur.strftime("%Y-%m-%dT%H:%M:%S"),
+            }
+            if nxt < end:
+                params["to"] = nxt.strftime("%Y-%m-%dT%H:%M:%S")
+            q = urllib.parse.urlencode(params)
             try:
                 js = self._req("GET", "/prices/%s?%s" % (urllib.parse.quote(epic), q))
             except CapitalError as e:
-                if "prices.not.found" in str(e) or "error.prices.not-found" in str(e):
+                err_s = str(e)
+                if "prices.not.found" in err_s or "error.prices.not-found" in err_s:
                     cur = nxt
                     continue
-                raise
+                if "invalid.daterange" in err_s:
+                    if "to" in params:
+                        params.pop("to", None)
+                        try:
+                            js = self._req("GET", "/prices/%s?%s" % (urllib.parse.quote(epic), urllib.parse.urlencode(params)))
+                        except CapitalError:
+                            cur = nxt
+                            continue
+                    else:
+                        break
+                else:
+                    raise
             for p in js.get("prices", []):
                 t = datetime.strptime(p.get("snapshotTimeUTC") or p["snapshotTime"], "%Y-%m-%dT%H:%M:%S") \
                     .replace(tzinfo=timezone.utc)
