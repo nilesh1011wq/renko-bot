@@ -645,8 +645,9 @@ def apply_instrument_dna_to_config(cfg: dict, epic: str) -> dict:
         cfg.setdefault("strategy", {})["fallback_size"] = spec["fallback_size"]
 
     mat = get_or_build_matrix()
-    prof = mat.get("profiles_by_epic", {}).get(clean_epic) or (
+    prof = (
         cfg.get("risk", {}).get("instrument_profiles", {}).get(clean_epic)
+        or mat.get("profiles_by_epic", {}).get(clean_epic)
     )
     applied = {}
     if isinstance(prof, dict) and prof:

@@ -175,25 +175,26 @@
       "live_cached": true,
       "optimal_params": {
         "atr_len": 5,
-        "atr_div": 9.0,
+        "atr_div": 5.0,
         "st_factor": 2.1,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 2.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
-        "safety_stop_bricks": 3.0,
-        "breakeven_after_bricks": 0.0,
+        "safety_stop_bricks": 2.5,
+        "breakeven_after_bricks": 2.0,
         "use_htf_filter": false,
         "max_spread_frac_of_brick": 0.25,
         "rollover_blackout": true,
         "macro_blackout": false,
         "sessions": {
-          "asian": true,
+          "asian": false,
           "london": true,
           "new_york": true
         },
-        "sessions_label": "ALL"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "sample_trades": 151,
       "trades_15y": 2718,
@@ -370,25 +371,26 @@
       "live_cached": true,
       "optimal_params": {
         "atr_len": 5,
-        "atr_div": 9.0,
-        "st_factor": 2.0,
+        "atr_div": 6.0,
+        "st_factor": 1.8,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 4.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
-        "safety_stop_bricks": 3.0,
+        "safety_stop_bricks": 2.5,
         "breakeven_after_bricks": 1.5,
         "use_htf_filter": false,
         "max_spread_frac_of_brick": 0.5,
         "rollover_blackout": true,
         "macro_blackout": false,
         "sessions": {
-          "asian": false,
+          "asian": true,
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "ALL",
+        "dual_order_mode": false
       },
       "sample_trades": 160,
       "trades_15y": 2880,
@@ -565,25 +567,26 @@
       "live_cached": true,
       "optimal_params": {
         "atr_len": 5,
-        "atr_div": 9.0,
-        "st_factor": 2.0,
+        "atr_div": 7.0,
+        "st_factor": 2.1,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 4.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
-        "safety_stop_bricks": 3.0,
-        "breakeven_after_bricks": 1.5,
+        "safety_stop_bricks": 2.5,
+        "breakeven_after_bricks": 2.0,
         "use_htf_filter": false,
         "max_spread_frac_of_brick": 0.5,
         "rollover_blackout": true,
         "macro_blackout": false,
         "sessions": {
-          "asian": false,
+          "asian": true,
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "ALL",
+        "dual_order_mode": false
       },
       "sample_trades": 159,
       "trades_15y": 2862,
@@ -760,25 +763,26 @@
       "live_cached": true,
       "optimal_params": {
         "atr_len": 5,
-        "atr_div": 10.0,
-        "st_factor": 2.2,
+        "atr_div": 4.0,
+        "st_factor": 2.5,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 4.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
-        "safety_stop_bricks": 3.5,
-        "breakeven_after_bricks": 1.5,
+        "safety_stop_bricks": 2.5,
+        "breakeven_after_bricks": 2.0,
         "use_htf_filter": false,
         "max_spread_frac_of_brick": 0.38,
         "rollover_blackout": true,
         "macro_blackout": false,
         "sessions": {
-          "asian": false,
+          "asian": true,
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "ALL",
+        "dual_order_mode": false
       },
       "sample_trades": 74,
       "trades_15y": 1332,
@@ -955,12 +959,12 @@
       "live_cached": true,
       "optimal_params": {
         "atr_len": 7,
-        "atr_div": 15.0,
-        "st_factor": 2.0,
+        "atr_div": 7.0,
+        "st_factor": 2.1,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 2.5,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
         "safety_stop_bricks": 2.5,
         "breakeven_after_bricks": 1.5,
@@ -970,10 +974,11 @@
         "macro_blackout": false,
         "sessions": {
           "asian": false,
-          "london": true,
+          "london": false,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "NY",
+        "dual_order_mode": false
       },
       "sample_trades": 429,
       "trades_15y": 7722,
@@ -1154,8 +1159,8 @@
         "st_factor": 2.5,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 1.5,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
         "safety_stop_bricks": 2.5,
         "breakeven_after_bricks": 1.5,
@@ -1168,7 +1173,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "sample_trades": 92,
       "trades_15y": 1656,
@@ -1349,8 +1355,8 @@
         "st_factor": 2.1,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.5,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 5,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 2.0,
@@ -1359,11 +1365,12 @@
         "rollover_blackout": true,
         "macro_blackout": true,
         "sessions": {
-          "asian": true,
+          "asian": false,
           "london": true,
           "new_york": true
         },
-        "sessions_label": "ALL"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "sample_trades": 196,
       "trades_15y": 3528,
@@ -1544,8 +1551,8 @@
         "st_factor": 2.0,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 2.5,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 1.5,
@@ -1558,7 +1565,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "sample_trades": 80,
       "trades_15y": 1440,
@@ -1735,25 +1743,26 @@
       "live_cached": true,
       "optimal_params": {
         "atr_len": 7,
-        "atr_div": 15.0,
-        "st_factor": 2.0,
+        "atr_div": 4.0,
+        "st_factor": 2.5,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 2.5,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
         "safety_stop_bricks": 2.5,
-        "breakeven_after_bricks": 1.5,
+        "breakeven_after_bricks": 2.0,
         "use_htf_filter": false,
         "max_spread_frac_of_brick": 0.42,
         "rollover_blackout": true,
         "macro_blackout": false,
         "sessions": {
           "asian": false,
-          "london": true,
+          "london": false,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "NY",
+        "dual_order_mode": false
       },
       "sample_trades": 479,
       "trades_15y": 8622,
@@ -1934,8 +1943,8 @@
         "st_factor": 2.2,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 5,
         "safety_stop_bricks": 2.5,
         "breakeven_after_bricks": 1.5,
@@ -1948,7 +1957,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "sample_trades": 320,
       "trades_15y": 5760,
@@ -2125,25 +2135,26 @@
       "live_cached": true,
       "optimal_params": {
         "atr_len": 7,
-        "atr_div": 11.0,
-        "st_factor": 1.8,
+        "atr_div": 4.0,
+        "st_factor": 2.5,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
         "safety_stop_bricks": 3.0,
-        "breakeven_after_bricks": 1.5,
+        "breakeven_after_bricks": 2.0,
         "use_htf_filter": false,
         "max_spread_frac_of_brick": 0.35,
         "rollover_blackout": true,
         "macro_blackout": false,
         "sessions": {
-          "asian": false,
+          "asian": true,
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "ALL",
+        "dual_order_mode": false
       },
       "sample_trades": 246,
       "trades_15y": 4428,
@@ -2320,14 +2331,14 @@
       "live_cached": true,
       "optimal_params": {
         "atr_len": 5,
-        "atr_div": 10.0,
-        "st_factor": 1.9,
+        "atr_div": 4.0,
+        "st_factor": 2.5,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
-        "safety_stop_bricks": 3.0,
+        "safety_stop_bricks": 2.5,
         "breakeven_after_bricks": 1.5,
         "use_htf_filter": false,
         "max_spread_frac_of_brick": 0.35,
@@ -2338,7 +2349,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "sample_trades": 163,
       "trades_15y": 2934,
@@ -2516,24 +2528,25 @@
       "optimal_params": {
         "atr_len": 7,
         "atr_div": 12.0,
-        "st_factor": 2.1,
+        "st_factor": 2.5,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 4.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 5,
-        "safety_stop_bricks": 3.5,
-        "breakeven_after_bricks": 2.0,
+        "safety_stop_bricks": 2.5,
+        "breakeven_after_bricks": 1.5,
         "use_htf_filter": false,
         "max_spread_frac_of_brick": 0.35,
         "rollover_blackout": true,
         "macro_blackout": true,
         "sessions": {
-          "asian": false,
+          "asian": true,
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "ALL",
+        "dual_order_mode": false
       },
       "sample_trades": 258,
       "trades_15y": 4644,
@@ -2710,14 +2723,14 @@
       "live_cached": true,
       "optimal_params": {
         "atr_len": 7,
-        "atr_div": 11.0,
-        "st_factor": 1.8,
+        "atr_div": 6.0,
+        "st_factor": 2.5,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
-        "safety_stop_bricks": 3.0,
+        "safety_stop_bricks": 2.5,
         "breakeven_after_bricks": 1.5,
         "use_htf_filter": false,
         "max_spread_frac_of_brick": 0.35,
@@ -2725,10 +2738,11 @@
         "macro_blackout": false,
         "sessions": {
           "asian": false,
-          "london": true,
+          "london": false,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "NY",
+        "dual_order_mode": false
       },
       "sample_trades": 270,
       "trades_15y": 4860,
@@ -2909,8 +2923,8 @@
         "st_factor": 1.8,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
         "safety_stop_bricks": 3.0,
         "breakeven_after_bricks": 1.5,
@@ -2923,7 +2937,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "sample_trades": 221,
       "trades_15y": 3978,
@@ -3100,14 +3115,14 @@
       "live_cached": true,
       "optimal_params": {
         "atr_len": 5,
-        "atr_div": 10.0,
-        "st_factor": 1.9,
+        "atr_div": 6.0,
+        "st_factor": 2.1,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
-        "safety_stop_bricks": 3.0,
+        "safety_stop_bricks": 2.5,
         "breakeven_after_bricks": 1.5,
         "use_htf_filter": false,
         "max_spread_frac_of_brick": 0.35,
@@ -3116,9 +3131,10 @@
         "sessions": {
           "asian": true,
           "london": true,
-          "new_york": false
+          "new_york": true
         },
-        "sessions_label": "ASI+LON"
+        "sessions_label": "ALL",
+        "dual_order_mode": false
       },
       "sample_trades": 79,
       "trades_15y": 1422,
@@ -3295,15 +3311,15 @@
       "live_cached": true,
       "optimal_params": {
         "atr_len": 14,
-        "atr_div": 6.0,
-        "st_factor": 1.5,
+        "atr_div": 5.0,
+        "st_factor": 2.5,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
-        "safety_stop_bricks": 3.0,
-        "breakeven_after_bricks": 1.5,
+        "safety_stop_bricks": 2.5,
+        "breakeven_after_bricks": 0.0,
         "use_htf_filter": false,
         "max_spread_frac_of_brick": 0.45,
         "rollover_blackout": true,
@@ -3313,7 +3329,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "sample_trades": 69,
       "trades_15y": 1242,
@@ -3490,25 +3507,26 @@
       "live_cached": true,
       "optimal_params": {
         "atr_len": 5,
-        "atr_div": 8.0,
-        "st_factor": 2.0,
+        "atr_div": 5.0,
+        "st_factor": 2.5,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 3,
         "safety_stop_bricks": 3.0,
-        "breakeven_after_bricks": 1.0,
+        "breakeven_after_bricks": 0.0,
         "use_htf_filter": false,
         "max_spread_frac_of_brick": 0.45,
         "rollover_blackout": true,
         "macro_blackout": false,
         "sessions": {
-          "asian": true,
+          "asian": false,
           "london": true,
           "new_york": true
         },
-        "sessions_label": "ALL"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "sample_trades": 166,
       "trades_15y": 2988,
@@ -3685,17 +3703,17 @@
       "live_cached": true,
       "optimal_params": {
         "atr_len": 5,
-        "atr_div": 11.0,
-        "st_factor": 2.0,
+        "atr_div": 9.0,
+        "st_factor": 2.5,
         "green_buy": 2,
         "red_sell": 2,
-        "tp_bricks": 3.0,
-        "runner_offset_bricks": 1.0,
+        "tp_bricks": 0.0,
+        "runner_offset_bricks": 0.0,
         "confirm_minutes": 2,
-        "safety_stop_bricks": 3.0,
+        "safety_stop_bricks": 2.5,
         "breakeven_after_bricks": 1.5,
         "use_htf_filter": false,
-        "max_spread_frac_of_brick": 0.45,
+        "max_spread_frac_of_brick": 0.55,
         "rollover_blackout": true,
         "macro_blackout": false,
         "sessions": {
@@ -3703,7 +3721,8 @@
           "london": true,
           "new_york": true
         },
-        "sessions_label": "LON+NY"
+        "sessions_label": "LON+NY",
+        "dual_order_mode": false
       },
       "sample_trades": 175,
       "trades_15y": 3150,
@@ -3876,17 +3895,40 @@
   "profiles_by_epic": {
     "GOLD": {
       "atr_len": 5,
-      "atr_div": 9.0,
+      "atr_div": 5.0,
       "st_factor": 2.1,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 2.0,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 2,
-      "safety_stop_bricks": 3.0,
-      "breakeven_after_bricks": 0.0,
+      "safety_stop_bricks": 2.5,
+      "breakeven_after_bricks": 2.0,
       "use_htf_filter": false,
       "max_spread_frac_of_brick": 0.25,
+      "rollover_blackout": true,
+      "macro_blackout": false,
+      "sessions": {
+        "asian": false,
+        "london": true,
+        "new_york": true
+      },
+      "sessions_label": "LON+NY",
+      "dual_order_mode": false
+    },
+    "SILVER": {
+      "atr_len": 5,
+      "atr_div": 6.0,
+      "st_factor": 1.8,
+      "green_buy": 2,
+      "red_sell": 2,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
+      "confirm_minutes": 3,
+      "safety_stop_bricks": 2.5,
+      "breakeven_after_bricks": 1.5,
+      "use_htf_filter": false,
+      "max_spread_frac_of_brick": 0.5,
       "rollover_blackout": true,
       "macro_blackout": false,
       "sessions": {
@@ -3894,82 +3936,63 @@
         "london": true,
         "new_york": true
       },
-      "sessions_label": "ALL"
-    },
-    "SILVER": {
-      "atr_len": 5,
-      "atr_div": 9.0,
-      "st_factor": 2.0,
-      "green_buy": 2,
-      "red_sell": 2,
-      "tp_bricks": 4.0,
-      "runner_offset_bricks": 1.0,
-      "confirm_minutes": 3,
-      "safety_stop_bricks": 3.0,
-      "breakeven_after_bricks": 1.5,
-      "use_htf_filter": false,
-      "max_spread_frac_of_brick": 0.5,
-      "rollover_blackout": true,
-      "macro_blackout": false,
-      "sessions": {
-        "asian": false,
-        "london": true,
-        "new_york": true
-      },
-      "sessions_label": "LON+NY"
+      "sessions_label": "ALL",
+      "dual_order_mode": false
     },
     "OIL_CRUDE": {
       "atr_len": 5,
-      "atr_div": 9.0,
-      "st_factor": 2.0,
+      "atr_div": 7.0,
+      "st_factor": 2.1,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 4.0,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 3,
-      "safety_stop_bricks": 3.0,
-      "breakeven_after_bricks": 1.5,
+      "safety_stop_bricks": 2.5,
+      "breakeven_after_bricks": 2.0,
       "use_htf_filter": false,
       "max_spread_frac_of_brick": 0.5,
       "rollover_blackout": true,
       "macro_blackout": false,
       "sessions": {
-        "asian": false,
+        "asian": true,
         "london": true,
         "new_york": true
       },
-      "sessions_label": "LON+NY"
+      "sessions_label": "ALL",
+      "dual_order_mode": false
     },
     "OIL_BRENT": {
       "atr_len": 5,
-      "atr_div": 10.0,
-      "st_factor": 2.2,
+      "atr_div": 4.0,
+      "st_factor": 2.5,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 4.0,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 3,
-      "safety_stop_bricks": 3.5,
-      "breakeven_after_bricks": 1.5,
+      "safety_stop_bricks": 2.5,
+      "breakeven_after_bricks": 2.0,
       "use_htf_filter": false,
       "max_spread_frac_of_brick": 0.38,
       "rollover_blackout": true,
       "macro_blackout": false,
       "sessions": {
-        "asian": false,
+        "asian": true,
         "london": true,
         "new_york": true
       },
-      "sessions_label": "LON+NY"
+      "sessions_label": "ALL",
+      "dual_order_mode": false
     },
     "EURUSD": {
       "atr_len": 7,
-      "atr_div": 15.0,
-      "st_factor": 2.0,
+      "atr_div": 7.0,
+      "st_factor": 2.1,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 2.5,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 2,
       "safety_stop_bricks": 2.5,
       "breakeven_after_bricks": 1.5,
@@ -3979,10 +4002,11 @@
       "macro_blackout": false,
       "sessions": {
         "asian": false,
-        "london": true,
+        "london": false,
         "new_york": true
       },
-      "sessions_label": "LON+NY"
+      "sessions_label": "NY",
+      "dual_order_mode": false
     },
     "GBPUSD": {
       "atr_len": 10,
@@ -3990,8 +4014,8 @@
       "st_factor": 2.5,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 1.5,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 3,
       "safety_stop_bricks": 2.5,
       "breakeven_after_bricks": 1.5,
@@ -4004,7 +4028,8 @@
         "london": true,
         "new_york": true
       },
-      "sessions_label": "LON+NY"
+      "sessions_label": "LON+NY",
+      "dual_order_mode": false
     },
     "USDJPY": {
       "atr_len": 5,
@@ -4012,8 +4037,8 @@
       "st_factor": 2.1,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 3.5,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 5,
       "safety_stop_bricks": 3.0,
       "breakeven_after_bricks": 2.0,
@@ -4022,11 +4047,12 @@
       "rollover_blackout": true,
       "macro_blackout": true,
       "sessions": {
-        "asian": true,
+        "asian": false,
         "london": true,
         "new_york": true
       },
-      "sessions_label": "ALL"
+      "sessions_label": "LON+NY",
+      "dual_order_mode": false
     },
     "AUDUSD": {
       "atr_len": 5,
@@ -4034,8 +4060,8 @@
       "st_factor": 2.0,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 2.5,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 3,
       "safety_stop_bricks": 3.0,
       "breakeven_after_bricks": 1.5,
@@ -4048,29 +4074,31 @@
         "london": true,
         "new_york": true
       },
-      "sessions_label": "LON+NY"
+      "sessions_label": "LON+NY",
+      "dual_order_mode": false
     },
     "USDCAD": {
       "atr_len": 7,
-      "atr_div": 15.0,
-      "st_factor": 2.0,
+      "atr_div": 4.0,
+      "st_factor": 2.5,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 2.5,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 2,
       "safety_stop_bricks": 2.5,
-      "breakeven_after_bricks": 1.5,
+      "breakeven_after_bricks": 2.0,
       "use_htf_filter": false,
       "max_spread_frac_of_brick": 0.42,
       "rollover_blackout": true,
       "macro_blackout": false,
       "sessions": {
         "asian": false,
-        "london": true,
+        "london": false,
         "new_york": true
       },
-      "sessions_label": "LON+NY"
+      "sessions_label": "NY",
+      "dual_order_mode": false
     },
     "USDCHF": {
       "atr_len": 5,
@@ -4078,8 +4106,8 @@
       "st_factor": 2.2,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 3.0,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 5,
       "safety_stop_bricks": 2.5,
       "breakeven_after_bricks": 1.5,
@@ -4092,84 +4120,88 @@
         "london": true,
         "new_york": true
       },
-      "sessions_label": "LON+NY"
+      "sessions_label": "LON+NY",
+      "dual_order_mode": false
     },
     "US500": {
       "atr_len": 7,
-      "atr_div": 11.0,
-      "st_factor": 1.8,
+      "atr_div": 4.0,
+      "st_factor": 2.5,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 3.0,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 2,
       "safety_stop_bricks": 3.0,
-      "breakeven_after_bricks": 1.5,
-      "use_htf_filter": false,
-      "max_spread_frac_of_brick": 0.35,
-      "rollover_blackout": true,
-      "macro_blackout": false,
-      "sessions": {
-        "asian": false,
-        "london": true,
-        "new_york": true
-      },
-      "sessions_label": "LON+NY"
-    },
-    "US100": {
-      "atr_len": 5,
-      "atr_div": 10.0,
-      "st_factor": 1.9,
-      "green_buy": 2,
-      "red_sell": 2,
-      "tp_bricks": 3.0,
-      "runner_offset_bricks": 1.0,
-      "confirm_minutes": 3,
-      "safety_stop_bricks": 3.0,
-      "breakeven_after_bricks": 1.5,
-      "use_htf_filter": false,
-      "max_spread_frac_of_brick": 0.35,
-      "rollover_blackout": true,
-      "macro_blackout": true,
-      "sessions": {
-        "asian": false,
-        "london": true,
-        "new_york": true
-      },
-      "sessions_label": "LON+NY"
-    },
-    "US30": {
-      "atr_len": 7,
-      "atr_div": 12.0,
-      "st_factor": 2.1,
-      "green_buy": 2,
-      "red_sell": 2,
-      "tp_bricks": 4.0,
-      "runner_offset_bricks": 1.0,
-      "confirm_minutes": 5,
-      "safety_stop_bricks": 3.5,
       "breakeven_after_bricks": 2.0,
       "use_htf_filter": false,
       "max_spread_frac_of_brick": 0.35,
       "rollover_blackout": true,
+      "macro_blackout": false,
+      "sessions": {
+        "asian": true,
+        "london": true,
+        "new_york": true
+      },
+      "sessions_label": "ALL",
+      "dual_order_mode": false
+    },
+    "US100": {
+      "atr_len": 5,
+      "atr_div": 4.0,
+      "st_factor": 2.5,
+      "green_buy": 2,
+      "red_sell": 2,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
+      "confirm_minutes": 3,
+      "safety_stop_bricks": 2.5,
+      "breakeven_after_bricks": 1.5,
+      "use_htf_filter": false,
+      "max_spread_frac_of_brick": 0.35,
+      "rollover_blackout": true,
       "macro_blackout": true,
       "sessions": {
         "asian": false,
         "london": true,
         "new_york": true
       },
-      "sessions_label": "LON+NY"
+      "sessions_label": "LON+NY",
+      "dual_order_mode": false
+    },
+    "US30": {
+      "atr_len": 7,
+      "atr_div": 12.0,
+      "st_factor": 2.5,
+      "green_buy": 2,
+      "red_sell": 2,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
+      "confirm_minutes": 5,
+      "safety_stop_bricks": 2.5,
+      "breakeven_after_bricks": 1.5,
+      "use_htf_filter": false,
+      "max_spread_frac_of_brick": 0.35,
+      "rollover_blackout": true,
+      "macro_blackout": true,
+      "sessions": {
+        "asian": true,
+        "london": true,
+        "new_york": true
+      },
+      "sessions_label": "ALL",
+      "dual_order_mode": false
     },
     "GER40": {
       "atr_len": 7,
-      "atr_div": 11.0,
-      "st_factor": 1.8,
+      "atr_div": 6.0,
+      "st_factor": 2.5,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 3.0,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 2,
-      "safety_stop_bricks": 3.0,
+      "safety_stop_bricks": 2.5,
       "breakeven_after_bricks": 1.5,
       "use_htf_filter": false,
       "max_spread_frac_of_brick": 0.35,
@@ -4177,10 +4209,11 @@
       "macro_blackout": false,
       "sessions": {
         "asian": false,
-        "london": true,
+        "london": false,
         "new_york": true
       },
-      "sessions_label": "LON+NY"
+      "sessions_label": "NY",
+      "dual_order_mode": false
     },
     "UK100": {
       "atr_len": 7,
@@ -4188,8 +4221,8 @@
       "st_factor": 1.8,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 3.0,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 2,
       "safety_stop_bricks": 3.0,
       "breakeven_after_bricks": 1.5,
@@ -4202,18 +4235,19 @@
         "london": true,
         "new_york": true
       },
-      "sessions_label": "LON+NY"
+      "sessions_label": "LON+NY",
+      "dual_order_mode": false
     },
     "JP225": {
       "atr_len": 5,
-      "atr_div": 10.0,
-      "st_factor": 1.9,
+      "atr_div": 6.0,
+      "st_factor": 2.1,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 3.0,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 3,
-      "safety_stop_bricks": 3.0,
+      "safety_stop_bricks": 2.5,
       "breakeven_after_bricks": 1.5,
       "use_htf_filter": false,
       "max_spread_frac_of_brick": 0.35,
@@ -4222,21 +4256,22 @@
       "sessions": {
         "asian": true,
         "london": true,
-        "new_york": false
+        "new_york": true
       },
-      "sessions_label": "ASI+LON"
+      "sessions_label": "ALL",
+      "dual_order_mode": false
     },
     "BTCUSD": {
       "atr_len": 14,
-      "atr_div": 6.0,
-      "st_factor": 1.5,
+      "atr_div": 5.0,
+      "st_factor": 2.5,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 3.0,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 2,
-      "safety_stop_bricks": 3.0,
-      "breakeven_after_bricks": 1.5,
+      "safety_stop_bricks": 2.5,
+      "breakeven_after_bricks": 0.0,
       "use_htf_filter": false,
       "max_spread_frac_of_brick": 0.45,
       "rollover_blackout": true,
@@ -4246,41 +4281,20 @@
         "london": true,
         "new_york": true
       },
-      "sessions_label": "LON+NY"
+      "sessions_label": "LON+NY",
+      "dual_order_mode": false
     },
     "ETHUSD": {
       "atr_len": 5,
-      "atr_div": 8.0,
-      "st_factor": 2.0,
+      "atr_div": 5.0,
+      "st_factor": 2.5,
       "green_buy": 2,
       "red_sell": 2,
-      "tp_bricks": 3.0,
-      "runner_offset_bricks": 1.0,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
       "confirm_minutes": 3,
       "safety_stop_bricks": 3.0,
-      "breakeven_after_bricks": 1.0,
-      "use_htf_filter": false,
-      "max_spread_frac_of_brick": 0.45,
-      "rollover_blackout": true,
-      "macro_blackout": false,
-      "sessions": {
-        "asian": true,
-        "london": true,
-        "new_york": true
-      },
-      "sessions_label": "ALL"
-    },
-    "SOLUSD": {
-      "atr_len": 5,
-      "atr_div": 11.0,
-      "st_factor": 2.0,
-      "green_buy": 2,
-      "red_sell": 2,
-      "tp_bricks": 3.0,
-      "runner_offset_bricks": 1.0,
-      "confirm_minutes": 2,
-      "safety_stop_bricks": 3.0,
-      "breakeven_after_bricks": 1.5,
+      "breakeven_after_bricks": 0.0,
       "use_htf_filter": false,
       "max_spread_frac_of_brick": 0.45,
       "rollover_blackout": true,
@@ -4290,7 +4304,31 @@
         "london": true,
         "new_york": true
       },
-      "sessions_label": "LON+NY"
+      "sessions_label": "LON+NY",
+      "dual_order_mode": false
+    },
+    "SOLUSD": {
+      "atr_len": 5,
+      "atr_div": 9.0,
+      "st_factor": 2.5,
+      "green_buy": 2,
+      "red_sell": 2,
+      "tp_bricks": 0.0,
+      "runner_offset_bricks": 0.0,
+      "confirm_minutes": 2,
+      "safety_stop_bricks": 2.5,
+      "breakeven_after_bricks": 1.5,
+      "use_htf_filter": false,
+      "max_spread_frac_of_brick": 0.55,
+      "rollover_blackout": true,
+      "macro_blackout": false,
+      "sessions": {
+        "asian": false,
+        "london": true,
+        "new_york": true
+      },
+      "sessions_label": "LON+NY",
+      "dual_order_mode": false
     }
   },
   "competitor_benchmark": [
