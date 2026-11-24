@@ -1,27 +1,64 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Renko ATR Pro Cloud Cockpit — XAUUSD / Capital.com</title>
+  <title>Renko Pro Terminal — Multi-Asset Cockpit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    (function() {
+      try {
+        var t = localStorage.getItem('renko_theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', t);
+      } catch(e) {}
+    })();
+  </script>
   <style>
-    :root {
-      --bg-0: #0b0e14;
-      --bg-1: #111621;
-      --bg-2: #171e2c;
-      --bg-3: #1f293d;
-      --border: #263248;
-      --text-0: #f0f4f8;
-      --text-1: #a0aec0;
-      --text-2: #64748b;
-      --green: #26a69a;
-      --green-bright: #10b981;
-      --red: #ef5350;
-      --amber: #f59e0b;
-      --blue: #3b82f6;
-      --purple: #8b5cf6;
+    :root, [data-theme="dark"] {
+      --bg-0: #0E1116;
+      --bg-1: #151A21;
+      --bg-2: #1C222B;
+      --bg-3: #242B36;
+      --border: #262D38;
+      --text-0: #E6EAF0;
+      --text-1: #9AA4B2;
+      --text-2: #768390;
+      --accent: #4C8DFF;
+      --profit: #2EBD85;
+      --loss: #E5534B;
+      --warning: #E3A93B;
+      --green: #2EBD85;
+      --green-bright: #2EBD85;
+      --red: #E5534B;
+      --amber: #E3A93B;
+      --blue: #4C8DFF;
+      --purple: #4C8DFF;
+      --radius-sm: 8px;
+      --radius-md: 12px;
       --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
-      --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    [data-theme="light"] {
+      --bg-0: #F4F6F9;
+      --bg-1: #FFFFFF;
+      --bg-2: #EEF1F5;
+      --bg-3: #E2E7EE;
+      --border: #DDE2EA;
+      --text-0: #161B22;
+      --text-1: #5B6573;
+      --text-2: #6E7781;
+      --accent: #2F6FEB;
+      --profit: #0F9D6A;
+      --loss: #D23C34;
+      --warning: #B7791F;
+      --green: #0F9D6A;
+      --green-bright: #0F9D6A;
+      --red: #D23C34;
+      --amber: #B7791F;
+      --blue: #2F6FEB;
+      --purple: #2F6FEB;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -31,6 +68,14 @@
       font-size: 13px;
       line-height: 1.45;
       overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    .mono, table, .kpi-item, .pill .val {
+      font-variant-numeric: tabular-nums;
+    }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
     }
 
     /* Login Modal Gate */
@@ -69,87 +114,149 @@
       margin-bottom: 12px;
     }
 
-    /* Top Header Bar */
+    /* Consolidated 52px Top Header Bar */
     .topbar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 18px;
+      height: 52px;
+      padding: 0 14px;
       background: var(--bg-1);
       border-bottom: 1px solid var(--border);
       position: sticky;
       top: 0;
-      z-index: 50;
-      gap: 12px;
-      flex-wrap: wrap;
+      z-index: 60;
+      gap: 10px;
+      flex-shrink: 0;
     }
+    .mode-line {
+      height: 2px;
+      width: 100%;
+      background: var(--accent);
+      flex-shrink: 0;
+      transition: background 0.2s ease;
+    }
+    .mode-line.live-auto { background: var(--warning); }
+    .mode-line.halted { background: var(--loss); }
+
     .brand {
       display: flex;
       align-items: center;
-      gap: 10px;
-      font-weight: 700;
-      font-size: 15px;
-      letter-spacing: 0.3px;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 13.5px;
+      letter-spacing: -0.01em;
+      white-space: nowrap;
     }
     .brand-badge {
-      background: linear-gradient(135deg, #f59e0b, #d97706);
-      color: #0b0e14;
-      font-weight: 800;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      color: var(--accent);
+      font-weight: 600;
       font-size: 11px;
       padding: 2px 7px;
-      border-radius: 4px;
+      border-radius: 6px;
       font-family: var(--font-mono);
     }
     .ticker-strip {
       display: flex;
       align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
+      gap: 8px;
       font-family: var(--font-mono);
       font-size: 12px;
+      min-width: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
     }
+    .ticker-strip::-webkit-scrollbar { display: none; }
     .pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 4px 10px;
-      border-radius: 6px;
+      height: 32px;
+      padding: 0 10px;
+      border-radius: var(--radius-sm);
       background: var(--bg-2);
       border: 1px solid var(--border);
+      white-space: nowrap;
+      flex-shrink: 0;
     }
-    .pill .lbl { color: var(--text-2); font-size: 11px; }
+    .pill .lbl { color: var(--text-2); font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; }
     .pill .val { font-weight: 600; color: var(--text-0); }
-    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-    .dot.green { background: var(--green-bright); box-shadow: 0 0 8px var(--green-bright); }
-    .dot.amber { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
-    .dot.red { background: var(--red); box-shadow: 0 0 8px var(--red); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .dot.green { background: var(--profit); }
+    .dot.amber { background: var(--warning); }
+    .dot.red { background: var(--loss); }
 
     .top-actions {
       display: flex;
       align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
+      gap: 6px;
+      flex-shrink: 0;
+      position: relative;
     }
     button {
       cursor: pointer;
       font-family: var(--font-sans);
-      font-weight: 600;
-      font-size: 12px;
+      font-weight: 500;
+      font-size: 12.5px;
       border: 1px solid var(--border);
       background: var(--bg-2);
       color: var(--text-0);
-      padding: 6px 12px;
-      border-radius: 6px;
-      transition: all 0.15s ease;
+      min-height: 32px;
+      padding: 4px 12px;
+      border-radius: var(--radius-sm);
+      transition: background 0.15s ease, border-color 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      white-space: nowrap;
     }
-    button:hover { background: var(--bg-3); border-color: #3b4d6e; }
-    button.primary { background: var(--blue); border-color: #2563eb; color: #fff; }
-    button.primary:hover { background: #2563eb; }
-    button.success { background: var(--green); border-color: #1e877d; color: #fff; }
-    button.success:hover { background: #1e877d; }
-    button.danger { background: #dc2626; border-color: #b91c1c; color: #fff; }
-    button.danger:hover { background: #b91c1c; }
-    button.warning { background: #d97706; border-color: #b45309; color: #fff; }
+    button:hover { background: var(--bg-3); border-color: var(--text-2); }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+    button.primary:hover { filter: brightness(1.08); }
+    button.success { background: rgba(46, 189, 133, 0.14); border-color: var(--profit); color: var(--profit); font-weight: 600; }
+    button.success:hover { background: rgba(46, 189, 133, 0.24); }
+    button.danger { background: transparent; border-color: var(--loss); color: var(--loss); font-weight: 600; }
+    button.danger:hover { background: rgba(229, 83, 75, 0.14); }
+    button.warning { background: rgba(227, 169, 59, 0.12); border-color: var(--warning); color: var(--warning); font-weight: 600; }
+    button.warning:hover { background: rgba(227, 169, 59, 0.22); }
+    button.btn-xs { min-height: 26px; padding: 2px 8px; font-size: 12px; }
+
+    /* Engine & Risk Popover */
+    .engine-popover {
+      position: absolute;
+      top: 46px;
+      right: 12px;
+      width: 340px;
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+      z-index: 120;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .engine-popover.open { display: flex; }
+    .popover-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px;
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+    .popover-row .pr-title { font-size: 12.5px; font-weight: 600; color: var(--text-0); }
+    .popover-row .pr-desc { font-size: 11.5px; color: var(--text-1); margin-top: 2px; }
+
+    /* Collapsible Sidebar Support */
+    .layout.sidebar-collapsed { grid-template-columns: 0px 1fr !important; }
+    .layout.sidebar-collapsed .sidebar { display: none !important; }
 
     /* Single-Screen Fit Layout (Zero Vertical Page Scrolling) */
     html, body {
@@ -286,43 +393,44 @@
     .kpi-strip {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
       flex-shrink: 0;
       background: var(--bg-1);
       border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 5px 10px;
+      border-radius: var(--radius-md);
+      padding: 8px 12px;
       overflow-x: auto;
     }
     .kpi-item {
       display: flex;
       flex-direction: column;
-      min-width: 100px;
-      padding-right: 10px;
+      min-width: 108px;
+      padding-right: 12px;
       border-right: 1px solid var(--border);
     }
     .kpi-item:last-child { border-right: none; }
     .kpi-item .k-label {
-      font-size: 9.5px;
+      font-size: 11px;
       color: var(--text-2);
       text-transform: uppercase;
-      font-family: var(--font-mono);
+      letter-spacing: 0.06em;
+      font-weight: 500;
       white-space: nowrap;
     }
     .kpi-item .k-val {
-      font-size: 13.5px;
-      font-weight: 700;
+      font-size: 15px;
+      font-weight: 600;
       font-family: var(--font-mono);
       white-space: nowrap;
     }
     .kpi-item .k-sub {
-      font-size: 9.5px;
+      font-size: 11px;
       color: var(--text-1);
       font-family: var(--font-mono);
       white-space: nowrap;
     }
-    .pos { color: var(--green-bright); }
-    .neg { color: var(--red); }
+    .pos { color: var(--profit); }
+    .neg { color: var(--loss); }
 
     /* Central Renko Chart Card */
     .renko-card {
@@ -332,12 +440,12 @@
       flex-direction: column;
       background: var(--bg-1);
       border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 6px 8px;
+      border-radius: var(--radius-md);
+      padding: 8px 10px;
       position: relative;
     }
     .renko-card .chart-header {
-      margin-bottom: 4px;
+      margin-bottom: 6px;
       flex-shrink: 0;
       display: flex;
       justify-content: space-between;
@@ -356,9 +464,9 @@
       width: 100%;
       height: 100%;
       display: block;
-      background: #090c12;
-      border-radius: 4px;
-      border: 1px solid #1a2232;
+      background: var(--bg-0);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
       cursor: crosshair;
     }
 
@@ -730,118 +838,171 @@
     </div>
   </div>
 
-  <!-- TOP STATUS BAR -->
-  <header class="topbar">
-    <div class="brand">
-      <span class="brand-badge">CLOUD v2</span>
-      <span>Renko ATR Strategy &amp; Capital.com Cockpit</span>
+  <!-- SAFETY CONFIRMATION MODAL (HIGH-RISK ACTIONS) -->
+  <div id="safety-confirm-modal" class="login-overlay" style="z-index:250;">
+    <div class="login-box" style="max-width:440px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+        <span id="safety-modal-icon" style="font-size:20px;">⚠️</span>
+        <h2 id="safety-modal-title" style="margin:0; font-size:16px; color:var(--text-0);">Confirm High-Risk Action</h2>
+      </div>
+      <p id="safety-modal-desc" style="font-size:13px; color:var(--text-1); line-height:1.5; margin-bottom:14px;"></p>
+      <div id="safety-modal-impact" style="background:var(--bg-0); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-family:var(--font-mono); font-size:12px; color:var(--text-0); margin-bottom:16px;"></div>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button type="button" onclick="closeSafetyModal()" style="padding:8px 14px;">Cancel</button>
+        <button type="button" id="safety-modal-confirm-btn" class="danger" style="padding:8px 16px;">Confirm Action</button>
+      </div>
     </div>
+  </div>
 
-    <div class="ticker-strip">
-      <div class="pill account-select-pill" style="padding: 2px 8px; display: inline-flex; align-items: center; gap: 6px; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 4px;" title="Select Active Trading Account & Broker">
-        <span class="lbl" style="color: #c084fc; font-weight: 700; letter-spacing: 0.5px; font-size: 10px;">ACCOUNT</span>
-        <select id="in-account-select" onchange="switchCockpitAccount(this.value)" style="background: transparent; color: #f8fafc; font-weight: 700; font-size: 11px; font-family: var(--font-mono); border: none; outline: none; cursor: pointer; padding: 2px 4px;">
-          <option value="capital_demo">Capital.com Demo (#332507)</option>
-          <option value="capital_live">Capital.com Live</option>
-          <option value="alpha_direct_mt5">Alpha Direct Prop ($10k MT5)</option>
-          <option value="all_accounts">🌐 All Combined Accounts</option>
-        </select>
+  <!-- CONSOLIDATED 52PX TOP STATUS BAR -->
+  <header class="topbar">
+    <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+      <button type="button" id="btn-toggle-sidebar" onclick="toggleSidebarCollapse()" title="Toggle Strategy Sidebar" style="padding:0 8px; min-height:32px; font-size:14px;">☰</button>
+      <div class="brand">
+        <span class="brand-badge">PRO</span>
+        <span>Renko Terminal</span>
       </div>
-      <div class="pill market-select-pill" style="padding: 2px 8px; display: inline-flex; align-items: center; gap: 6px; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 4px;" title="Select Active Market / Instrument">
-        <span class="lbl" style="color: #38bdf8; font-weight: 700; letter-spacing: 0.5px; font-size: 10px;">MARKET</span>
-        <select id="in-epic" onchange="switchInstrument(this.value)" style="background: transparent; color: #f8fafc; font-weight: 700; font-size: 11.5px; font-family: var(--font-mono); border: none; outline: none; cursor: pointer; padding: 2px 4px;">
-          <optgroup label="Metals" style="background: #0f172a; color: #f8fafc;">
-            <option value="GOLD">GOLD (XAU/USD)</option>
-            <option value="SILVER">SILVER (XAG/USD)</option>
-          </optgroup>
-          <optgroup label="Energy &amp; Oil" style="background: #0f172a; color: #f8fafc;">
-            <option value="OIL_CRUDE">OIL_CRUDE (WTI)</option>
-            <option value="OIL_BRENT">OIL_BRENT</option>
-          </optgroup>
-          <optgroup label="Major Forex" style="background: #0f172a; color: #f8fafc;">
-            <option value="EURUSD">EUR/USD</option>
-            <option value="GBPUSD">GBP/USD</option>
-            <option value="AUDUSD">AUD/USD</option>
-            <option value="USDCAD">USD/CAD</option>
-          </optgroup>
-          <optgroup label="Major Indices" style="background: #0f172a; color: #f8fafc;">
-            <option value="US500">US500 (S&amp;P 500)</option>
-            <option value="US100">US100 (Nasdaq 100)</option>
-            <option value="US30">US30 (Dow 30)</option>
-            <option value="GER40">GER40 (DAX 40)</option>
-            <option value="UK100">UK100 (FTSE 100)</option>
-          </optgroup>
-          <optgroup label="Crypto (24/7)" style="background: #0f172a; color: #f8fafc;">
-            <option value="BTCUSD">BTCUSD (Bitcoin)</option>
-            <option value="ETHUSD">ETHUSD (Ethereum)</option>
-            <option value="SOLUSD">SOLUSD (Solana)</option>
-          </optgroup>
-        </select>
-        <span id="hdr-epic" style="display: none;">GOLD</span>
-      </div>
-      <div class="pill" id="pill-scanner" style="cursor:pointer;" onclick="switchDockTab('scanner', document.getElementById('tab-scanner'));" title="Click to view 16-Market Strategy Scanner">
-        <span class="lbl">SCANNER</span>
-        <span class="val" id="hdr-scanner-status" style="color:#38bdf8; font-weight:700;">⚪ 16 Mkts</span>
-      </div>
-      <div class="pill" id="pill-price" style="cursor:pointer;" onclick="syncLiveBrokerPrice()" title="Click to sync live Gold price directly from Capital.com">
-        <span class="lbl">BROKER PX</span>
-        <span class="val" id="hdr-px">--</span>
-        <span id="hdr-px-sub" style="font-size:9.5px; font-family:var(--font-mono); margin-left:2px;"></span>
-      </div>
-      <div class="pill">
-        <span class="lbl">BRICK SZ</span>
-        <span class="val" id="hdr-bs">--</span>
-      </div>
-      <div class="pill">
-        <span class="lbl">RUNS</span>
-        <span class="val" id="hdr-runs">G:0 / R:0</span>
-      </div>
-      <div class="pill">
-        <span class="lbl">SUPERTREND</span>
-        <span class="val" id="hdr-st">--</span>
-      </div>
-      <div class="pill">
-        <span class="dot amber" id="hdr-watch-dot"></span>
-        <span class="lbl">24/7 BOT</span>
-        <span class="val" id="hdr-watch">PAUSED</span>
-      </div>
-      <div class="pill" title="UAE Gulf Standard Time (Dubai / Abu Dhabi, UTC+4)">
-        <span class="lbl">🇦🇪 UAE TIME</span>
-        <span class="val" id="hdr-gst-clock" style="color:#38bdf8;">--:--:-- GST</span>
-      </div>
-      <div class="pill" id="pill-mode" style="cursor:pointer;" onclick="toggleBotMode()" title="Click to switch between Full Auto (direct broker orders) and Semi-Auto (on-screen tickets)">
-        <span class="lbl">MODE</span>
-        <span class="val" id="hdr-mode" style="color:var(--green-bright); font-weight:700;">AUTO</span>
-      </div>
-      <div class="pill" id="pill-broker" style="cursor:pointer;" onclick="openBrokerModal()" title="Click to view or connect Capital.com Broker API">
-        <span class="dot amber" id="hdr-conn-dot"></span>
-        <span class="lbl">BROKER</span>
-        <span class="val" id="hdr-conn">SAMPLE / DEMO</span>
-      </div>
-      <div class="pill" id="pill-readonly" style="display:none; cursor:pointer; background:rgba(245,158,11,0.18); border:1px solid #f59e0b;" onclick="openAdminUnlockModal()" title="Public View-Only Share Mode: Visitors cannot edit or trade. Click to unlock Admin with password.">
-        <span class="val" style="color:#fbbf24; font-weight:700;">👁️ VIEW-ONLY · 🔑 Unlock</span>
-      </div>
-      <div class="pill" id="pill-admin-unlocked" style="display:none; cursor:pointer; background:rgba(16,185,129,0.16); border:1px solid #10b981;" onclick="lockAdminSession()" title="Admin Unlocked while Public View-Only Share Mode is active. Click to lock back to View-Only.">
-        <span class="val" style="color:#34d399; font-weight:700;">🔓 ADMIN · Lock View</span>
+
+      <div class="ticker-strip">
+        <div class="pill" style="padding:0 8px;" title="Active Trading Account & Broker">
+          <span class="lbl">ACCT</span>
+          <select id="in-account-select" onchange="switchCockpitAccount(this.value)" style="background:transparent; color:var(--text-0); font-weight:600; font-size:12px; font-family:var(--font-mono); border:none; outline:none; cursor:pointer;">
+            <option value="capital_demo">Capital Demo (#332507)</option>
+            <option value="capital_live">Capital Live</option>
+            <option value="alpha_direct_mt5">Alpha Direct ($10k MT5)</option>
+            <option value="all_accounts">All Combined</option>
+          </select>
+        </div>
+
+        <div class="pill" style="padding:0 8px;" title="Active Instrument">
+          <span class="lbl">MKT</span>
+          <select id="in-epic" onchange="switchInstrument(this.value)" style="background:transparent; color:var(--text-0); font-weight:600; font-size:12px; font-family:var(--font-mono); border:none; outline:none; cursor:pointer;">
+            <optgroup label="Metals" style="background:var(--bg-1); color:var(--text-0);">
+              <option value="GOLD">GOLD (XAU/USD)</option>
+              <option value="SILVER">SILVER (XAG/USD)</option>
+            </optgroup>
+            <optgroup label="Energy &amp; Oil" style="background:var(--bg-1); color:var(--text-0);">
+              <option value="OIL_CRUDE">OIL_CRUDE (WTI)</option>
+              <option value="OIL_BRENT">OIL_BRENT</option>
+            </optgroup>
+            <optgroup label="Major Forex" style="background:var(--bg-1); color:var(--text-0);">
+              <option value="EURUSD">EUR/USD</option>
+              <option value="GBPUSD">GBP/USD</option>
+              <option value="AUDUSD">AUD/USD</option>
+              <option value="USDCAD">USD/CAD</option>
+            </optgroup>
+            <optgroup label="Major Indices" style="background:var(--bg-1); color:var(--text-0);">
+              <option value="US500">US500 (S&amp;P 500)</option>
+              <option value="US100">US100 (Nasdaq 100)</option>
+              <option value="US30">US30 (Dow 30)</option>
+              <option value="GER40">GER40 (DAX 40)</option>
+              <option value="UK100">UK100 (FTSE 100)</option>
+            </optgroup>
+            <optgroup label="Crypto (24/7)" style="background:var(--bg-1); color:var(--text-0);">
+              <option value="BTCUSD">BTCUSD (Bitcoin)</option>
+              <option value="ETHUSD">ETHUSD (Ethereum)</option>
+              <option value="SOLUSD">SOLUSD (Solana)</option>
+            </optgroup>
+          </select>
+          <span id="hdr-epic" style="display:none;">GOLD</span>
+        </div>
+
+        <div class="pill" id="pill-price" style="cursor:pointer;" onclick="syncLiveBrokerPrice()" title="Click to sync live price">
+          <span class="lbl">PX</span>
+          <span class="val" id="hdr-px">--</span>
+          <span id="hdr-px-sub" style="font-size:11px; font-family:var(--font-mono); margin-left:2px;"></span>
+        </div>
+
+        <div class="pill">
+          <span class="lbl">BRICK</span>
+          <span class="val" id="hdr-bs">--</span>
+        </div>
+
+        <div class="pill">
+          <span class="lbl">ST</span>
+          <span class="val" id="hdr-st">--</span>
+          <span id="hdr-runs" style="display:none;">G:0 / R:0</span>
+        </div>
+
+        <div class="pill" id="pill-scanner" style="cursor:pointer;" onclick="switchDockTab('tab-scanner', document.querySelector('[onclick*=tab-scanner]'));" title="Open 16-Market Scanner">
+          <span class="lbl">SCAN</span>
+          <span class="val" id="hdr-scanner-status" style="color:var(--accent);">16 Mkts</span>
+        </div>
       </div>
     </div>
 
     <div class="top-actions">
-      <a href="/guide" target="_blank" style="text-decoration:none;"><button type="button" style="background:#0284c7; color:#fff; font-weight:700;">📘 Master Guide (PDF)</button></a>
-      <a href="/studio" target="_blank" style="text-decoration:none;"><button type="button" class="primary">✦ Open Studio Lab</button></a>
-      <button id="btn-broker-settings" class="primary" onclick="openBrokerModal()" title="Connect Capital.com Broker API">
-        <span>🔑</span> <span id="btn-broker-text">Connect Broker</span>
+      <div class="pill" title="UAE Gulf Standard Time (UTC+4)">
+        <span class="val" id="hdr-gst-clock" style="color:var(--text-1); font-size:11.5px;">--:--:-- GST</span>
+      </div>
+
+      <div class="pill" id="pill-broker" style="cursor:pointer;" onclick="openBrokerModal()" title="Broker API Connection">
+        <span class="dot amber" id="hdr-conn-dot"></span>
+        <span class="val" id="hdr-conn">DEMO</span>
+        <span id="btn-broker-text" style="display:none;">Connect Broker</span>
+      </div>
+
+      <button type="button" id="btn-engine-menu" onclick="toggleEnginePopover(event)" title="Engine Controls & Risk Settings">
+        <span class="dot amber" id="hdr-watch-dot"></span>
+        <span>Engine:</span>
+        <span id="hdr-watch" style="font-family:var(--font-mono);">PAUSED</span>
+        <span style="color:var(--text-2); font-size:10px;">▾</span>
       </button>
-      <button id="btn-sync-market" onclick="syncLiveBrokerPrice()" title="Sync real-time Gold price & candles directly from Capital.com">
-        <span>⚡</span> <span>Sync Broker Price</span>
-      </button>
-      <button id="btn-watcher" class="success" onclick="toggleWatcher()">▶ Start 24/7 Watcher</button>
-      <button onclick="simulateTicket('BUY')" title="Test Semi-Auto BUY Ticket">+ Sim BUY</button>
-      <button onclick="simulateTicket('SELL')" title="Test Semi-Auto SELL Ticket">+ Sim SELL</button>
-      <button id="btn-lossbypass" class="warning" onclick="toggleLossBypass()" title="Admin override: ignore the daily-loss limit for today only (auto-expires 00:00 UTC)">Loss Limit: ON</button>
-      <button id="btn-kill" class="danger" onclick="toggleKillSwitch()">FLATTEN / KILL SWITCH</button>
+
+      <div class="pill" id="pill-readonly" style="display:none; cursor:pointer; border-color:var(--warning);" onclick="openAdminUnlockModal()" title="Unlock Admin">
+        <span class="val" style="color:var(--warning);">VIEW-ONLY</span>
+      </div>
+      <div class="pill" id="pill-admin-unlocked" style="display:none; cursor:pointer; border-color:var(--profit);" onclick="lockAdminSession()" title="Lock View">
+        <span class="val" style="color:var(--profit);">ADMIN</span>
+      </div>
+
+      <button type="button" id="btn-theme-toggle" onclick="toggleTheme()" title="Switch Dark / Light Theme" style="padding:0 9px;">🌙</button>
+      <button type="button" id="btn-sync-market" class="primary" onclick="syncLiveBrokerPrice()" title="Sync Live Price & Candles">Sync</button>
+      <button type="button" id="btn-kill" class="danger" onclick="confirmKillSwitch()" title="Flatten All Positions & Halt Bot">Flatten &amp; Halt</button>
+
+      <!-- ENGINE POPOVER -->
+      <div id="engine-popover" class="engine-popover">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:6px; border-bottom:1px solid var(--border);">
+          <span style="font-weight:600; font-size:13px; color:var(--text-0);">Engine &amp; Execution Controls</span>
+          <button type="button" class="btn-xs" onclick="toggleEnginePopover(event)" style="border:none; background:transparent;">✕</button>
+        </div>
+
+        <div class="popover-row">
+          <div>
+            <div class="pr-title">24/7 Cloud Watcher</div>
+            <div class="pr-desc">Automated background bar-close polling.</div>
+          </div>
+          <button type="button" id="btn-watcher" class="success btn-xs" onclick="toggleWatcher()">▶ Start</button>
+        </div>
+
+        <div class="popover-row" style="border-color:rgba(227,169,59,0.4);">
+          <div>
+            <div class="pr-title" style="color:var(--warning);">Execution Mode</div>
+            <div class="pr-desc">AUTO executes directly; SEMI-AUTO tickets.</div>
+          </div>
+          <button type="button" id="pill-mode" class="warning btn-xs" onclick="confirmBotModeToggle()">
+            <span id="hdr-mode">AUTO</span>
+          </button>
+        </div>
+
+        <div class="popover-row">
+          <div>
+            <div class="pr-title">Daily Loss Guard</div>
+            <div class="pr-desc">Halts entries if daily loss hits cap.</div>
+          </div>
+          <button type="button" id="btn-lossbypass" class="warning btn-xs" onclick="confirmLossBypass()">Loss Limit: ON</button>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; pt:4px;">
+          <button type="button" class="btn-xs" onclick="simulateTicket('BUY')">+ Sim BUY</button>
+          <button type="button" class="btn-xs" onclick="simulateTicket('SELL')">+ Sim SELL</button>
+          <a href="/studio" target="_blank" style="text-decoration:none;"><button type="button" class="btn-xs" style="width:100%;">Studio Lab</button></a>
+          <a href="/guide" target="_blank" style="text-decoration:none;"><button type="button" class="btn-xs" style="width:100%;">Master Guide</button></a>
+        </div>
+      </div>
     </div>
   </header>
+  <div id="mode-status-line" class="mode-line" title="Blue = Demo Safe | Amber = Live Auto-Exec | Red = Halted"></div>
 
   <div class="layout">
     <!-- LEFT SIDEBAR: STRATEGY & RISK CONTROLS -->
@@ -1228,46 +1389,46 @@
       <!-- BOTTOM MULTI-TAB TERMINAL DOCK (NO SCROLLING DOWN) -->
       <section class="dock-card">
         <div class="dock-tabs">
-          <button class="dock-tab active" onclick="switchDockTab('tab-positions', this)">⚡ Capital.com Live Orders (<span id="dock-pos-cnt">0</span>)</button>
-          <button class="dock-tab" onclick="switchDockTab('tab-scanner', this)">📊 Market Scanner (<span id="dock-scanner-cnt" style="color:#10b981; font-weight:700;">16</span>)</button>
-          <button class="dock-tab" onclick="switchDockTab('tab-equity', this)">📈 Equity Curve (vs Raw)</button>
-          <button class="dock-tab" onclick="switchDockTab('tab-mc', this)">🎲 Monte Carlo Cone (2,500 Runs)</button>
-          <button class="dock-tab" onclick="switchDockTab('tab-tca', this)">🎯 TCA &amp; Attribution</button>
-          <button class="dock-tab" onclick="switchDockTab('tab-optimizer', this)">🔬 Optimizer</button>
-          <button class="dock-tab" onclick="switchDockTab('tab-matrix15y', this)" style="color:#f59e0b; font-weight:700;">🏆 15Y Matrix &amp; Market Edge (16)</button>
-          <button class="dock-tab" onclick="switchDockTab('tab-sessions', this)">🔑 Broker Env &amp; Sessions</button>
-          <button class="dock-tab" onclick="switchDockTab('tab-journal', this)">📋 Trade History (<span id="dock-trade-cnt">0</span>)</button>
-          <button class="dock-tab" onclick="switchDockTab('tab-log', this)">📜 Bot Activity Log</button>
+          <button class="dock-tab active" onclick="switchDockTab('tab-positions', this)">Live Orders (<span id="dock-pos-cnt">0</span>)</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-scanner', this)">Market Scanner (<span id="dock-scanner-cnt">16</span>)</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-equity', this)">Equity Curve</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-mc', this)">Monte Carlo</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-tca', this)">TCA &amp; Attribution</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-optimizer', this)">Optimizer</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-matrix15y', this)">15Y Matrix (16)</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-sessions', this)">Broker &amp; Sessions</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-journal', this)">Trade History (<span id="dock-trade-cnt">0</span>)</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-log', this)">Activity Log</button>
         </div>
 
         <div class="dock-content">
           <!-- Tab 1: Trade History -->
           <div id="tab-journal" class="dock-pane">
             <!-- Sub Header / Navigation Bar -->
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px; background:rgba(15,23,42,0.6); padding:4px 8px; border-radius:5px; border:1px solid var(--border);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px; background:var(--bg-2); padding:6px 10px; border-radius:var(--radius-sm); border:1px solid var(--border);">
               <div style="display:flex; gap:6px; align-items:center;">
-                <span style="font-size:10.5px; color:#c084fc; font-family:var(--font-mono); font-weight:700;">ACCOUNT:</span>
-                <button id="btn-view-live" onclick="switchJournalSubView('live')" class="journal-view-btn active" style="font-size:10.5px; padding:2px 10px; border-radius:3px; cursor:pointer; font-weight:700; background:#9333ea; color:#fff; border:1px solid #c084fc;">🏦 Live History &amp; Edge</button>
-                <button id="btn-view-backtest" onclick="switchJournalSubView('backtest')" class="journal-view-btn" style="font-size:10.5px; padding:2px 10px; border-radius:3px; cursor:pointer; font-weight:600; background:transparent; color:var(--text-1); border:1px solid var(--border);">📋 Strategy Backtest</button>
+                <span style="font-size:11px; color:var(--text-1); font-family:var(--font-mono); font-weight:600; text-transform:uppercase; letter-spacing:0.04em;">View:</span>
+                <button id="btn-view-live" onclick="switchJournalSubView('live')" class="journal-view-btn active btn-xs" style="background:var(--accent); color:#fff; border-color:var(--accent);">Live History &amp; Edge</button>
+                <button id="btn-view-backtest" onclick="switchJournalSubView('backtest')" class="journal-view-btn btn-xs" style="background:var(--bg-1); color:var(--text-1); border-color:var(--border);">Strategy Backtest</button>
               </div>
               <div style="display:flex; gap:6px; align-items:center;">
-                <button type="button" class="btn-xs" onclick="syncLiveHistoryFromBroker()" style="padding:2px 8px; font-weight:700; background:#059669; color:#fff;" title="Sync trades directly from broker API">⚡ Sync Live Trades</button>
-                <button type="button" class="btn-xs" onclick="window.open('/api/tearsheet', '_blank')" style="padding:2px 8px; font-weight:700; background:#0284c7; color:#fff;">📄 Tear-Sheet</button>
-                <button type="button" class="btn-xs" onclick="window.location.href='/api/export-trades.csv'" style="padding:2px 8px; font-weight:700;">📥 CSV</button>
+                <button type="button" class="btn-xs primary" onclick="syncLiveHistoryFromBroker()" title="Sync trades directly from broker API">Sync Live Trades</button>
+                <button type="button" class="btn-xs" onclick="window.open('/api/tearsheet', '_blank')">Tear-Sheet</button>
+                <button type="button" class="btn-xs" onclick="window.location.href='/api/export-trades.csv'">Export CSV</button>
               </div>
             </div>
 
             <!-- SUB-VIEW 1: LIVE MULTI-ACCOUNT TRADE HISTORY & EDGE (Active by default) -->
             <div id="subview-live-history" style="display:flex; flex-direction:column; gap:6px; flex:1; min-height:0;">
               <!-- Filter Toolbar -->
-              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; background:var(--bg-1); padding:4px 8px; border-radius:4px; border:1px solid var(--border);">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; background:var(--bg-1); padding:6px 10px; border-radius:var(--radius-sm); border:1px solid var(--border);">
                 <div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
-                  <span style="font-size:10px; color:var(--text-1); font-family:var(--font-mono); font-weight:700;">PERIOD:</span>
-                  <button class="live-preset-btn" id="lpreset-today" onclick="selectLivePreset('today')" style="font-size:10px; padding:2px 7px; border-radius:3px; font-family:var(--font-mono); font-weight:700; background:var(--bg-2); color:var(--text-0); border:1px solid var(--border);">Today (24h GST)</button>
-                  <button class="live-preset-btn active" id="lpreset-yesterday" onclick="selectLivePreset('yesterday')" style="font-size:10px; padding:2px 7px; border-radius:3px; font-family:var(--font-mono); font-weight:700; background:#0284c7; color:#fff; border:1px solid #38bdf8;">Yesterday (24h GST)</button>
-                  <button class="live-preset-btn" id="lpreset-7d" onclick="selectLivePreset('7d')" style="font-size:10px; padding:2px 7px; border-radius:3px; font-family:var(--font-mono); font-weight:700; background:var(--bg-2); color:var(--text-0); border:1px solid var(--border);">Last 7D</button>
-                  <button class="live-preset-btn" id="lpreset-30d" onclick="selectLivePreset('30d')" style="font-size:10px; padding:2px 7px; border-radius:3px; font-family:var(--font-mono); font-weight:700; background:var(--bg-2); color:var(--text-0); border:1px solid var(--border);">Last 30D</button>
-                  <button class="live-preset-btn" id="lpreset-all" onclick="selectLivePreset('all')" style="font-size:10px; padding:2px 7px; border-radius:3px; font-family:var(--font-mono); font-weight:700; background:var(--bg-2); color:var(--text-0); border:1px solid var(--border);">All History</button>
+                  <span style="font-size:11px; color:var(--text-2); font-family:var(--font-mono); font-weight:600; margin-right:4px;">PERIOD:</span>
+                  <button class="live-preset-btn btn-xs" id="lpreset-today" onclick="selectLivePreset('today')">Today</button>
+                  <button class="live-preset-btn active btn-xs" id="lpreset-yesterday" onclick="selectLivePreset('yesterday')" style="background:var(--accent); color:#fff; border-color:var(--accent);">Yesterday</button>
+                  <button class="live-preset-btn btn-xs" id="lpreset-7d" onclick="selectLivePreset('7d')">7D</button>
+                  <button class="live-preset-btn btn-xs" id="lpreset-30d" onclick="selectLivePreset('30d')">30D</button>
+                  <button class="live-preset-btn btn-xs" id="lpreset-all" onclick="selectLivePreset('all')">All History</button>
                 </div>
                 <div style="display:flex; gap:4px; align-items:center;">
                   <span style="font-size:10px; color:var(--text-2); font-family:var(--font-mono);">From:</span>
@@ -1775,9 +1936,143 @@
     }
 
     function fmtUsd(v) {
-      if (v === null || v === undefined || isNaN(v)) return '--';
-      const sign = v > 0 ? '+' : '';
-      return sign + '$' + Number(v).toFixed(2);
+      if (v === null || v === undefined || isNaN(v)) return '—';
+      const num = Number(v);
+      const absStr = Math.abs(num).toFixed(2);
+      if (num < 0) return '−$' + absStr;
+      if (num > 0) return '+$' + absStr;
+      return '$0.00';
+    }
+
+    function fmtExitReason(raw) {
+      if (!raw) return '—';
+      const map = {
+        'SL_HIT': { label: 'Stop Hit', icon: '🛑', tip: 'Initial safety stop level triggered' },
+        'SAFETY_STOP_HIT': { label: 'Safety Stop', icon: '🛑', tip: 'Protective safety stop hit' },
+        'TRAILING_STOP_LOCK': { label: 'Trailing Lock', icon: '🔒', tip: 'Profit locked by trailing stop ratchet' },
+        'TRAILING_STOP_OR_RATCHET': { label: 'Trailing Lock', icon: '🔒', tip: 'Trailing stop or break-even ratchet' },
+        'OPPOSITE_BRICK_EXIT': { label: 'Brick Reversal', icon: '🔄', tip: 'Closed on opposing Renko brick' },
+        'DYNAMIC_STOP_CUT': { label: 'Dynamic Stop', icon: '✂️', tip: 'Tightened dynamic stop triggered' },
+        'REVERSAL_CUT': { label: 'Reversal Cut', icon: '🔄', tip: 'Fast reversal protection exit' },
+        'OPPOSITE_SIGNAL': { label: 'Counter Signal', icon: '⚡', tip: 'SuperTrend/brick counter-signal exit' },
+        'BROKER_CLOSED': { label: 'Broker Closed', icon: '🏛️', tip: 'Closed directly at broker' },
+        'STRATEGY_EXIT': { label: 'Strategy Exit', icon: '📊', tip: 'Standard strategy exit rule' },
+        'TP_HIT': { label: 'Target Hit', icon: '🎯', tip: 'Take profit target reached' }
+      };
+      const m = map[raw] || { label: raw.replace(/_/g, ' '), icon: '•', tip: raw };
+      return `<span class="badge" style="font-size:11px; background:var(--bg-2); color:var(--text-1); border:1px solid var(--border); font-weight:500;" title="${m.tip}">${m.icon} ${m.label}</span>`;
+    }
+
+    function toggleTheme() {
+      const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+      const next = cur === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('renko_theme', next); } catch(e) {}
+      const btn = document.getElementById('btn-theme-toggle');
+      if (btn) btn.textContent = next === 'dark' ? '🌙' : '☀️';
+      if (STATE && STATE.backtest) {
+        drawRenkoChart(STATE.backtest.bricks, STATE.backtest.trades, STATE.backtest.filtered_events);
+      }
+    }
+    (function syncThemeBtn() {
+      const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+      const btn = document.getElementById('btn-theme-toggle');
+      if (btn) btn.textContent = cur === 'dark' ? '🌙' : '☀️';
+    })();
+
+    function toggleSidebarCollapse() {
+      const layout = document.querySelector('.layout');
+      if (layout) layout.classList.toggle('sidebar-collapsed');
+      setTimeout(() => {
+        if (STATE && STATE.backtest) {
+          drawRenkoChart(STATE.backtest.bricks, STATE.backtest.trades, STATE.backtest.filtered_events);
+        }
+      }, 60);
+    }
+
+    function toggleEnginePopover(e) {
+      if (e) e.stopPropagation();
+      const pop = document.getElementById('engine-popover');
+      if (pop) pop.classList.toggle('open');
+    }
+    document.addEventListener('click', (e) => {
+      const pop = document.getElementById('engine-popover');
+      const btn = document.getElementById('btn-engine-menu');
+      if (pop && pop.classList.contains('open') && !pop.contains(e.target) && (!btn || !btn.contains(e.target))) {
+        pop.classList.remove('open');
+      }
+    });
+
+    let _pendingSafetyAction = null;
+    function openSafetyModal(title, desc, impactHtml, btnText, isDanger, onConfirm) {
+      document.getElementById('safety-modal-title').textContent = title;
+      document.getElementById('safety-modal-desc').textContent = desc;
+      document.getElementById('safety-modal-impact').innerHTML = impactHtml;
+      const cbtn = document.getElementById('safety-modal-confirm-btn');
+      cbtn.textContent = btnText;
+      cbtn.className = isDanger ? 'danger' : 'warning';
+      _pendingSafetyAction = onConfirm;
+      cbtn.onclick = () => {
+        closeSafetyModal();
+        if (_pendingSafetyAction) _pendingSafetyAction();
+      };
+      document.getElementById('safety-confirm-modal').classList.add('active');
+    }
+    function closeSafetyModal() {
+      document.getElementById('safety-confirm-modal').classList.remove('active');
+      _pendingSafetyAction = null;
+    }
+
+    function confirmKillSwitch() {
+      const bot = (window.STATE && window.STATE.bot) || {};
+      const posCount = (bot.live_positions || []).length;
+      const halted = Boolean(bot.kill_switch);
+      if (halted) {
+        toggleKillSwitch();
+        return;
+      }
+      openSafetyModal(
+        'Flatten All & Halt Engine?',
+        'This immediately closes all open positions at market and halts automated execution.',
+        `Open Positions: <b>${posCount}</b><br>Status After Action: <span style="color:var(--loss);">HALTED (Kill Switch Active)</span>`,
+        'Yes, Flatten All & Halt',
+        true,
+        () => toggleKillSwitch()
+      );
+    }
+
+    function confirmLossBypass() {
+      const bot = (window.STATE && window.STATE.bot) || {};
+      const isBypassed = Boolean(bot.daily_loss_bypass);
+      if (isBypassed) {
+        toggleLossBypass();
+        return;
+      }
+      openSafetyModal(
+        'Disable Daily Loss Guard?',
+        'Disabling the daily loss limit allows the engine to continue opening trades even if daily drawdown exceeds your limit.',
+        `Current Cap: <b>$${(window.STATE && window.STATE.config && window.STATE.config.risk && window.STATE.config.risk.max_daily_loss) || 250}</b><br>Expires Automatically: <b>00:00 UTC</b>`,
+        'Disable Guard for Today',
+        false,
+        () => toggleLossBypass()
+      );
+    }
+
+    function confirmBotModeToggle() {
+      const modeTxt = document.getElementById('hdr-mode')?.textContent || '';
+      const isAuto = modeTxt.includes('AUTO') && !modeTxt.includes('SEMI');
+      if (isAuto) {
+        toggleBotMode();
+        return;
+      }
+      openSafetyModal(
+        'Enable Full Auto Execution?',
+        'In AUTO mode, validated signals immediately submit live market orders to the active broker without manual ticket confirmation.',
+        `Active Account: <b>${document.getElementById('in-account-select')?.value || 'capital_demo'}</b><br>Mode: <span style="color:var(--warning);">FULL AUTO</span>`,
+        'Enable AUTO Mode',
+        false,
+        () => toggleBotMode()
+      );
     }
 
     function getSpec(epic) {
@@ -3466,14 +3761,14 @@
       const subLive = document.getElementById('subview-live-history');
       const subBacktest = document.getElementById('subview-backtest');
       if (view === 'live') {
-        if (btnLive) { btnLive.style.background = '#9333ea'; btnLive.style.color = '#fff'; btnLive.style.borderColor = '#c084fc'; }
-        if (btnBacktest) { btnBacktest.style.background = 'transparent'; btnBacktest.style.color = 'var(--text-1)'; btnBacktest.style.borderColor = 'var(--border)'; }
+        if (btnLive) { btnLive.style.background = 'var(--accent)'; btnLive.style.color = '#fff'; btnLive.style.borderColor = 'var(--accent)'; }
+        if (btnBacktest) { btnBacktest.style.background = 'var(--bg-1)'; btnBacktest.style.color = 'var(--text-1)'; btnBacktest.style.borderColor = 'var(--border)'; }
         if (subLive) subLive.style.display = 'flex';
         if (subBacktest) subBacktest.style.display = 'none';
         loadLiveHistoryAnalytics();
       } else {
-        if (btnBacktest) { btnBacktest.style.background = '#0284c7'; btnBacktest.style.color = '#fff'; btnBacktest.style.borderColor = '#38bdf8'; }
-        if (btnLive) { btnLive.style.background = 'transparent'; btnLive.style.color = 'var(--text-1)'; btnLive.style.borderColor = 'var(--border)'; }
+        if (btnBacktest) { btnBacktest.style.background = 'var(--accent)'; btnBacktest.style.color = '#fff'; btnBacktest.style.borderColor = 'var(--accent)'; }
+        if (btnLive) { btnLive.style.background = 'var(--bg-1)'; btnLive.style.color = 'var(--text-1)'; btnLive.style.borderColor = 'var(--border)'; }
         if (subLive) subLive.style.display = 'none';
         if (subBacktest) subBacktest.style.display = 'flex';
         if (STATE && STATE.backtest) renderJournalTable(STATE.backtest, STATE.bot);
@@ -3509,9 +3804,9 @@
       });
       const activeBtn = document.getElementById(`lpreset-${preset}`);
       if (activeBtn) {
-        activeBtn.style.background = '#0284c7';
+        activeBtn.style.background = 'var(--accent)';
         activeBtn.style.color = '#fff';
-        activeBtn.style.borderColor = '#38bdf8';
+        activeBtn.style.borderColor = 'var(--accent)';
       }
 
       // Auto-populate custom date inputs (GST = UTC+4)
@@ -3589,8 +3884,8 @@
       const netPnl = d.net_pnl || 0.0;
       const elPnl = document.getElementById('kpi-live-net-pnl');
       if (elPnl) {
-        elPnl.textContent = (netPnl >= 0 ? '+' : '') + fmtUsd(netPnl);
-        elPnl.style.color = netPnl >= 0 ? '#10b981' : '#ef4444';
+        elPnl.textContent = fmtUsd(netPnl);
+        elPnl.style.color = netPnl >= 0 ? 'var(--profit)' : 'var(--loss)';
       }
       const elPnlSub = document.getElementById('kpi-live-pnl-sub');
       if (elPnlSub) elPnlSub.textContent = `${d.total_trades || 0} trades closed`;
@@ -3598,7 +3893,7 @@
       const elWr = document.getElementById('kpi-live-winrate');
       if (elWr) {
         elWr.textContent = `${d['win_rate_%'] || 0.0}%`;
-        elWr.style.color = (d['win_rate_%'] >= 50) ? '#10b981' : ((d['win_rate_%'] >= 40) ? '#38bdf8' : '#fbbf24');
+        elWr.style.color = (d['win_rate_%'] >= 50) ? 'var(--profit)' : 'var(--text-0)';
       }
       const elWrSub = document.getElementById('kpi-live-winrate-sub');
       if (elWrSub) elWrSub.textContent = `${d.wins || 0} Wins / ${d.losses || 0} Losses`;
@@ -3606,20 +3901,29 @@
       const elPf = document.getElementById('kpi-live-pf');
       if (elPf) {
         elPf.textContent = d.profit_factor >= 900 ? '∞' : (d.profit_factor || 0.0).toFixed(2);
-        elPf.style.color = d.profit_factor >= 1.5 ? '#10b981' : (d.profit_factor >= 1.0 ? '#fbbf24' : '#ef4444');
+        elPf.style.color = d.profit_factor >= 1.5 ? 'var(--profit)' : (d.profit_factor >= 1.0 ? 'var(--text-0)' : 'var(--loss)');
       }
       const elPfSub = document.getElementById('kpi-live-pf-sub');
-      if (elPfSub) elPfSub.textContent = `+$${d.gross_profit || 0} / -$${d.gross_loss || 0}`;
+      if (elPfSub) elPfSub.textContent = `+$${d.gross_profit || 0} / −$${d.gross_loss || 0}`;
 
       const elRr = document.getElementById('kpi-live-rr');
-      if (elRr) elRr.textContent = `${(d.risk_reward_ratio || 0.0).toFixed(2)} : 1`;
+      if (elRr) {
+        elRr.textContent = `${(d.risk_reward_ratio || 0.0).toFixed(2)} : 1`;
+        elRr.style.color = 'var(--text-0)';
+      }
       const elRrSub = document.getElementById('kpi-live-rr-sub');
       if (elRrSub) elRrSub.textContent = `Avg W: $${d.avg_win || 0} / L: $${d.avg_loss || 0}`;
 
       const elMw = document.getElementById('kpi-live-maxwin');
-      if (elMw) elMw.textContent = `+${fmtUsd(d.largest_win || 0)}`;
+      if (elMw) {
+        elMw.textContent = fmtUsd(d.largest_win || 0);
+        elMw.style.color = 'var(--profit)';
+      }
       const elMl = document.getElementById('kpi-live-maxloss');
-      if (elMl) elMl.textContent = `${fmtUsd(d.largest_loss || 0)}`;
+      if (elMl) {
+        elMl.textContent = fmtUsd(d.largest_loss || 0);
+        elMl.style.color = 'var(--loss)';
+      }
 
       const flt = d.filter || {};
       const elPeriodTag = document.getElementById('live-period-tag');
@@ -3641,19 +3945,19 @@
         if (elAssetCnt) elAssetCnt.textContent = `${assets.length} Assets`;
 
         if (assets.length === 0) {
-          assetTbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-2); padding:12px;">No executed trades in this period.</td></tr>';
+          assetTbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-2); padding:16px;">No executed trades in this period.</td></tr>';
         } else {
           for (const a of assets) {
             const tr = document.createElement('tr');
             const pnlColor = a.net_pnl >= 0 ? 'pos' : 'neg';
             const pfStr = a.profit_factor >= 900 ? '∞' : a.profit_factor.toFixed(2);
             tr.innerHTML = `
-              <td style="font-weight:700; color:var(--text-0);">${a.epic}</td>
-              <td>${a.total_trades} <span style="font-size:9.5px; color:var(--text-2);">(${a.wins}W/${a.losses}L)</span></td>
-              <td style="font-weight:700; color:${a['win_rate_%'] >= 50 ? '#10b981' : '#f59e0b'};">${a['win_rate_%']}%</td>
-              <td class="${pnlColor}" style="font-weight:700;">${a.net_pnl >= 0 ? '+' : ''}${fmtUsd(a.net_pnl)}</td>
-              <td style="color:${a.profit_factor >= 1.0 ? '#fbbf24' : '#ef4444'}; font-weight:700;">${pfStr}</td>
-              <td style="color:#a855f7; font-weight:700;">${a.risk_reward_ratio.toFixed(2)} : 1</td>
+              <td style="font-weight:600; color:var(--text-0);">${a.epic}</td>
+              <td class="mono" style="text-align:right;">${a.total_trades} <span style="font-size:11px; color:var(--text-2);">(${a.wins}W/${a.losses}L)</span></td>
+              <td class="mono" style="text-align:right; font-weight:600; color:${a['win_rate_%'] >= 50 ? 'var(--profit)' : 'var(--text-0)'};">${a['win_rate_%']}%</td>
+              <td class="${pnlColor} mono" style="text-align:right; font-weight:600;">${fmtUsd(a.net_pnl)}</td>
+              <td class="mono" style="text-align:right; color:${a.profit_factor >= 1.0 ? 'var(--text-0)' : 'var(--loss)'}; font-weight:600;">${pfStr}</td>
+              <td class="mono" style="text-align:right; color:var(--text-1); font-weight:500;">${a.risk_reward_ratio.toFixed(2)} : 1</td>
             `;
             assetTbody.appendChild(tr);
           }
@@ -3665,7 +3969,7 @@
         ordersTbody.innerHTML = '';
         const trades = d.trades || [];
         if (trades.length === 0) {
-          ordersTbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-2); padding:12px;">No closed deals in selected timeframe.</td></tr>';
+          ordersTbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-2); padding:16px;">No closed deals in selected timeframe.</td></tr>';
         } else {
           for (const t of trades) {
             const tr = document.createElement('tr');
@@ -3674,14 +3978,14 @@
               : '<span class="badge sell">SELL</span>';
             const pnlColor = t.pnl >= 0 ? 'pos' : 'neg';
             tr.innerHTML = `
-              <td style="font-size:10px; font-family:var(--font-mono);">${t.closed_at_gst || t.closed_at_utc}</td>
-              <td style="font-weight:700; color:#38bdf8;">${t.epic}</td>
+              <td class="mono" style="font-size:11.5px; color:var(--text-1);">${t.closed_at_gst || t.closed_at_utc}</td>
+              <td style="font-weight:600; color:var(--text-0);">${t.epic}</td>
               <td>${sideBadge}</td>
-              <td style="font-family:var(--font-mono);">${t.size}</td>
-              <td style="font-family:var(--font-mono);">${t.open_price}</td>
-              <td style="font-family:var(--font-mono);">${t.close_price}</td>
-              <td><span class="badge" style="font-size:9px; background:rgba(255,255,255,0.06);">${t.exit_type}</span></td>
-              <td class="${pnlColor}" style="font-weight:700;">${t.pnl >= 0 ? '+' : ''}${fmtUsd(t.pnl)}</td>
+              <td class="mono" style="text-align:right;">${t.size}</td>
+              <td class="mono" style="text-align:right;">${t.open_price}</td>
+              <td class="mono" style="text-align:right;">${t.close_price}</td>
+              <td>${fmtExitReason(t.exit_type)}</td>
+              <td class="${pnlColor} mono" style="text-align:right; font-weight:600;">${fmtUsd(t.pnl)}</td>
             `;
             ordersTbody.appendChild(tr);
           }
@@ -3788,10 +4092,20 @@
         const activeMode = (STATE?.config?.mode || 'auto').toUpperCase();
         if (elMode) {
           elMode.textContent = activeMode === 'AUTO' ? 'FULL AUTO' : 'SEMI-AUTO';
-          elMode.style.color = activeMode === 'AUTO' ? 'var(--green-bright)' : 'var(--blue-light)';
+          elMode.style.color = activeMode === 'AUTO' ? 'var(--warning)' : 'var(--accent)';
         }
 
         const creds = bot.credentials || {};
+        const modeLine = document.getElementById('mode-status-line');
+        if (modeLine) {
+          if (bot.kill_switch) {
+            modeLine.className = 'mode-line halted';
+          } else if (creds.env === 'live' && activeMode === 'AUTO') {
+            modeLine.className = 'mode-line live-auto';
+          } else {
+            modeLine.className = 'mode-line';
+          }
+        }
         const allCreds = creds.connected || (creds.api_key && creds.identifier && creds.password);
         const dot = document.getElementById('hdr-conn-dot');
         const connTxt = document.getElementById('hdr-conn');
@@ -4210,10 +4524,14 @@
       const plotH = Math.max(50, h - padT - padB);
       const py = p => padT + plotH - ((p - minP) / (maxP - minP)) * plotH;
 
+      const cs = getComputedStyle(document.documentElement);
+      const cGrid = cs.getPropertyValue('--border').trim() || '#262D38';
+      const cText2 = cs.getPropertyValue('--text-2').trim() || '#768390';
+
       // Horizontal price grid lines and right axis labels
-      ctx.strokeStyle = '#161c28';
-      ctx.fillStyle = '#64748b';
-      ctx.font = '10px JetBrains Mono, monospace';
+      ctx.strokeStyle = cGrid;
+      ctx.fillStyle = cText2;
+      ctx.font = '11px JetBrains Mono, monospace';
       for (let i = 0; i <= 5; i++) {
         const p = minP + (maxP - minP) * (i / 5);
         const y = py(p);
