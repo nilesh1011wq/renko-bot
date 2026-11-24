@@ -134,6 +134,8 @@ class TestSimulate(unittest.TestCase):
         cfg["strategy"]["max_bricks_on_entry_bar"] = 0
         cfg["strategy"]["max_overshoot_bricks"] = 0.0
         cfg["strategy"]["grid_anchor"] = False
+        cfg["strategy"]["confirm_minutes"] = 0
+        cfg["strategy"]["st_factor"] = 2.1
         t0 = datetime(2026, 11, 2, 10, 0, tzinfo=timezone.utc)
         bars = []
         for i, c in enumerate([100, 110, 120, 100, 90, 110]):

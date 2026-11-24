@@ -294,11 +294,20 @@ def update_live_tick(epic: str, bid: float | None, offer: float | None, digits: 
     return dict(tick_obj)
 
 
-def get_live_tick(epic: str) -> dict | None:
-    """Fetch the most recent cached live quote tick for an epic."""
+def get_live_tick(epic: str, max_age_sec: float | None = 15.0) -> dict | None:
+    """Fetch the most recent cached live quote tick for an epic, rejecting stale quotes."""
     with _LIVE_TICK_LOCK:
         t = _LIVE_TICK_CACHE.get(str(epic or "GOLD").upper())
-        return dict(t) if t else None
+        if not t:
+            return None
+        if max_age_sec is not None and t.get("ts"):
+            try:
+                age = (datetime.now(timezone.utc) - datetime.fromisoformat(t["ts"])).total_seconds()
+                if age > max_age_sec:
+                    return None
+            except Exception:
+                return None
+        return dict(t)
 
 
 class CapitalTickStreamer:

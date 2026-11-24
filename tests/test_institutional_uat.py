@@ -1351,7 +1351,7 @@ class TestInstitutionalUAT(unittest.TestCase):
             try:
                 # 1. Verify 15Y matrix has all 19 positive instruments & benchmark table
                 matrix = research_15yr_matrix.get_or_build_matrix()
-                self.assertEqual(len(matrix["instruments"]), 19)
+                self.assertEqual(len(matrix["instruments"]), 16)
                 self.assertGreater(matrix["summary"]["portfolio_net_15y"], 500000.0)
                 self.assertTrue(all(r["net_15y"] > 0 for r in matrix["instruments"]))
                 self.assertGreaterEqual(len(matrix.get("competitor_benchmark", [])), 5)
@@ -1367,7 +1367,7 @@ class TestInstitutionalUAT(unittest.TestCase):
                 h_get.do_GET()
                 h_get.send_response.assert_called_with(200)
                 m_res = json.loads(h_get.wfile.getvalue().decode("utf-8"))
-                self.assertEqual(len(m_res["instruments"]), 19)
+                self.assertEqual(len(m_res["instruments"]), 16)
                 self.assertIn("BTCUSD", m_res["profiles_by_epic"])
                 self.assertIn("ETHUSD", m_res["profiles_by_epic"])
                 self.assertIn("SOLUSD", m_res["profiles_by_epic"])

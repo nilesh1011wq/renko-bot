@@ -111,8 +111,9 @@ def generate_sample_gold_data(epic="GOLD", res="MINUTE", days_intraday=12, seed=
     cur = start_day.replace(hour=0, minute=0)
     intraday_start = end_day - timedelta(days=days_intraday)
 
+    is_crypto = spec.get("category") == "Crypto"
     while cur < intraday_start:
-        if cur.weekday() < 5:
+        if is_crypto or cur.weekday() < 5:
             drift = rng.gauss(1.2 * scale, 14.0 * scale)
             hi = px + abs(rng.gauss(13.0 * scale, 5.0 * scale)) + max(0, drift)
             lo = px - abs(rng.gauss(13.0 * scale, 5.0 * scale)) + min(0, drift)
@@ -135,7 +136,7 @@ def generate_sample_gold_data(epic="GOLD", res="MINUTE", days_intraday=12, seed=
     regime_left = 0
 
     while t <= end_day:
-        if t.weekday() >= 5 or t.hour == 21:  # weekend or 21:00-22:00 UTC rollover break
+        if not is_crypto and (t.weekday() >= 5 or t.hour == 21):  # weekend or 21:00-22:00 UTC rollover break
             t += timedelta(minutes=1)
             continue
 
@@ -589,21 +590,29 @@ def stats(trades, key):
     avg_tr = total_pnl / n
     avg_w = (sum(wins) / len(wins)) if wins else 0.0
     avg_l = (sum(losses) / len(losses)) if losses else 0.0
-    variance = sum((x - avg_tr) ** 2 for x in pnl) / n
-    stdev = math.sqrt(variance)
-    down_var = sum((min(0.0, x)) ** 2 for x in pnl) / n
-    down_dev = math.sqrt(down_var)
-    sharpe = round((avg_tr / stdev) * math.sqrt(n), 2) if stdev > 0 else 0.0
-    sortino = round((avg_tr / down_dev) * math.sqrt(n), 2) if down_dev > 0 else (99.0 if avg_tr > 0 else 0.0)
-    calmar = round(total_pnl / mdd, 2) if mdd > 0 else (99.0 if total_pnl > 0 else 0.0)
-    payoff = round(avg_w / abs(avg_l), 2) if avg_l < 0 else 0.0
-    exp_r = round(avg_tr / abs(avg_l), 2) if avg_l < 0 else 0.0
     by_day_pnl = {}
     for tr, x in zip(trades, pnl):
         dt_val = tr.get("exit_time") or tr.get("entry_time") or ""
         d_key = dt_val.isoformat()[:10] if hasattr(dt_val, "isoformat") else str(dt_val)[:10]
         if d_key:
             by_day_pnl[d_key] = by_day_pnl.get(d_key, 0.0) + x
+    day_vals = list(by_day_pnl.values())
+    if len(day_vals) >= 2:
+        mean_d = sum(day_vals) / len(day_vals)
+        std_d = math.sqrt(sum((x - mean_d) ** 2 for x in day_vals) / len(day_vals))
+        down_d = math.sqrt(sum((min(0.0, x)) ** 2 for x in day_vals) / len(day_vals))
+        sharpe = round((mean_d / std_d) * math.sqrt(252), 2) if std_d > 0 else 0.0
+        sortino = round((mean_d / down_d) * math.sqrt(252), 2) if down_d > 0 else (99.0 if mean_d > 0 else 0.0)
+    else:
+        variance = sum((x - avg_tr) ** 2 for x in pnl) / n
+        stdev = math.sqrt(variance)
+        down_var = sum((min(0.0, x)) ** 2 for x in pnl) / n
+        down_dev = math.sqrt(down_var)
+        sharpe = round((avg_tr / stdev) * math.sqrt(n), 2) if stdev > 0 else 0.0
+        sortino = round((avg_tr / down_dev) * math.sqrt(n), 2) if down_dev > 0 else (99.0 if avg_tr > 0 else 0.0)
+    calmar = round(total_pnl / mdd, 2) if mdd > 0 else (99.0 if total_pnl > 0 else 0.0)
+    payoff = round(avg_w / abs(avg_l), 2) if avg_l < 0 else 0.0
+    exp_r = round(avg_tr / abs(avg_l), 2) if avg_l < 0 else 0.0
     var_series = sorted(by_day_pnl.values()) if len(by_day_pnl) >= 3 else sorted(pnl)
     idx_5 = max(0, min(len(var_series) - 1, int(math.floor(0.05 * len(var_series)))))
     daily_var_95 = round(abs(min(0.0, var_series[idx_5])), 2)
@@ -614,7 +623,7 @@ def stats(trades, key):
         "avg_trade": round(avg_tr, 2),
         "avg_win": round(avg_w, 2),
         "avg_loss": round(avg_l, 2),
-        "profit_factor": round(sum(wins) / gl, 2) if gl > 0 else 99.0,
+        "profit_factor": round(sum(wins) / gl, 2) if gl > 0 else 999.0,
         "max_drawdown": round(mdd, 2),
         "longest_losing_streak": worst,
         "avg_mfe_bricks": round(mfe, 2),

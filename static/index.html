@@ -1935,6 +1935,12 @@
       setTimeout(() => { el.style.display = 'none'; }, 3800);
     }
 
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+
     function fmtUsd(v) {
       if (v === null || v === undefined || isNaN(v)) return '—';
       const num = Number(v);
@@ -3952,7 +3958,7 @@
             const pnlColor = a.net_pnl >= 0 ? 'pos' : 'neg';
             const pfStr = a.profit_factor >= 900 ? '∞' : a.profit_factor.toFixed(2);
             tr.innerHTML = `
-              <td style="font-weight:600; color:var(--text-0);">${a.epic}</td>
+              <td style="font-weight:600; color:var(--text-0);">${escapeHtml(a.epic)}</td>
               <td class="mono" style="text-align:right;">${a.total_trades} <span style="font-size:11px; color:var(--text-2);">(${a.wins}W/${a.losses}L)</span></td>
               <td class="mono" style="text-align:right; font-weight:600; color:${a['win_rate_%'] >= 50 ? 'var(--profit)' : 'var(--text-0)'};">${a['win_rate_%']}%</td>
               <td class="${pnlColor} mono" style="text-align:right; font-weight:600;">${fmtUsd(a.net_pnl)}</td>
@@ -3978,8 +3984,8 @@
               : '<span class="badge sell">SELL</span>';
             const pnlColor = t.pnl >= 0 ? 'pos' : 'neg';
             tr.innerHTML = `
-              <td class="mono" style="font-size:11.5px; color:var(--text-1);">${t.closed_at_gst || t.closed_at_utc}</td>
-              <td style="font-weight:600; color:var(--text-0);">${t.epic}</td>
+              <td class="mono" style="font-size:11.5px; color:var(--text-1);">${escapeHtml(t.closed_at_gst || t.closed_at_utc)}</td>
+              <td style="font-weight:600; color:var(--text-0);">${escapeHtml(t.epic)}</td>
               <td>${sideBadge}</td>
               <td class="mono" style="text-align:right;">${t.size}</td>
               <td class="mono" style="text-align:right;">${t.open_price}</td>

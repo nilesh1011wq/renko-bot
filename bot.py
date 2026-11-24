@@ -282,6 +282,7 @@ def _trail_positions(cap: Capital, positions: list[dict], pos_dir: int,
     """Trail stops per position individually while preserving any existing profitLevel (TP)."""
     if pos_dir == 0 or not positions or last_close is None:
         return []
+    cfg.setdefault("risk", {})["weekend_gate"] = True
     epic = cfg["epic"]
     new_stop = safety_stop_level(pos_dir, last_close, bs, cfg)
     dual_mode = bool(cfg.get("strategy", {}).get("dual_order_mode", False))
@@ -332,6 +333,7 @@ def place_runner_working_order(cap: Capital, cfg: dict, action: str, target_px: 
     """Place a native broker STOP working order for Model E's +1B Runner leg."""
     if not hasattr(cap, "create_working_order"):
         return None
+    cfg.setdefault("risk", {})["weekend_gate"] = True
     epic = cfg["epic"]
     side = 1 if action == "BUY" else -1
     stop = safety_stop_level(side, last_close, bs, cfg)
@@ -465,19 +467,21 @@ def _process_pending_runner(cap: Capital, cfg: dict, epic: str, eng: RenkoEngine
 
 def execute_decision(cap: Capital, cfg: dict, action: str, reverse: bool,
                      last_close: float, bs: float, deal_ids: list[str], size: float | None = None,
-                     profit_level: float | None = None, note_tag: str = ""):
+                     profit_level: float | None = None, note_tag: str = "", close_size: float | None = None):
+    cfg.setdefault("risk", {})["weekend_gate"] = True
     epic = cfg["epic"]
     sz = size if size is not None else compute_size(cfg, bs, price=last_close)
+    close_sz = close_size if close_size is not None else sz
     if action in ("EXIT", "COVER") or (reverse and deal_ids):
         for did in deal_ids:
             try:
                 conf = cap.close_position(did)
-                log_event("CLOSE", action, sz, conf.get("level"), None, did,
+                log_event("CLOSE", action, close_sz, conf.get("level"), None, did,
                           realized_pnl=conf.get("profit", 0.0), note=f"[{epic}] {conf.get('dealStatus', '')}")
                 print(f"[{epic}] Closed deal {did}: status={conf.get('dealStatus')} level={conf.get('level')}")
             except Exception as e:
                 print(f"[{epic}] Error closing deal {did}: {e}")
-                log_event("ERROR", action, sz, None, None, did, note=f"[{epic}] {e}")
+                log_event("ERROR", action, close_sz, None, None, did, note=f"[{epic}] {e}")
         if action in ("EXIT", "COVER"):
             return
 
@@ -500,13 +504,18 @@ def execute_decision(cap: Capital, cfg: dict, action: str, reverse: bool,
             except Exception as e:
                 last_err = e
                 continue
-        if conf:
+        if conf and str(conf.get("dealStatus", "")).upper() == "ACCEPTED":
             did = conf.get("dealId", "")
             evt = "REVERSE_OPEN" if reverse else "OPEN"
             tag_str = f" {note_tag}" if note_tag else ""
             log_event(evt, action, sz, conf.get("level"), stop, did, note=f"[{epic}]{tag_str} {conf.get('dealStatus', '')}")
             print(f"[{epic}]{tag_str} Opened {action} {sz} {cfg['epic']}: dealId={did} status={conf.get('dealStatus')} "
                   f"level={conf.get('level')} stop={stop} tp={profit_level}")
+        elif conf:
+            rej = conf.get("reason") or conf.get("dealStatus") or "REJECTED"
+            log_event("ERROR", action, sz, conf.get("level"), stop, conf.get("dealId", ""),
+                      note=f"[{epic}] Order rejected by broker: {rej}")
+            print(f"[{epic}] Order REJECTED for {action}: {rej}")
         else:
             log_event("ERROR", action, sz, None, stop, note=f"[{epic}] Order failed: {last_err}")
             print(f"[{epic}] Failed to open {action}: {last_err}")
@@ -566,6 +575,12 @@ def _step_once_impl(cap: Capital, cfg: dict):
     if not closed_bars:
         print("No closed bars returned.")
         return
+    max_bar_age = max(300, RES_MINUTES.get(cfg.get("resolution", "MINUTE"), 1) * 180)
+    bar_age_sec = (datetime.now(timezone.utc) - closed_bars[-1]["t"]).total_seconds()
+    if bar_age_sec > max_bar_age:
+        print(f"[{cfg.get('epic')}] Stale bars ({int(bar_age_sec)}s > {max_bar_age}s); skipping signal evaluation.")
+        return
+    cfg.setdefault("risk", {})["weekend_gate"] = True
     epic = cfg["epic"]
     tick = cfg["tick"]
     pos_dir, deal_ids, current_stop, total_sz, epic_positions = broker_position(cap, epic, return_raw=True)

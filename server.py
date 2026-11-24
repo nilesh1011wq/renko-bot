@@ -1690,8 +1690,19 @@ class Handler(BaseHTTPRequestHandler):
         try:
             body = self._read_body()
 
-            # Login endpoint (public)
+            # Login endpoint (public, rate-limited against brute force)
             if u.path == "/api/login":
+                ip = self.headers.get("X-Forwarded-For", "").split(",")[0].strip() or self.client_address[0]
+                now_ts = time.time()
+                _login_fails = getattr(Handler, "_LOGIN_FAILS", {})
+                Handler._LOGIN_FAILS = _login_fails
+                rec = _login_fails.get(ip, [])
+                rec = [t for t in rec if now_ts - t < 300]
+                _login_fails[ip] = rec
+                if len(rec) >= 5:
+                    self._send_json({"error": "Too many failed login attempts. Try again in 5 minutes."}, 429)
+                    return
+
                 pw = get_dashboard_password()
                 given = str(body.get("password", "")).strip()
                 if not pw:
@@ -1703,11 +1714,14 @@ class Handler(BaseHTTPRequestHandler):
                     self._send_json({"ok": True, "authenticated": True})
                     return
                 if hmac.compare_digest(given, pw):
+                    _login_fails.pop(ip, None)
                     tok = expected_session_token(pw)
                     cookie = f"renko_session={tok}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000"
                     self._send_json({"ok": True, "authenticated": True, "token": tok},
                                     extra_headers=[("Set-Cookie", cookie)])
                 else:
+                    rec.append(now_ts)
+                    _login_fails[ip] = rec
                     self._send_json({"error": "Invalid dashboard password"}, 403)
                 return
 

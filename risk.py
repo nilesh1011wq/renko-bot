@@ -39,10 +39,22 @@ def in_rollover_blackout(t: datetime) -> bool:
     return (20 * 60 + 45) <= hm <= (22 * 60 + 15)
 
 
-def in_macro_blackout(t: datetime) -> bool:
-    """Tier-1 US Macro Release Blackout (13:25-13:35 UTC CPI/NFP, 18:55-19:10 UTC FOMC)."""
-    hm = t.hour * 60 + t.minute
-    return (13 * 60 + 25) <= hm <= (13 * 60 + 35) or (18 * 60 + 55) <= hm <= (19 * 60 + 10)
+def in_macro_blackout(t: datetime, epic: str | None = None) -> bool:
+    """DST-aware Tier-1 US Macro Release Blackout in America/New_York time:
+    - 08:15-09:00 ET (CPI / NFP / PPI / GDP)
+    - 13:45-14:45 ET (FOMC Rate Decision & Press Conf)
+    - Wed 10:15-10:45 ET (EIA Oil Inventory for Energy)
+    """
+    from zoneinfo import ZoneInfo
+    et = (t if t.tzinfo else t.replace(tzinfo=timezone.utc)).astimezone(ZoneInfo("America/New_York"))
+    hm = et.hour * 60 + et.minute
+    if (8 * 60 + 15) <= hm <= (8 * 60 + 50) or (13 * 60 + 45) <= hm <= (14 * 60 + 30):
+        return True
+    ep = str(epic or "").upper()
+    if ep in ("OIL_CRUDE", "OIL_BRENT", "WTI", "BRENT") and et.weekday() == 2:
+        if (10 * 60 + 15) <= hm <= (10 * 60 + 45):
+            return True
+    return False
 
 
 # Reference USD value of 1 unit of quote currency for non-USD-quoted instruments
@@ -108,7 +120,7 @@ def compute_size(cfg: dict, brick_size: float, price: float | None = None) -> fl
 
 def safety_stop_level(side: int, last_brick_close: float, brick_size: float, cfg: dict) -> float:
     """Calculate the broker-side trailing safety stop level (side: +1 LONG, -1 SHORT)."""
-    k = cfg["risk"].get("safety_stop_bricks", 3)
+    k = max(2.0, float(cfg["risk"].get("safety_stop_bricks", 3)))
     tick = cfg.get("tick", 0.01)
     raw = last_brick_close - side * k * brick_size
     return round_to_tick(raw, tick)
@@ -184,16 +196,29 @@ def fetch_broker_today_pnl(cap, now: datetime | None = None, ttl_sec: float = 60
         return cached[1] if cached else None
 
 
+def _is_crypto_epic(epic: str | None) -> bool:
+    up = str(epic or "").upper().replace("/", "")
+    return up in ("BTCUSD", "ETHUSD", "SOLUSD", "BITCOIN", "ETHEREUM", "SOLANA")
+
+
 def check_session_and_schedule_allowed(cfg: dict, now: datetime | None = None) -> tuple[bool, str]:
-    """Fast pre-check of kill switch, blackout windows, and enabled sessions (used before arming confirm timers)."""
+    """Fast pre-check of kill switch, weekend close, blackout windows, and enabled sessions."""
     if kill_switch_active():
         return False, "BLOCK: Kill switch (STOP file) is active"
     r_cfg = cfg.get("risk", {})
     t_now = now or datetime.now(timezone.utc)
+    epic = cfg.get("epic")
+
+    # Block non-Crypto assets during weekend market closure when weekend_gate is active (live bot)
+    if r_cfg.get("weekend_gate", False) and not _is_crypto_epic(epic):
+        wd = t_now.weekday()
+        if wd == 5 or (wd == 4 and t_now.hour >= 21) or (wd == 6 and t_now.hour < 22):
+            return False, f"BLOCK: Weekend market closure for {epic or 'CFD'} (UTC)"
+
     if r_cfg.get("rollover_blackout") and in_rollover_blackout(t_now):
         return False, "BLOCK: Daily Gold rollover blackout window (20:45-22:15 UTC)"
-    if r_cfg.get("macro_blackout", False) and in_macro_blackout(t_now):
-        return False, "BLOCK: US Macro News Blackout window (13:25-13:35 / 18:55-19:10 UTC)"
+    if r_cfg.get("macro_blackout", False) and in_macro_blackout(t_now, epic=epic):
+        return False, "BLOCK: Tier-1 Macro News Blackout window (America/New_York DST-aware)"
     sessions = r_cfg.get("sessions", {"asian": True, "london": True, "new_york": True})
     sess = session_of(t_now)
     if not sessions.get(sess, True):
@@ -225,6 +250,9 @@ def check_entry_allowed(cfg: dict, bid: float | None, ask: float | None, brick_s
     if (max_loss and max_loss > 0 and pnl <= -abs(max_loss)
             and not daily_loss_bypass_active(r_cfg, t_now)):
         return False, f"BLOCK: Daily loss limit reached ({pnl:.2f} <= -{abs(max_loss):.2f})"
+
+    if bid is not None and ask is not None and bid > ask:
+        return False, f"BLOCK: Inverted quote detected (bid={bid} > ask={ask})"
 
     max_spread_frac = r_cfg.get("max_spread_frac_of_brick", 0)
     if max_spread_frac and max_spread_frac > 0 and bid is not None and ask is not None and brick_size > 0:
