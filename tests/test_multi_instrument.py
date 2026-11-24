@@ -129,16 +129,16 @@ class TestMultiInstrument(unittest.TestCase):
             self.assertLess(t["brick_size"], 0.05, f"Brick size too large for Forex: {t['brick_size']}")
 
     def test_scanner_engine_all_instruments(self):
-        """Verify multi-instrument scanner evaluates all 19 instruments with correct metadata."""
+        """Verify multi-instrument scanner evaluates all 16 instruments with correct metadata."""
         from scanner import scan_all_instruments, get_cached_or_scan_all
         cfg = load_config()
         res = scan_all_instruments(cfg)
         self.assertIn("items", res)
-        self.assertEqual(len(res["items"]), 19)
+        self.assertEqual(len(res["items"]), 16)
         
         epics = {it["epic"] for it in res["items"]}
-        expected_epics = {"GOLD", "SILVER", "OIL_CRUDE", "OIL_BRENT", "EURUSD", "GBPUSD", "USDJPY",
-                          "AUDUSD", "USDCAD", "USDCHF", "US500", "US100", "US30", "GER40", "UK100", "JP225",
+        expected_epics = {"GOLD", "SILVER", "OIL_CRUDE", "OIL_BRENT", "EURUSD", "GBPUSD",
+                          "AUDUSD", "USDCAD", "US500", "US100", "US30", "GER40", "UK100",
                           "BTCUSD", "ETHUSD", "SOLUSD"}
         self.assertEqual(epics, expected_epics)
 

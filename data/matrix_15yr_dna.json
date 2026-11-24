@@ -1344,202 +1344,6 @@
       "rationale": "ATR(10, /7.5) sizes bricks for Forex volatility; ST(2.5) + 3m gate filters noise; Model E 1.5B TP / 2.5B SL + 1.5B BE lock; LON+NY sessions focus peak liquidity."
     },
     {
-      "epic": "USDJPY",
-      "name": "USD / JPY",
-      "category": "Forex",
-      "cluster": "JPY_CROSS",
-      "live_cached": true,
-      "optimal_params": {
-        "atr_len": 5,
-        "atr_div": 12.0,
-        "st_factor": 2.1,
-        "green_buy": 2,
-        "red_sell": 2,
-        "tp_bricks": 0.0,
-        "runner_offset_bricks": 0.0,
-        "confirm_minutes": 5,
-        "safety_stop_bricks": 3.0,
-        "breakeven_after_bricks": 2.0,
-        "use_htf_filter": true,
-        "max_spread_frac_of_brick": 0.42,
-        "rollover_blackout": true,
-        "macro_blackout": true,
-        "sessions": {
-          "asian": false,
-          "london": true,
-          "new_york": true
-        },
-        "sessions_label": "LON+NY",
-        "dual_order_mode": false
-      },
-      "sample_trades": 196,
-      "trades_15y": 3528,
-      "win_rate": 41.8,
-      "profit_factor": 1.85,
-      "sharpe": 1.29,
-      "sortino": 2.28,
-      "calmar_sample": 6.82,
-      "calmar_15y": 1.43,
-      "max_dd_15y": 1527.31,
-      "net_sample": 1818.06,
-      "net_15y": 32725.08,
-      "raw_baseline_15y": 39362.58,
-      "edge_vs_raw_15y": -6637.5,
-      "cagr_pct": 14.4,
-      "eras_profitable": 5,
-      "era_breakdown": [
-        {
-          "id": "era1",
-          "years": "2011-2013",
-          "label": "Sovereign Debt Crisis & Metals Peak",
-          "trades": 45,
-          "win_rate": 40.0,
-          "pf": 1.14,
-          "net_sample": 210.94,
-          "net_15y_slice": 3796.92
-        },
-        {
-          "id": "era2",
-          "years": "2014-2016",
-          "label": "Oil Supply Glut & Strong USD",
-          "trades": 38,
-          "win_rate": 36.8,
-          "pf": 1.31,
-          "net_sample": 344.58,
-          "net_15y_slice": 6202.44
-        },
-        {
-          "id": "era3",
-          "years": "2017-2019",
-          "label": "Low-Vol Secular Trend & Tariff Whipsaw",
-          "trades": 28,
-          "win_rate": 39.3,
-          "pf": 1.4,
-          "net_sample": 260.3,
-          "net_15y_slice": 4685.4
-        },
-        {
-          "id": "era4",
-          "years": "2020-2022",
-          "label": "COVID Shock & Global Rate-Hike Cycle",
-          "trades": 45,
-          "win_rate": 51.1,
-          "pf": 2.05,
-          "net_sample": 854.07,
-          "net_15y_slice": 15373.26
-        },
-        {
-          "id": "era5",
-          "years": "2023-2026",
-          "label": "Gold Super-Cycle & AI Index Breakout",
-          "trades": 40,
-          "win_rate": 40.0,
-          "pf": 1.14,
-          "net_sample": 148.17,
-          "net_15y_slice": 2667.06
-        }
-      ],
-      "yearly_curve": [
-        {
-          "year": 2011,
-          "pro": 0.0,
-          "raw": 0.0,
-          "era": "Start"
-        },
-        {
-          "year": 2012,
-          "pro": 1177.05,
-          "raw": 2624.17,
-          "era": "2011-2013"
-        },
-        {
-          "year": 2013,
-          "pro": 2468.0,
-          "raw": 5248.34,
-          "era": "2011-2013"
-        },
-        {
-          "year": 2014,
-          "pro": 3796.92,
-          "raw": 7872.51,
-          "era": "2011-2013"
-        },
-        {
-          "year": 2015,
-          "pro": 5719.68,
-          "raw": 10496.68,
-          "era": "2014-2016"
-        },
-        {
-          "year": 2016,
-          "pro": 7828.51,
-          "raw": 13120.85,
-          "era": "2014-2016"
-        },
-        {
-          "year": 2017,
-          "pro": 9999.36,
-          "raw": 15745.02,
-          "era": "2014-2016"
-        },
-        {
-          "year": 2018,
-          "pro": 11451.83,
-          "raw": 18369.19,
-          "era": "2017-2019"
-        },
-        {
-          "year": 2019,
-          "pro": 13044.87,
-          "raw": 20993.36,
-          "era": "2017-2019"
-        },
-        {
-          "year": 2020,
-          "pro": 14684.76,
-          "raw": 23617.53,
-          "era": "2017-2019"
-        },
-        {
-          "year": 2021,
-          "pro": 19450.47,
-          "raw": 26241.7,
-          "era": "2020-2022"
-        },
-        {
-          "year": 2022,
-          "pro": 24677.38,
-          "raw": 28865.87,
-          "era": "2020-2022"
-        },
-        {
-          "year": 2023,
-          "pro": 30058.02,
-          "raw": 31490.04,
-          "era": "2020-2022"
-        },
-        {
-          "year": 2024,
-          "pro": 30884.81,
-          "raw": 34114.21,
-          "era": "2023-2026"
-        },
-        {
-          "year": 2025,
-          "pro": 31791.61,
-          "raw": 36738.38,
-          "era": "2023-2026"
-        },
-        {
-          "year": 2026,
-          "pro": 32725.08,
-          "raw": 39362.55,
-          "era": "2023-2026"
-        }
-      ],
-      "rationale": "ATR(5, /12) sizes bricks for Forex volatility; ST(2.1) + 5m gate filters noise; Model E 3.5B TP / 3B SL + 2B BE lock; ALL sessions focus peak liquidity."
-    },
-    {
       "epic": "AUDUSD",
       "name": "AUD / USD",
       "category": "Forex",
@@ -1930,202 +1734,6 @@
         }
       ],
       "rationale": "ATR(7, /15) sizes bricks for Forex volatility; ST(2) + 2m gate filters noise; Model E 2.5B TP / 2.5B SL + 1.5B BE lock; LON+NY sessions focus peak liquidity."
-    },
-    {
-      "epic": "USDCHF",
-      "name": "USD / CHF",
-      "category": "Forex",
-      "cluster": "USD_BLOC",
-      "live_cached": true,
-      "optimal_params": {
-        "atr_len": 5,
-        "atr_div": 14.0,
-        "st_factor": 2.2,
-        "green_buy": 2,
-        "red_sell": 2,
-        "tp_bricks": 0.0,
-        "runner_offset_bricks": 0.0,
-        "confirm_minutes": 5,
-        "safety_stop_bricks": 2.5,
-        "breakeven_after_bricks": 1.5,
-        "use_htf_filter": false,
-        "max_spread_frac_of_brick": 0.42,
-        "rollover_blackout": true,
-        "macro_blackout": true,
-        "sessions": {
-          "asian": false,
-          "london": true,
-          "new_york": true
-        },
-        "sessions_label": "LON+NY",
-        "dual_order_mode": false
-      },
-      "sample_trades": 320,
-      "trades_15y": 5760,
-      "win_rate": 33.8,
-      "profit_factor": 1.55,
-      "sharpe": 1.08,
-      "sortino": 1.91,
-      "calmar_sample": 2.84,
-      "calmar_15y": 0.59,
-      "max_dd_15y": 4925.65,
-      "net_sample": 2439.42,
-      "net_15y": 43909.56,
-      "raw_baseline_15y": 33495.3,
-      "edge_vs_raw_15y": 10414.26,
-      "cagr_pct": 16.4,
-      "eras_profitable": 4,
-      "era_breakdown": [
-        {
-          "id": "era1",
-          "years": "2011-2013",
-          "label": "Sovereign Debt Crisis & Metals Peak",
-          "trades": 42,
-          "win_rate": 35.7,
-          "pf": 1.59,
-          "net_sample": 766.69,
-          "net_15y_slice": 13800.42
-        },
-        {
-          "id": "era2",
-          "years": "2014-2016",
-          "label": "Oil Supply Glut & Strong USD",
-          "trades": 63,
-          "win_rate": 39.7,
-          "pf": 1.49,
-          "net_sample": 855.3,
-          "net_15y_slice": 15395.4
-        },
-        {
-          "id": "era3",
-          "years": "2017-2019",
-          "label": "Low-Vol Secular Trend & Tariff Whipsaw",
-          "trades": 80,
-          "win_rate": 21.2,
-          "pf": 0.85,
-          "net_sample": -750.95,
-          "net_15y_slice": -13517.1
-        },
-        {
-          "id": "era4",
-          "years": "2020-2022",
-          "label": "COVID Shock & Global Rate-Hike Cycle",
-          "trades": 59,
-          "win_rate": 42.4,
-          "pf": 1.93,
-          "net_sample": 1254.65,
-          "net_15y_slice": 22583.7
-        },
-        {
-          "id": "era5",
-          "years": "2023-2026",
-          "label": "Gold Super-Cycle & AI Index Breakout",
-          "trades": 76,
-          "win_rate": 34.2,
-          "pf": 1.13,
-          "net_sample": 313.73,
-          "net_15y_slice": 5647.14
-        }
-      ],
-      "yearly_curve": [
-        {
-          "year": 2011,
-          "pro": 0.0,
-          "raw": 0.0,
-          "era": "Start"
-        },
-        {
-          "year": 2012,
-          "pro": 4278.13,
-          "raw": 2233.02,
-          "era": "2011-2013"
-        },
-        {
-          "year": 2013,
-          "pro": 8970.27,
-          "raw": 4466.04,
-          "era": "2011-2013"
-        },
-        {
-          "year": 2014,
-          "pro": 13800.42,
-          "raw": 6699.06,
-          "era": "2011-2013"
-        },
-        {
-          "year": 2015,
-          "pro": 18572.99,
-          "raw": 8932.08,
-          "era": "2014-2016"
-        },
-        {
-          "year": 2016,
-          "pro": 23807.43,
-          "raw": 11165.1,
-          "era": "2014-2016"
-        },
-        {
-          "year": 2017,
-          "pro": 29195.82,
-          "raw": 13398.12,
-          "era": "2014-2016"
-        },
-        {
-          "year": 2018,
-          "pro": 25005.52,
-          "raw": 15631.14,
-          "era": "2017-2019"
-        },
-        {
-          "year": 2019,
-          "pro": 20409.71,
-          "raw": 17864.16,
-          "era": "2017-2019"
-        },
-        {
-          "year": 2020,
-          "pro": 15678.72,
-          "raw": 20097.18,
-          "era": "2017-2019"
-        },
-        {
-          "year": 2021,
-          "pro": 22679.67,
-          "raw": 22330.2,
-          "era": "2020-2022"
-        },
-        {
-          "year": 2022,
-          "pro": 30358.13,
-          "raw": 24563.22,
-          "era": "2020-2022"
-        },
-        {
-          "year": 2023,
-          "pro": 38262.43,
-          "raw": 26796.24,
-          "era": "2020-2022"
-        },
-        {
-          "year": 2024,
-          "pro": 40013.04,
-          "raw": 29029.26,
-          "era": "2023-2026"
-        },
-        {
-          "year": 2025,
-          "pro": 41933.07,
-          "raw": 31262.28,
-          "era": "2023-2026"
-        },
-        {
-          "year": 2026,
-          "pro": 43909.57,
-          "raw": 33495.3,
-          "era": "2023-2026"
-        }
-      ],
-      "rationale": "ATR(5, /14) sizes bricks for Forex volatility; ST(2.2) + 5m gate filters noise; Model E 3B TP / 2.5B SL + 1.5B BE lock; LON+NY sessions focus peak liquidity."
     },
     {
       "epic": "US500",
@@ -3108,202 +2716,6 @@
       "rationale": "ATR(7, /11) sizes bricks for Indices volatility; ST(1.8) + 2m gate filters noise; Model E 3B TP / 3B SL + 1.5B BE lock; LON+NY sessions focus peak liquidity."
     },
     {
-      "epic": "JP225",
-      "name": "Nikkei 225",
-      "category": "Indices",
-      "cluster": "APAC_INDICES",
-      "live_cached": true,
-      "optimal_params": {
-        "atr_len": 5,
-        "atr_div": 6.0,
-        "st_factor": 2.1,
-        "green_buy": 2,
-        "red_sell": 2,
-        "tp_bricks": 0.0,
-        "runner_offset_bricks": 0.0,
-        "confirm_minutes": 3,
-        "safety_stop_bricks": 2.5,
-        "breakeven_after_bricks": 1.5,
-        "use_htf_filter": false,
-        "max_spread_frac_of_brick": 0.35,
-        "rollover_blackout": true,
-        "macro_blackout": true,
-        "sessions": {
-          "asian": true,
-          "london": true,
-          "new_york": true
-        },
-        "sessions_label": "ALL",
-        "dual_order_mode": false
-      },
-      "sample_trades": 79,
-      "trades_15y": 1422,
-      "win_rate": 53.2,
-      "profit_factor": 2.65,
-      "sharpe": 1.46,
-      "sortino": 3.53,
-      "calmar_sample": 10.22,
-      "calmar_15y": 1.69,
-      "max_dd_15y": 1200.0,
-      "net_sample": 1685.83,
-      "net_15y": 30344.94,
-      "raw_baseline_15y": 30683.88,
-      "edge_vs_raw_15y": -338.94,
-      "cagr_pct": 13.9,
-      "eras_profitable": 5,
-      "era_breakdown": [
-        {
-          "id": "era1",
-          "years": "2011-2013",
-          "label": "Sovereign Debt Crisis & Metals Peak",
-          "trades": 16,
-          "win_rate": 50.0,
-          "pf": 1.78,
-          "net_sample": 304.62,
-          "net_15y_slice": 5483.16
-        },
-        {
-          "id": "era2",
-          "years": "2014-2016",
-          "label": "Oil Supply Glut & Strong USD",
-          "trades": 7,
-          "win_rate": 71.4,
-          "pf": 2.65,
-          "net_sample": 234.27,
-          "net_15y_slice": 4216.86
-        },
-        {
-          "id": "era3",
-          "years": "2017-2019",
-          "label": "Low-Vol Secular Trend & Tariff Whipsaw",
-          "trades": 19,
-          "win_rate": 31.6,
-          "pf": 1.06,
-          "net_sample": 40.83,
-          "net_15y_slice": 734.94
-        },
-        {
-          "id": "era4",
-          "years": "2020-2022",
-          "label": "COVID Shock & Global Rate-Hike Cycle",
-          "trades": 17,
-          "win_rate": 64.7,
-          "pf": 2.65,
-          "net_sample": 745.73,
-          "net_15y_slice": 13423.14
-        },
-        {
-          "id": "era5",
-          "years": "2023-2026",
-          "label": "Gold Super-Cycle & AI Index Breakout",
-          "trades": 20,
-          "win_rate": 60.0,
-          "pf": 1.68,
-          "net_sample": 360.38,
-          "net_15y_slice": 6486.84
-        }
-      ],
-      "yearly_curve": [
-        {
-          "year": 2011,
-          "pro": 0.0,
-          "raw": 0.0,
-          "era": "Start"
-        },
-        {
-          "year": 2012,
-          "pro": 1699.78,
-          "raw": 2045.59,
-          "era": "2011-2013"
-        },
-        {
-          "year": 2013,
-          "pro": 3564.05,
-          "raw": 4091.18,
-          "era": "2011-2013"
-        },
-        {
-          "year": 2014,
-          "pro": 5483.16,
-          "raw": 6136.77,
-          "era": "2011-2013"
-        },
-        {
-          "year": 2015,
-          "pro": 6790.39,
-          "raw": 8182.36,
-          "era": "2014-2016"
-        },
-        {
-          "year": 2016,
-          "pro": 8224.12,
-          "raw": 10227.95,
-          "era": "2014-2016"
-        },
-        {
-          "year": 2017,
-          "pro": 9700.02,
-          "raw": 12273.54,
-          "era": "2014-2016"
-        },
-        {
-          "year": 2018,
-          "pro": 9927.85,
-          "raw": 14319.13,
-          "era": "2017-2019"
-        },
-        {
-          "year": 2019,
-          "pro": 10177.73,
-          "raw": 16364.72,
-          "era": "2017-2019"
-        },
-        {
-          "year": 2020,
-          "pro": 10434.96,
-          "raw": 18410.31,
-          "era": "2017-2019"
-        },
-        {
-          "year": 2021,
-          "pro": 14596.13,
-          "raw": 20455.9,
-          "era": "2020-2022"
-        },
-        {
-          "year": 2022,
-          "pro": 19160.0,
-          "raw": 22501.49,
-          "era": "2020-2022"
-        },
-        {
-          "year": 2023,
-          "pro": 23858.1,
-          "raw": 24547.08,
-          "era": "2020-2022"
-        },
-        {
-          "year": 2024,
-          "pro": 25869.02,
-          "raw": 26592.67,
-          "era": "2023-2026"
-        },
-        {
-          "year": 2025,
-          "pro": 28074.55,
-          "raw": 28638.26,
-          "era": "2023-2026"
-        },
-        {
-          "year": 2026,
-          "pro": 30344.94,
-          "raw": 30683.85,
-          "era": "2023-2026"
-        }
-      ],
-      "rationale": "ATR(5, /10) sizes bricks for Indices volatility; ST(1.9) + 3m gate filters noise; Model E 3B TP / 3B SL + 1.5B BE lock; ASI+LON sessions focus peak liquidity."
-    },
-    {
       "epic": "BTCUSD",
       "name": "Bitcoin / USD",
       "category": "Crypto",
@@ -3895,8 +3307,8 @@
   "profiles_by_epic": {
     "GOLD": {
       "atr_len": 5,
-      "atr_div": 5.0,
-      "st_factor": 2.1,
+      "atr_div": 12.0,
+      "st_factor": 1.8,
       "green_buy": 2,
       "red_sell": 2,
       "tp_bricks": 0.0,
@@ -3941,13 +3353,13 @@
     },
     "OIL_CRUDE": {
       "atr_len": 5,
-      "atr_div": 7.0,
-      "st_factor": 2.1,
+      "atr_div": 8.0,
+      "st_factor": 1.8,
       "green_buy": 2,
       "red_sell": 2,
       "tp_bricks": 0.0,
       "runner_offset_bricks": 0.0,
-      "confirm_minutes": 3,
+      "confirm_minutes": 2,
       "safety_stop_bricks": 2.5,
       "breakeven_after_bricks": 2.0,
       "use_htf_filter": false,
@@ -3964,13 +3376,13 @@
     },
     "OIL_BRENT": {
       "atr_len": 5,
-      "atr_div": 4.0,
-      "st_factor": 2.5,
+      "atr_div": 10.0,
+      "st_factor": 1.8,
       "green_buy": 2,
       "red_sell": 2,
       "tp_bricks": 0.0,
       "runner_offset_bricks": 0.0,
-      "confirm_minutes": 3,
+      "confirm_minutes": 2,
       "safety_stop_bricks": 2.5,
       "breakeven_after_bricks": 2.0,
       "use_htf_filter": false,
@@ -3987,13 +3399,13 @@
     },
     "EURUSD": {
       "atr_len": 7,
-      "atr_div": 7.0,
-      "st_factor": 2.1,
+      "atr_div": 20.0,
+      "st_factor": 1.8,
       "green_buy": 2,
       "red_sell": 2,
       "tp_bricks": 0.0,
       "runner_offset_bricks": 0.0,
-      "confirm_minutes": 2,
+      "confirm_minutes": 3,
       "safety_stop_bricks": 2.5,
       "breakeven_after_bricks": 1.5,
       "use_htf_filter": false,
@@ -4031,38 +3443,15 @@
       "sessions_label": "LON+NY",
       "dual_order_mode": false
     },
-    "USDJPY": {
-      "atr_len": 5,
-      "atr_div": 12.0,
-      "st_factor": 2.1,
-      "green_buy": 2,
-      "red_sell": 2,
-      "tp_bricks": 0.0,
-      "runner_offset_bricks": 0.0,
-      "confirm_minutes": 5,
-      "safety_stop_bricks": 3.0,
-      "breakeven_after_bricks": 2.0,
-      "use_htf_filter": true,
-      "max_spread_frac_of_brick": 0.42,
-      "rollover_blackout": true,
-      "macro_blackout": true,
-      "sessions": {
-        "asian": false,
-        "london": true,
-        "new_york": true
-      },
-      "sessions_label": "LON+NY",
-      "dual_order_mode": false
-    },
     "AUDUSD": {
       "atr_len": 5,
-      "atr_div": 7.0,
-      "st_factor": 2.0,
+      "atr_div": 12.0,
+      "st_factor": 1.8,
       "green_buy": 2,
       "red_sell": 2,
       "tp_bricks": 0.0,
       "runner_offset_bricks": 0.0,
-      "confirm_minutes": 3,
+      "confirm_minutes": 2,
       "safety_stop_bricks": 3.0,
       "breakeven_after_bricks": 1.5,
       "use_htf_filter": false,
@@ -4079,13 +3468,13 @@
     },
     "USDCAD": {
       "atr_len": 7,
-      "atr_div": 4.0,
-      "st_factor": 2.5,
+      "atr_div": 12.0,
+      "st_factor": 1.8,
       "green_buy": 2,
       "red_sell": 2,
       "tp_bricks": 0.0,
       "runner_offset_bricks": 0.0,
-      "confirm_minutes": 2,
+      "confirm_minutes": 3,
       "safety_stop_bricks": 2.5,
       "breakeven_after_bricks": 2.0,
       "use_htf_filter": false,
@@ -4100,38 +3489,15 @@
       "sessions_label": "NY",
       "dual_order_mode": false
     },
-    "USDCHF": {
-      "atr_len": 5,
-      "atr_div": 14.0,
-      "st_factor": 2.2,
-      "green_buy": 2,
-      "red_sell": 2,
-      "tp_bricks": 0.0,
-      "runner_offset_bricks": 0.0,
-      "confirm_minutes": 5,
-      "safety_stop_bricks": 2.5,
-      "breakeven_after_bricks": 1.5,
-      "use_htf_filter": false,
-      "max_spread_frac_of_brick": 0.42,
-      "rollover_blackout": true,
-      "macro_blackout": true,
-      "sessions": {
-        "asian": false,
-        "london": true,
-        "new_york": true
-      },
-      "sessions_label": "LON+NY",
-      "dual_order_mode": false
-    },
     "US500": {
       "atr_len": 7,
-      "atr_div": 4.0,
-      "st_factor": 2.5,
+      "atr_div": 20.0,
+      "st_factor": 1.8,
       "green_buy": 2,
       "red_sell": 2,
       "tp_bricks": 0.0,
       "runner_offset_bricks": 0.0,
-      "confirm_minutes": 2,
+      "confirm_minutes": 0,
       "safety_stop_bricks": 3.0,
       "breakeven_after_bricks": 2.0,
       "use_htf_filter": false,
@@ -4148,13 +3514,13 @@
     },
     "US100": {
       "atr_len": 5,
-      "atr_div": 4.0,
-      "st_factor": 2.5,
+      "atr_div": 20.0,
+      "st_factor": 1.8,
       "green_buy": 2,
       "red_sell": 2,
       "tp_bricks": 0.0,
       "runner_offset_bricks": 0.0,
-      "confirm_minutes": 3,
+      "confirm_minutes": 0,
       "safety_stop_bricks": 2.5,
       "breakeven_after_bricks": 1.5,
       "use_htf_filter": false,
@@ -4172,7 +3538,7 @@
     "US30": {
       "atr_len": 7,
       "atr_div": 12.0,
-      "st_factor": 2.5,
+      "st_factor": 2.1,
       "green_buy": 2,
       "red_sell": 2,
       "tp_bricks": 0.0,
@@ -4194,13 +3560,13 @@
     },
     "GER40": {
       "atr_len": 7,
-      "atr_div": 6.0,
-      "st_factor": 2.5,
+      "atr_div": 16.0,
+      "st_factor": 1.8,
       "green_buy": 2,
       "red_sell": 2,
       "tp_bricks": 0.0,
       "runner_offset_bricks": 0.0,
-      "confirm_minutes": 2,
+      "confirm_minutes": 5,
       "safety_stop_bricks": 2.5,
       "breakeven_after_bricks": 1.5,
       "use_htf_filter": false,
@@ -4217,13 +3583,13 @@
     },
     "UK100": {
       "atr_len": 7,
-      "atr_div": 11.0,
+      "atr_div": 8.0,
       "st_factor": 1.8,
       "green_buy": 2,
       "red_sell": 2,
       "tp_bricks": 0.0,
       "runner_offset_bricks": 0.0,
-      "confirm_minutes": 2,
+      "confirm_minutes": 5,
       "safety_stop_bricks": 3.0,
       "breakeven_after_bricks": 1.5,
       "use_htf_filter": false,
@@ -4238,33 +3604,10 @@
       "sessions_label": "LON+NY",
       "dual_order_mode": false
     },
-    "JP225": {
-      "atr_len": 5,
-      "atr_div": 6.0,
-      "st_factor": 2.1,
-      "green_buy": 2,
-      "red_sell": 2,
-      "tp_bricks": 0.0,
-      "runner_offset_bricks": 0.0,
-      "confirm_minutes": 3,
-      "safety_stop_bricks": 2.5,
-      "breakeven_after_bricks": 1.5,
-      "use_htf_filter": false,
-      "max_spread_frac_of_brick": 0.35,
-      "rollover_blackout": true,
-      "macro_blackout": true,
-      "sessions": {
-        "asian": true,
-        "london": true,
-        "new_york": true
-      },
-      "sessions_label": "ALL",
-      "dual_order_mode": false
-    },
     "BTCUSD": {
       "atr_len": 14,
-      "atr_div": 5.0,
-      "st_factor": 2.5,
+      "atr_div": 12.0,
+      "st_factor": 1.8,
       "green_buy": 2,
       "red_sell": 2,
       "tp_bricks": 0.0,
@@ -4286,13 +3629,13 @@
     },
     "ETHUSD": {
       "atr_len": 5,
-      "atr_div": 5.0,
-      "st_factor": 2.5,
+      "atr_div": 10.0,
+      "st_factor": 1.8,
       "green_buy": 2,
       "red_sell": 2,
       "tp_bricks": 0.0,
       "runner_offset_bricks": 0.0,
-      "confirm_minutes": 3,
+      "confirm_minutes": 5,
       "safety_stop_bricks": 3.0,
       "breakeven_after_bricks": 0.0,
       "use_htf_filter": false,
@@ -4309,13 +3652,13 @@
     },
     "SOLUSD": {
       "atr_len": 5,
-      "atr_div": 9.0,
-      "st_factor": 2.5,
+      "atr_div": 12.0,
+      "st_factor": 1.8,
       "green_buy": 2,
       "red_sell": 2,
       "tp_bricks": 0.0,
       "runner_offset_bricks": 0.0,
-      "confirm_minutes": 2,
+      "confirm_minutes": 0,
       "safety_stop_bricks": 2.5,
       "breakeven_after_bricks": 1.5,
       "use_htf_filter": false,

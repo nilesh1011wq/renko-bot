@@ -20,8 +20,8 @@ logger = logging.getLogger("renko.scanner")
 ALL_SCAN_EPICS = [
     "GOLD", "SILVER",
     "OIL_CRUDE", "OIL_BRENT",
-    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF",
-    "US500", "US100", "US30", "GER40", "UK100", "JP225",
+    "EURUSD", "GBPUSD", "AUDUSD", "USDCAD",
+    "US500", "US100", "US30", "GER40", "UK100",
     "BTCUSD", "ETHUSD", "SOLUSD",
 ]
 
