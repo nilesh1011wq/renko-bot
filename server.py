@@ -1652,24 +1652,25 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if u.path == "/api/trade-analytics":
-            from history_analytics import get_filtered_trade_analytics
+            from history_analytics import get_filtered_trade_analytics, query_raw_trades
             from urllib.parse import parse_qs
             qs = parse_qs(u.query)
             cfg = load_config()
             active_id = qs.get("account_id", [cfg.get("active_account_id", "capital_demo")])[0]
-            preset = qs.get("preset", ["today"])[0]
+            preset = qs.get("preset", ["yesterday"])[0]
             custom_from = qs.get("from", [None])[0]
             custom_to = qs.get("to", [None])[0]
             do_sync = qs.get("sync", ["0"])[0].lower() in ("1", "true")
 
             cap = None
-            if do_sync:
-                creds = check_credentials_present()
-                if creds.get("connected"):
-                    try:
-                        cap = Capital("live" if cfg.get("live") else "demo")
-                    except Exception:
-                        pass
+            creds = check_credentials_present()
+            if creds.get("connected"):
+                try:
+                    from credentials_config import apply_default_credentials
+                    apply_default_credentials()
+                    cap = Capital("live" if cfg.get("live") else "demo")
+                except Exception as ce:
+                    print("Capital sync init note:", ce)
 
             res = get_filtered_trade_analytics(
                 account_id=active_id,

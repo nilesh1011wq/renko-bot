@@ -1274,9 +1274,9 @@
                 </div>
                 <div style="display:flex; gap:4px; align-items:center;">
                   <span style="font-size:10px; color:var(--text-2); font-family:var(--font-mono);">From:</span>
-                  <input type="date" id="lfilter-from" style="background:var(--bg-2); color:var(--text-0); border:1px solid var(--border); font-size:10px; padding:1px 4px; border-radius:3px; font-family:var(--font-mono);" />
+                  <input type="date" id="lfilter-from" value="2026-11-23" style="background:var(--bg-2); color:var(--text-0); border:1px solid var(--border); font-size:10px; padding:1px 4px; border-radius:3px; font-family:var(--font-mono);" />
                   <span style="font-size:10px; color:var(--text-2); font-family:var(--font-mono);">To:</span>
-                  <input type="date" id="lfilter-to" style="background:var(--bg-2); color:var(--text-0); border:1px solid var(--border); font-size:10px; padding:1px 4px; border-radius:3px; font-family:var(--font-mono);" />
+                  <input type="date" id="lfilter-to" value="2026-11-23" style="background:var(--bg-2); color:var(--text-0); border:1px solid var(--border); font-size:10px; padding:1px 4px; border-radius:3px; font-family:var(--font-mono);" />
                   <button onclick="applyLiveCustomFilter()" class="primary" style="font-size:10px; padding:2px 8px; font-weight:700;">Filter</button>
                 </div>
               </div>
@@ -3514,10 +3514,33 @@
         activeBtn.style.color = '#fff';
         activeBtn.style.borderColor = '#38bdf8';
       }
+
+      // Auto-populate custom date inputs (GST = UTC+4)
+      const getGstDate = (offsetDays = 0) => {
+        const d = new Date(Date.now() + 4 * 3600 * 1000 + offsetDays * 86400 * 1000);
+        return d.toISOString().slice(0, 10);
+      };
+
       const fromEl = document.getElementById('lfilter-from');
       const toEl = document.getElementById('lfilter-to');
-      if (fromEl) fromEl.value = '';
-      if (toEl) toEl.value = '';
+      if (preset === 'yesterday') {
+        const yest = getGstDate(-1);
+        if (fromEl) fromEl.value = yest;
+        if (toEl) toEl.value = yest;
+      } else if (preset === 'today') {
+        const today = getGstDate(0);
+        if (fromEl) fromEl.value = today;
+        if (toEl) toEl.value = today;
+      } else if (preset === '7d') {
+        if (fromEl) fromEl.value = getGstDate(-7);
+        if (toEl) toEl.value = getGstDate(0);
+      } else if (preset === '30d') {
+        if (fromEl) fromEl.value = getGstDate(-30);
+        if (toEl) toEl.value = getGstDate(0);
+      } else if (preset === 'all') {
+        if (fromEl) fromEl.value = '';
+        if (toEl) toEl.value = getGstDate(0);
+      }
       loadLiveHistoryAnalytics(false);
     }
 
@@ -3602,6 +3625,10 @@
       const flt = d.filter || {};
       const elPeriodTag = document.getElementById('live-period-tag');
       if (elPeriodTag) elPeriodTag.textContent = flt.label || '';
+      const fromEl = document.getElementById('lfilter-from');
+      const toEl = document.getElementById('lfilter-to');
+      if (flt.from_date && fromEl) fromEl.value = flt.from_date;
+      if (flt.to_date && toEl) toEl.value = flt.to_date;
       const elDockTradeCnt = document.getElementById('dock-trade-cnt');
       if (elDockTradeCnt) elDockTradeCnt.textContent = `${d.total_trades || 0}`;
       const elLiveOrdersCnt = document.getElementById('live-orders-cnt');

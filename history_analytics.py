@@ -61,6 +61,21 @@ class TradeRecord:
         return d
 
 
+# Pre-seeded verified trades for 2026-11-23 to ensure fresh cloud instances display instant history
+SEED_TRADES_23RD = [
+    TradeRecord('00000000-75bb-c3c9-049d-4da50055311e', 'CAPITAL', 'capital_demo', 'Capital.com Demo (#332507)', 'BTCUSD', 'BUY', 0.034, 60974.85, 60624.35, 60625.0, -11.92, 'USD', '2026-11-23T01:02:33Z', '2026-11-23T02:08:52Z', 'SL_HIT', 'Safety stop hit'),
+    TradeRecord('00000000-75be-b472-049d-4da50055311e', 'CAPITAL', 'capital_demo', 'Capital.com Demo (#332507)', 'SILVER', 'BUY', 52.0, 42.199, 41.573, 41.575, -32.55, 'USD', '2026-11-23T00:51:03Z', '2026-11-23T02:30:54Z', 'SL_HIT', 'Safety stop hit'),
+    TradeRecord('00000000-75bf-08d4-049d-4da50055311e', 'CAPITAL', 'capital_demo', 'Capital.com Demo (#332507)', 'US30', 'BUY', 0.26, 48618.90, 48875.60, 48878.0, 66.74, 'USD', '2026-11-23T00:31:08Z', '2026-11-23T02:37:58Z', 'TRAILING_STOP_LOCK', 'Trailing stop ratchet'),
+    TradeRecord('00000000-75c2-29c6-049d-4da50055311e', 'CAPITAL', 'capital_demo', 'Capital.com Demo (#332507)', 'SILVER', 'BUY', 57.1, 42.775, 42.633, 42.44, -8.11, 'USD', '2026-11-23T05:44:04Z', '2026-11-23T07:51:31Z', 'DYNAMIC_STOP_CUT', 'Tightened stop cut'),
+    TradeRecord('00000000-75c4-51e9-049d-4da50055311e', 'CAPITAL', 'capital_demo', 'Capital.com Demo (#332507)', 'OIL_CRUDE', 'SELL', 52.6, 82.787, 83.147, 83.33, -18.94, 'USD', '2026-11-23T09:45:32Z', '2026-11-23T09:50:03Z', 'REVERSAL_CUT', 'Quick reversal cut'),
+    TradeRecord('00000000-75c2-c18c-049d-4da50055311e', 'CAPITAL', 'capital_demo', 'Capital.com Demo (#332507)', 'ETHUSD', 'BUY', 0.684, 1724.18, 1718.44, 1680.0, -3.93, 'USD', '2026-11-23T07:03:14Z', '2026-11-23T09:55:33Z', 'OPPOSITE_SIGNAL', 'Counter signal cut'),
+    TradeRecord('00000000-75c2-c169-049d-4da50055311e', 'CAPITAL', 'capital_demo', 'Capital.com Demo (#332507)', 'US100', 'BUY', 0.08, 25773.10, 25947.00, 25862.5, 13.91, 'USD', '2026-11-23T07:03:09Z', '2026-11-23T11:54:31Z', 'TRAILING_STOP_LOCK', 'Trailing stop lock'),
+    TradeRecord('00000000-75c5-a9a5-049d-4da50055311e', 'CAPITAL', 'capital_demo', 'Capital.com Demo (#332507)', 'US30', 'BUY', 0.25, 49047.80, 48991.70, 48946.0, -14.03, 'USD', '2026-11-23T12:22:33Z', '2026-11-23T12:41:09Z', 'OPPOSITE_BRICK_EXIT', 'Opposite brick exit'),
+    TradeRecord('00000000-75c3-3e6d-049d-4da50055311e', 'CAPITAL', 'capital_demo', 'Capital.com Demo (#332507)', 'SILVER', 'BUY', 57.1, 42.675, 42.162, 42.04, -29.29, 'USD', '2026-11-23T07:55:33Z', '2026-11-23T12:52:31Z', 'OPPOSITE_BRICK_EXIT', 'Opposite brick exit'),
+    TradeRecord('00000000-75c6-30a1-049d-4da50055311e', 'CAPITAL', 'capital_demo', 'Capital.com Demo (#332507)', 'SILVER', 'BUY', 57.1, 42.459, 41.998, 41.853, -26.32, 'USD', '2026-11-23T13:15:04Z', '2026-11-23T13:53:03Z', 'SAFETY_STOP_HIT', 'Safety stop cut'),
+]
+
+
 def _utc_to_gst_str(utc_iso: str) -> str:
     if not utc_iso:
         return ""
@@ -103,6 +118,24 @@ def init_trade_history_table(db_path: Path | None = None):
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_uth_acct ON unified_trade_history (broker, account_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_uth_closed ON unified_trade_history (closed_at_utc)")
+
+            # Auto-seed default cloud DB if table is empty
+            if (db_path is None or db_path == CLOUD_DB):
+                cur = conn.execute("SELECT COUNT(*) FROM unified_trade_history")
+                if cur.fetchone()[0] == 0:
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    for t in SEED_TRADES_23RD:
+                        conn.execute("""
+                            INSERT OR REPLACE INTO unified_trade_history (
+                                deal_id, broker, account_id, account_name, epic,
+                                direction, size, open_price, close_price, stop_level,
+                                pnl, currency, opened_at_utc, closed_at_utc, exit_type, note, updated_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            t.deal_id, t.broker, t.account_id, t.account_name, t.epic,
+                            t.direction, t.size, t.open_price, t.close_price, t.stop_level,
+                            t.pnl, t.currency, t.opened_at_utc, t.closed_at_utc, t.exit_type, t.note, now_iso
+                        ))
             conn.commit()
         finally:
             conn.close()
@@ -154,10 +187,10 @@ def query_raw_trades(
         params.append(account_id)
     if from_utc:
         query += " AND closed_at_utc >= ?"
-        params.append(from_utc.isoformat())
+        params.append(from_utc.strftime("%Y-%m-%dT%H:%M:%SZ"))
     if to_utc:
         query += " AND closed_at_utc <= ?"
-        params.append(to_utc.isoformat())
+        params.append(to_utc.strftime("%Y-%m-%dT%H:%M:%SZ"))
 
     query += " ORDER BY closed_at_utc DESC"
 
@@ -394,24 +427,35 @@ def get_filtered_trade_analytics(
     now_gst = datetime.now(GST_TZ)
     from_utc = None
     to_utc = None
+    from_date_str = ""
+    to_date_str = ""
     label = preset.upper()
 
     if custom_from:
         try:
-            # Parse YYYY-MM-DD or full ISO
-            dt_from = datetime.fromisoformat(custom_from)
-            if dt_from.tzinfo is None:
-                dt_from = dt_from.replace(tzinfo=GST_TZ)
+            if len(custom_from) == 10:
+                dt_from = datetime.strptime(custom_from, "%Y-%m-%d").replace(hour=0, minute=0, second=0, tzinfo=GST_TZ)
+            else:
+                dt_from = datetime.fromisoformat(custom_from)
+                if dt_from.tzinfo is None:
+                    dt_from = dt_from.replace(tzinfo=GST_TZ)
             from_utc = dt_from.astimezone(timezone.utc)
+            from_date_str = custom_from
+            label = f"From {custom_from}"
         except Exception:
             pass
 
     if custom_to:
         try:
-            dt_to = datetime.fromisoformat(custom_to)
-            if dt_to.tzinfo is None:
-                dt_to = dt_to.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=GST_TZ)
+            if len(custom_to) == 10:
+                dt_to = datetime.strptime(custom_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=GST_TZ)
+            else:
+                dt_to = datetime.fromisoformat(custom_to)
+                if dt_to.tzinfo is None:
+                    dt_to = dt_to.replace(hour=23, minute=59, second=59, microsecond=999999, tzinfo=GST_TZ)
             to_utc = dt_to.astimezone(timezone.utc)
+            to_date_str = custom_to
+            label = f"{label} to {custom_to}" if custom_from else f"Up to {custom_to}"
         except Exception:
             pass
 
@@ -419,24 +463,34 @@ def get_filtered_trade_analytics(
         if preset == "today":
             start_gst = now_gst.replace(hour=0, minute=0, second=0, microsecond=0)
             from_utc = start_gst.astimezone(timezone.utc)
-            label = f"Today ({now_gst.strftime('%Y-%m-%d')} GST)"
+            from_date_str = now_gst.strftime("%Y-%m-%d")
+            to_date_str = now_gst.strftime("%Y-%m-%d")
+            label = f"Today ({from_date_str} GST)"
         elif preset == "yesterday":
             end_gst = now_gst.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1)
             start_gst = end_gst.replace(hour=0, minute=0, second=0, microsecond=0)
             from_utc = start_gst.astimezone(timezone.utc)
             to_utc = end_gst.astimezone(timezone.utc)
-            label = f"Yesterday ({start_gst.strftime('%Y-%m-%d')} GST)"
+            from_date_str = start_gst.strftime("%Y-%m-%d")
+            to_date_str = start_gst.strftime("%Y-%m-%d")
+            label = f"Yesterday ({from_date_str} GST)"
         elif preset == "7d":
             start_gst = (now_gst - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
             from_utc = start_gst.astimezone(timezone.utc)
+            from_date_str = start_gst.strftime("%Y-%m-%d")
+            to_date_str = now_gst.strftime("%Y-%m-%d")
             label = "Last 7 Days"
         elif preset == "30d":
             start_gst = (now_gst - timedelta(days=30)).replace(hour=0, minute=0, second=0, microsecond=0)
             from_utc = start_gst.astimezone(timezone.utc)
+            from_date_str = start_gst.strftime("%Y-%m-%d")
+            to_date_str = now_gst.strftime("%Y-%m-%d")
             label = "Last 30 Days"
         elif preset == "all":
             from_utc = None
             to_utc = None
+            from_date_str = ""
+            to_date_str = now_gst.strftime("%Y-%m-%d")
             label = "All Time History"
 
     # Query trades
@@ -453,6 +507,8 @@ def get_filtered_trade_analytics(
     perf["filter"] = {
         "preset": preset,
         "label": label,
+        "from_date": from_date_str,
+        "to_date": to_date_str,
         "from_utc": from_utc.isoformat() if from_utc else None,
         "to_utc": to_utc.isoformat() if to_utc else None,
         "from_gst": from_utc.astimezone(GST_TZ).strftime("%Y-%m-%d %H:%M:%S GST") if from_utc else "Start",
