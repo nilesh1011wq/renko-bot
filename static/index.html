@@ -1231,7 +1231,6 @@
       <!-- BOTTOM MULTI-TAB TERMINAL DOCK (NO SCROLLING DOWN) -->
       <section class="dock-card">
         <div class="dock-tabs">
-          <button class="dock-tab active" onclick="switchDockTab('tab-journal', this)">📋 Trade Journal (<span id="dock-trade-cnt">0</span>)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-positions', this)">⚡ Capital.com Live Orders (<span id="dock-pos-cnt">0</span>)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-scanner', this)">📊 Market Scanner (<span id="dock-scanner-cnt" style="color:#10b981; font-weight:700;">19</span>)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-equity', this)">📈 Equity Curve (vs Raw)</button>
@@ -1240,6 +1239,7 @@
           <button class="dock-tab" onclick="switchDockTab('tab-optimizer', this)">🔬 Optimizer</button>
           <button class="dock-tab" onclick="switchDockTab('tab-matrix15y', this)" style="color:#f59e0b; font-weight:700;">🏆 15Y Matrix &amp; Market Edge (19)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-sessions', this)">🔑 Broker Env &amp; Sessions</button>
+          <button class="dock-tab active" onclick="switchDockTab('tab-journal', this)">📋 Trade History (<span id="dock-trade-cnt">0</span>)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-log', this)">📜 Bot Activity Log</button>
         </div>
 
@@ -3345,6 +3345,8 @@
       } else if (tabId === 'tab-matrix15y') {
         if (!MATRIX_15Y) loadMatrix15y();
         else setTimeout(() => { renderMatrix15y(); drawMatrix15yChart(); }, 20);
+      } else if (tabId === 'tab-journal') {
+        loadLiveHistoryAnalytics(false);
       }
     }
 
