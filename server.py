@@ -1641,6 +1641,47 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json(res)
             return
 
+        if u.path == "/api/accounts":
+            from history_analytics import get_accounts_registry
+            cfg = load_config()
+            active_id = cfg.get("active_account_id", "capital_demo")
+            accs = get_accounts_registry()
+            for a in accs:
+                a["is_active"] = (a["id"] == active_id)
+            self._send_json({"ok": True, "active_account_id": active_id, "accounts": accs})
+            return
+
+        if u.path == "/api/trade-analytics":
+            from history_analytics import get_filtered_trade_analytics
+            from urllib.parse import parse_qs
+            qs = parse_qs(u.query)
+            cfg = load_config()
+            active_id = qs.get("account_id", [cfg.get("active_account_id", "capital_demo")])[0]
+            preset = qs.get("preset", ["today"])[0]
+            custom_from = qs.get("from", [None])[0]
+            custom_to = qs.get("to", [None])[0]
+            do_sync = qs.get("sync", ["0"])[0].lower() in ("1", "true")
+
+            cap = None
+            if do_sync:
+                creds = check_credentials_present()
+                if creds.get("connected"):
+                    try:
+                        cap = Capital("live" if cfg.get("live") else "demo")
+                    except Exception:
+                        pass
+
+            res = get_filtered_trade_analytics(
+                account_id=active_id,
+                preset=preset,
+                custom_from=custom_from,
+                custom_to=custom_to,
+                sync=do_sync,
+                cap=cap
+            )
+            self._send_json({"ok": True, "data": res})
+            return
+
         self._send_json({"error": "Not found"}, 404)
 
     def do_POST(self):
@@ -2041,6 +2082,23 @@ class Handler(BaseHTTPRequestHandler):
                     "bot": get_bot_status(cfg, skip_network=True),
                     "backtest": serialize_backtest(cfg, use_cache=True, skip_network=True),
                     "instrument_specs": INSTRUMENT_SPECS,
+                })
+                return
+
+            if u.path == "/api/switch-account":
+                target_account = str(body.get("account_id", "capital_demo")).strip()
+                from history_analytics import get_accounts_registry
+                reg = get_accounts_registry()
+                valid = any(a["id"] == target_account for a in reg)
+                if not valid:
+                    self._send_json({"error": f"Invalid account id: {target_account}"}, 400)
+                    return
+                cfg["active_account_id"] = target_account
+                save_config(cfg)
+                self._send_json({
+                    "ok": True,
+                    "active_account_id": target_account,
+                    "account": next((a for a in reg if a["id"] == target_account), None),
                 })
                 return
 

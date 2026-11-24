@@ -738,6 +738,15 @@
     </div>
 
     <div class="ticker-strip">
+      <div class="pill account-select-pill" style="padding: 2px 8px; display: inline-flex; align-items: center; gap: 6px; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(168, 85, 247, 0.4); border-radius: 4px;" title="Select Active Trading Account & Broker">
+        <span class="lbl" style="color: #c084fc; font-weight: 700; letter-spacing: 0.5px; font-size: 10px;">ACCOUNT</span>
+        <select id="in-account-select" onchange="switchCockpitAccount(this.value)" style="background: transparent; color: #f8fafc; font-weight: 700; font-size: 11px; font-family: var(--font-mono); border: none; outline: none; cursor: pointer; padding: 2px 4px;">
+          <option value="capital_demo">Capital.com Demo (#332507)</option>
+          <option value="capital_live">Capital.com Live</option>
+          <option value="alpha_direct_mt5">Alpha Direct Prop ($10k MT5)</option>
+          <option value="all_accounts">🌐 All Combined Accounts</option>
+        </select>
+      </div>
       <div class="pill market-select-pill" style="padding: 2px 8px; display: inline-flex; align-items: center; gap: 6px; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 4px;" title="Select Active Market / Instrument">
         <span class="lbl" style="color: #38bdf8; font-weight: 700; letter-spacing: 0.5px; font-size: 10px;">MARKET</span>
         <select id="in-epic" onchange="switchInstrument(this.value)" style="background: transparent; color: #f8fafc; font-weight: 700; font-size: 11.5px; font-family: var(--font-mono); border: none; outline: none; cursor: pointer; padding: 2px 4px;">
@@ -1236,41 +1245,158 @@
 
         <div class="dock-content">
           <!-- Tab 1: Trade Journal -->
-          <div id="tab-journal" class="dock-pane active">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px;">
+          <div id="tab-journal" class="dock-pane active" style="display:flex; flex-direction:column; height:100%;">
+            <!-- Sub Header / Navigation Bar -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px; background:rgba(15,23,42,0.6); padding:4px 8px; border-radius:5px; border:1px solid var(--border);">
               <div style="display:flex; gap:6px; align-items:center;">
-                <span style="font-size:11px; color:var(--text-1); font-family:var(--font-mono); font-weight:600;">JOURNAL:</span>
-                <button id="btn-journal-all" onclick="setJournalFilter('all')" class="journal-filter-btn active" style="font-size:11px; padding:2px 8px; border-radius:3px; cursor:pointer;">All Entries (<span id="cnt-j-all">0</span>)</button>
-                <button id="btn-journal-exec" onclick="setJournalFilter('executed')" class="journal-filter-btn" style="font-size:11px; padding:2px 8px; border-radius:3px; cursor:pointer;">Executed (<span id="cnt-j-exec">0</span>)</button>
-                <button id="btn-journal-flt" onclick="setJournalFilter('filtered')" class="journal-filter-btn" style="font-size:11px; padding:2px 8px; border-radius:3px; cursor:pointer; background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid #f59e0b;">⚠️ Slippage &amp; Filtered (<span id="cnt-j-flt">0</span>)</button>
+                <span style="font-size:10.5px; color:#c084fc; font-family:var(--font-mono); font-weight:700;">ACCOUNT:</span>
+                <button id="btn-view-live" onclick="switchJournalSubView('live')" class="journal-view-btn active" style="font-size:10.5px; padding:2px 10px; border-radius:3px; cursor:pointer; font-weight:700; background:#9333ea; color:#fff; border:1px solid #c084fc;">🏦 Live History &amp; Edge</button>
+                <button id="btn-view-backtest" onclick="switchJournalSubView('backtest')" class="journal-view-btn" style="font-size:10.5px; padding:2px 10px; border-radius:3px; cursor:pointer; font-weight:600; background:transparent; color:var(--text-1); border:1px solid var(--border);">📋 Strategy Backtest</button>
               </div>
-              <div style="display:flex; gap:8px; align-items:center;">
-                <span style="font-size:10.5px; color:#38bdf8; font-family:var(--font-mono); background:rgba(56,189,248,0.12); padding:2px 8px; border-radius:3px; border:1px solid rgba(56,189,248,0.3);">
-                  🛡️ Pre-Execution Guard: ≤0.35 Brk Slippage | Candle Sync: :01s
-                </span>
+              <div style="display:flex; gap:6px; align-items:center;">
+                <button type="button" class="btn-xs" onclick="syncLiveHistoryFromBroker()" style="padding:2px 8px; font-weight:700; background:#059669; color:#fff;" title="Sync trades directly from broker API">⚡ Sync Live Trades</button>
                 <button type="button" class="btn-xs" onclick="window.open('/api/tearsheet', '_blank')" style="padding:2px 8px; font-weight:700; background:#0284c7; color:#fff;">📄 Tear-Sheet</button>
                 <button type="button" class="btn-xs" onclick="window.location.href='/api/export-trades.csv'" style="padding:2px 8px; font-weight:700;">📥 CSV</button>
               </div>
             </div>
-            <div class="table-wrap" style="max-height:calc(100% - 32px);">
-              <table>
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Side</th>
-                    <th>Session</th>
-                    <th>Entry Time (GST)</th>
-                    <th>Trig Px</th>
-                    <th>Fill Px</th>
-                    <th>Exit Px</th>
-                    <th>Reason</th>
-                    <th>MFE / MAE</th>
-                    <th>Gross</th>
-                    <th>Net P&amp;L</th>
-                  </tr>
-                </thead>
-                <tbody id="trades-tbody"></tbody>
-              </table>
+
+            <!-- SUB-VIEW 1: LIVE MULTI-ACCOUNT TRADE HISTORY & EDGE (Active by default) -->
+            <div id="subview-live-history" style="display:flex; flex-direction:column; gap:6px; flex:1; min-height:0;">
+              <!-- Filter Toolbar -->
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; background:var(--bg-1); padding:4px 8px; border-radius:4px; border:1px solid var(--border);">
+                <div style="display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
+                  <span style="font-size:10px; color:var(--text-1); font-family:var(--font-mono); font-weight:700;">PERIOD:</span>
+                  <button class="live-preset-btn" id="lpreset-today" onclick="selectLivePreset('today')" style="font-size:10px; padding:2px 7px; border-radius:3px; font-family:var(--font-mono); font-weight:700; background:var(--bg-2); color:var(--text-0); border:1px solid var(--border);">Today (24h GST)</button>
+                  <button class="live-preset-btn active" id="lpreset-yesterday" onclick="selectLivePreset('yesterday')" style="font-size:10px; padding:2px 7px; border-radius:3px; font-family:var(--font-mono); font-weight:700; background:#0284c7; color:#fff; border:1px solid #38bdf8;">Yesterday (24h GST)</button>
+                  <button class="live-preset-btn" id="lpreset-7d" onclick="selectLivePreset('7d')" style="font-size:10px; padding:2px 7px; border-radius:3px; font-family:var(--font-mono); font-weight:700; background:var(--bg-2); color:var(--text-0); border:1px solid var(--border);">Last 7D</button>
+                  <button class="live-preset-btn" id="lpreset-30d" onclick="selectLivePreset('30d')" style="font-size:10px; padding:2px 7px; border-radius:3px; font-family:var(--font-mono); font-weight:700; background:var(--bg-2); color:var(--text-0); border:1px solid var(--border);">Last 30D</button>
+                  <button class="live-preset-btn" id="lpreset-all" onclick="selectLivePreset('all')" style="font-size:10px; padding:2px 7px; border-radius:3px; font-family:var(--font-mono); font-weight:700; background:var(--bg-2); color:var(--text-0); border:1px solid var(--border);">All History</button>
+                </div>
+                <div style="display:flex; gap:4px; align-items:center;">
+                  <span style="font-size:10px; color:var(--text-2); font-family:var(--font-mono);">From:</span>
+                  <input type="date" id="lfilter-from" style="background:var(--bg-2); color:var(--text-0); border:1px solid var(--border); font-size:10px; padding:1px 4px; border-radius:3px; font-family:var(--font-mono);" />
+                  <span style="font-size:10px; color:var(--text-2); font-family:var(--font-mono);">To:</span>
+                  <input type="date" id="lfilter-to" style="background:var(--bg-2); color:var(--text-0); border:1px solid var(--border); font-size:10px; padding:1px 4px; border-radius:3px; font-family:var(--font-mono);" />
+                  <button onclick="applyLiveCustomFilter()" class="primary" style="font-size:10px; padding:2px 8px; font-weight:700;">Filter</button>
+                </div>
+              </div>
+
+              <!-- 5 KPI Cards Row -->
+              <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:6px;">
+                <div style="background:var(--bg-1); border:1px solid var(--border); border-radius:4px; padding:5px 8px;">
+                  <div style="font-size:9.5px; color:var(--text-2); font-family:var(--font-mono); font-weight:700;">NET REALIZED P&amp;L</div>
+                  <div id="kpi-live-net-pnl" style="font-size:15px; font-weight:800; font-family:var(--font-mono); color:#ef4444;">-$64.44</div>
+                  <div id="kpi-live-pnl-sub" style="font-size:9px; color:var(--text-2);">10 trades executed</div>
+                </div>
+                <div style="background:var(--bg-1); border:1px solid var(--border); border-radius:4px; padding:5px 8px;">
+                  <div style="font-size:9.5px; color:var(--text-2); font-family:var(--font-mono); font-weight:700;">WIN RATE</div>
+                  <div id="kpi-live-winrate" style="font-size:15px; font-weight:800; font-family:var(--font-mono); color:#38bdf8;">20.0%</div>
+                  <div id="kpi-live-winrate-sub" style="font-size:9px; color:var(--text-2);">2 Wins / 8 Losses</div>
+                </div>
+                <div style="background:var(--bg-1); border:1px solid var(--border); border-radius:4px; padding:5px 8px;">
+                  <div style="font-size:9.5px; color:var(--text-2); font-family:var(--font-mono); font-weight:700;">PROFIT FACTOR</div>
+                  <div id="kpi-live-pf" style="font-size:15px; font-weight:800; font-family:var(--font-mono); color:#fbbf24;">0.56</div>
+                  <div id="kpi-live-pf-sub" style="font-size:9px; color:var(--text-2);">Gross: +$80.65 / -$145.09</div>
+                </div>
+                <div style="background:var(--bg-1); border:1px solid var(--border); border-radius:4px; padding:5px 8px;">
+                  <div style="font-size:9.5px; color:var(--text-2); font-family:var(--font-mono); font-weight:700;">REALIZED R:R PAYOFF</div>
+                  <div id="kpi-live-rr" style="font-size:15px; font-weight:800; font-family:var(--font-mono); color:#a855f7;">2.22 : 1</div>
+                  <div id="kpi-live-rr-sub" style="font-size:9px; color:var(--text-2);">Avg Win $40.33 vs Loss $18.14</div>
+                </div>
+                <div style="background:var(--bg-1); border:1px solid var(--border); border-radius:4px; padding:5px 8px;">
+                  <div style="font-size:9.5px; color:var(--text-2); font-family:var(--font-mono); font-weight:700;">MAX WIN / LOSS</div>
+                  <div id="kpi-live-maxwin" style="font-size:11.5px; font-weight:700; font-family:var(--font-mono); color:#10b981;">+$66.74 (US30)</div>
+                  <div id="kpi-live-maxloss" style="font-size:11.5px; font-weight:700; font-family:var(--font-mono); color:#ef4444;">-$32.55 (SILVER)</div>
+                </div>
+              </div>
+
+              <!-- Main Grid: Asset/Currency Edge on Left (42%), Executed Orders on Right (58%) -->
+              <div style="display:grid; grid-template-columns:4.2fr 5.8fr; gap:6px; flex:1; min-height:0;">
+                <!-- Currency / Asset Breakdown -->
+                <div style="display:flex; flex-direction:column; background:var(--bg-1); border:1px solid var(--border); border-radius:4px; overflow:hidden;">
+                  <div style="padding:4px 8px; background:rgba(30,41,59,0.7); font-size:10px; font-weight:700; color:#38bdf8; font-family:var(--font-mono); border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+                    <span>📊 CURRENCY &amp; ASSET EDGE BREAKDOWN</span>
+                    <span id="kpi-asset-cnt">6 Assets</span>
+                  </div>
+                  <div class="table-wrap" style="flex:1; overflow-y:auto;">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Asset</th>
+                          <th>Trades</th>
+                          <th>Win Rate</th>
+                          <th>Net P&amp;L</th>
+                          <th>Profit Factor</th>
+                          <th>Payoff R:R</th>
+                        </tr>
+                      </thead>
+                      <tbody id="live-asset-tbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <!-- Detailed Executed Orders Log -->
+                <div style="display:flex; flex-direction:column; background:var(--bg-1); border:1px solid var(--border); border-radius:4px; overflow:hidden;">
+                  <div style="padding:4px 8px; background:rgba(30,41,59,0.7); font-size:10px; font-weight:700; color:#c084fc; font-family:var(--font-mono); border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+                    <span>📜 EXECUTED ORDERS (<span id="live-orders-cnt">0</span>)</span>
+                    <span id="live-period-tag" style="font-size:9.5px; color:var(--text-1);"></span>
+                  </div>
+                  <div class="table-wrap" style="flex:1; overflow-y:auto;">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Close Time (GST)</th>
+                          <th>Asset</th>
+                          <th>Side</th>
+                          <th>Size</th>
+                          <th>Entry</th>
+                          <th>Exit</th>
+                          <th>Exit Type</th>
+                          <th>Net P&amp;L</th>
+                        </tr>
+                      </thead>
+                      <tbody id="live-orders-tbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- SUB-VIEW 2: STRATEGY BACKTEST MODEL (Secondary) -->
+            <div id="subview-backtest" style="display:none; flex-direction:column; gap:6px; flex:1; min-height:0;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px; flex-wrap:wrap; gap:6px;">
+                <div style="display:flex; gap:6px; align-items:center;">
+                  <span style="font-size:11px; color:var(--text-1); font-family:var(--font-mono); font-weight:600;">SIMULATION:</span>
+                  <button id="btn-journal-all" onclick="setJournalFilter('all')" class="journal-filter-btn active" style="font-size:11px; padding:2px 8px; border-radius:3px; cursor:pointer;">All Entries (<span id="cnt-j-all">0</span>)</button>
+                  <button id="btn-journal-exec" onclick="setJournalFilter('executed')" class="journal-filter-btn" style="font-size:11px; padding:2px 8px; border-radius:3px; cursor:pointer;">Executed (<span id="cnt-j-exec">0</span>)</button>
+                  <button id="btn-journal-flt" onclick="setJournalFilter('filtered')" class="journal-filter-btn" style="font-size:11px; padding:2px 8px; border-radius:3px; cursor:pointer; background:rgba(245,158,11,0.15); color:#f59e0b; border:1px solid #f59e0b;">⚠️ Filtered (<span id="cnt-j-flt">0</span>)</button>
+                </div>
+                <div>
+                  <span style="font-size:10px; color:#38bdf8; font-family:var(--font-mono); background:rgba(56,189,248,0.12); padding:2px 8px; border-radius:3px; border:1px solid rgba(56,189,248,0.3);">
+                    🛡️ Pre-Execution Guard: ≤0.35 Brk Slippage
+                  </span>
+                </div>
+              </div>
+              <div class="table-wrap" style="flex:1; overflow-y:auto;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Side</th>
+                      <th>Session</th>
+                      <th>Entry Time (GST)</th>
+                      <th>Trig Px</th>
+                      <th>Fill Px</th>
+                      <th>Exit Px</th>
+                      <th>Reason</th>
+                      <th>MFE / MAE</th>
+                      <th>Gross</th>
+                      <th>Net P&amp;L</th>
+                    </tr>
+                  </thead>
+                  <tbody id="trades-tbody"></tbody>
+                </table>
+              </div>
             </div>
           </div>
 
@@ -2560,6 +2686,26 @@
         }
         await checkAndRestoreBrokerCredentials();
         await checkAndRestoreCloudState();
+        try {
+          const accRes = await apiFetch('/api/accounts');
+          const accData = await accRes.json();
+          if (accData.ok && accData.accounts) {
+            const selAcct = document.getElementById('in-account-select');
+            if (selAcct) {
+              selAcct.innerHTML = '';
+              for (const a of accData.accounts) {
+                const opt = document.createElement('option');
+                opt.value = a.id;
+                opt.textContent = a.name;
+                if (a.is_active) opt.selected = true;
+                selAcct.appendChild(opt);
+              }
+              CURRENT_LIVE_ACCOUNT = accData.active_account_id;
+            }
+          }
+        } catch (e) {
+          console.warn('Could not load accounts list:', e);
+        }
         renderAll();
       } catch (e) {
         console.error('Failed to load cockpit state:', e);
@@ -3239,11 +3385,6 @@
       if (cntAll) cntAll.textContent = execTrades.length + filteredEvents.length;
       if (cntExec) cntExec.textContent = execTrades.length;
       if (cntFlt) cntFlt.textContent = filteredEvents.length;
-      if (dockTradeCnt) {
-        dockTradeCnt.textContent = filteredEvents.length > 0
-          ? `${execTrades.length} / ${filteredEvents.length} flt`
-          : `${execTrades.length}`;
-      }
 
       let rows = [];
       if (CURRENT_JOURNAL_FILTER === 'executed') {
@@ -3313,6 +3454,212 @@
           `;
         }
         tbody.appendChild(tr);
+      }
+    }
+
+    let CURRENT_LIVE_PRESET = 'yesterday';
+    let CURRENT_LIVE_ACCOUNT = 'capital_demo';
+    let LIVE_HISTORY_DATA = null;
+
+    function switchJournalSubView(view) {
+      const btnLive = document.getElementById('btn-view-live');
+      const btnBacktest = document.getElementById('btn-view-backtest');
+      const subLive = document.getElementById('subview-live-history');
+      const subBacktest = document.getElementById('subview-backtest');
+      if (view === 'live') {
+        if (btnLive) { btnLive.style.background = '#9333ea'; btnLive.style.color = '#fff'; btnLive.style.borderColor = '#c084fc'; }
+        if (btnBacktest) { btnBacktest.style.background = 'transparent'; btnBacktest.style.color = 'var(--text-1)'; btnBacktest.style.borderColor = 'var(--border)'; }
+        if (subLive) subLive.style.display = 'flex';
+        if (subBacktest) subBacktest.style.display = 'none';
+        loadLiveHistoryAnalytics();
+      } else {
+        if (btnBacktest) { btnBacktest.style.background = '#0284c7'; btnBacktest.style.color = '#fff'; btnBacktest.style.borderColor = '#38bdf8'; }
+        if (btnLive) { btnLive.style.background = 'transparent'; btnLive.style.color = 'var(--text-1)'; btnLive.style.borderColor = 'var(--border)'; }
+        if (subLive) subLive.style.display = 'none';
+        if (subBacktest) subBacktest.style.display = 'flex';
+        if (STATE && STATE.backtest) renderJournalTable(STATE.backtest, STATE.bot);
+      }
+    }
+
+    async function switchCockpitAccount(acctId) {
+      try {
+        CURRENT_LIVE_ACCOUNT = acctId;
+        const topSel = document.getElementById('in-account-select');
+        if (topSel && topSel.value !== acctId) topSel.value = acctId;
+        const res = await apiFetch('/api/switch-account', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ account_id: acctId })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`✓ Switched to ${data.account ? data.account.name : acctId}`);
+          loadLiveHistoryAnalytics(false);
+        }
+      } catch (e) {
+        console.error('Error switching account:', e);
+      }
+    }
+
+    function selectLivePreset(preset) {
+      CURRENT_LIVE_PRESET = preset;
+      document.querySelectorAll('.live-preset-btn').forEach(b => {
+        b.style.background = 'var(--bg-2)';
+        b.style.color = 'var(--text-0)';
+        b.style.borderColor = 'var(--border)';
+      });
+      const activeBtn = document.getElementById(`lpreset-${preset}`);
+      if (activeBtn) {
+        activeBtn.style.background = '#0284c7';
+        activeBtn.style.color = '#fff';
+        activeBtn.style.borderColor = '#38bdf8';
+      }
+      const fromEl = document.getElementById('lfilter-from');
+      const toEl = document.getElementById('lfilter-to');
+      if (fromEl) fromEl.value = '';
+      if (toEl) toEl.value = '';
+      loadLiveHistoryAnalytics(false);
+    }
+
+    function applyLiveCustomFilter() {
+      const fromVal = document.getElementById('lfilter-from').value;
+      const toVal = document.getElementById('lfilter-to').value;
+      if (!fromVal && !toVal) {
+        showToast('Please pick From or To date');
+        return;
+      }
+      document.querySelectorAll('.live-preset-btn').forEach(b => {
+        b.style.background = 'var(--bg-2)';
+        b.style.color = 'var(--text-0)';
+        b.style.borderColor = 'var(--border)';
+      });
+      loadLiveHistoryAnalytics(false, fromVal, toVal);
+    }
+
+    async function syncLiveHistoryFromBroker() {
+      showToast('⚡ Syncing transactions from broker...');
+      await loadLiveHistoryAnalytics(true);
+      showToast('✓ Trade history synchronized!');
+    }
+
+    async function loadLiveHistoryAnalytics(sync = false, customFrom = null, customTo = null) {
+      try {
+        const selAcct = document.getElementById('in-account-select');
+        const acctId = (selAcct && selAcct.value) ? selAcct.value : CURRENT_LIVE_ACCOUNT;
+        let url = `/api/trade-analytics?account_id=${encodeURIComponent(acctId)}&preset=${encodeURIComponent(CURRENT_LIVE_PRESET)}`;
+        if (sync) url += '&sync=1';
+        if (customFrom) url += `&from=${encodeURIComponent(customFrom)}`;
+        if (customTo) url += `&to=${encodeURIComponent(customTo)}`;
+
+        const res = await apiFetch(url);
+        const data = await res.json();
+        if (data.ok && data.data) {
+          LIVE_HISTORY_DATA = data.data;
+          renderLiveHistory(data.data);
+        }
+      } catch (e) {
+        console.error('Error loading live history analytics:', e);
+      }
+    }
+
+    function renderLiveHistory(d) {
+      if (!d) return;
+      const netPnl = d.net_pnl || 0.0;
+      const elPnl = document.getElementById('kpi-live-net-pnl');
+      if (elPnl) {
+        elPnl.textContent = (netPnl >= 0 ? '+' : '') + fmtUsd(netPnl);
+        elPnl.style.color = netPnl >= 0 ? '#10b981' : '#ef4444';
+      }
+      const elPnlSub = document.getElementById('kpi-live-pnl-sub');
+      if (elPnlSub) elPnlSub.textContent = `${d.total_trades || 0} trades closed`;
+
+      const elWr = document.getElementById('kpi-live-winrate');
+      if (elWr) {
+        elWr.textContent = `${d['win_rate_%'] || 0.0}%`;
+        elWr.style.color = (d['win_rate_%'] >= 50) ? '#10b981' : ((d['win_rate_%'] >= 40) ? '#38bdf8' : '#fbbf24');
+      }
+      const elWrSub = document.getElementById('kpi-live-winrate-sub');
+      if (elWrSub) elWrSub.textContent = `${d.wins || 0} Wins / ${d.losses || 0} Losses`;
+
+      const elPf = document.getElementById('kpi-live-pf');
+      if (elPf) {
+        elPf.textContent = d.profit_factor >= 900 ? '∞' : (d.profit_factor || 0.0).toFixed(2);
+        elPf.style.color = d.profit_factor >= 1.5 ? '#10b981' : (d.profit_factor >= 1.0 ? '#fbbf24' : '#ef4444');
+      }
+      const elPfSub = document.getElementById('kpi-live-pf-sub');
+      if (elPfSub) elPfSub.textContent = `+$${d.gross_profit || 0} / -$${d.gross_loss || 0}`;
+
+      const elRr = document.getElementById('kpi-live-rr');
+      if (elRr) elRr.textContent = `${(d.risk_reward_ratio || 0.0).toFixed(2)} : 1`;
+      const elRrSub = document.getElementById('kpi-live-rr-sub');
+      if (elRrSub) elRrSub.textContent = `Avg W: $${d.avg_win || 0} / L: $${d.avg_loss || 0}`;
+
+      const elMw = document.getElementById('kpi-live-maxwin');
+      if (elMw) elMw.textContent = `+${fmtUsd(d.largest_win || 0)}`;
+      const elMl = document.getElementById('kpi-live-maxloss');
+      if (elMl) elMl.textContent = `${fmtUsd(d.largest_loss || 0)}`;
+
+      const flt = d.filter || {};
+      const elPeriodTag = document.getElementById('live-period-tag');
+      if (elPeriodTag) elPeriodTag.textContent = flt.label || '';
+      const elDockTradeCnt = document.getElementById('dock-trade-cnt');
+      if (elDockTradeCnt) elDockTradeCnt.textContent = `${d.total_trades || 0}`;
+      const elLiveOrdersCnt = document.getElementById('live-orders-cnt');
+      if (elLiveOrdersCnt) elLiveOrdersCnt.textContent = `${d.total_trades || 0}`;
+
+      const assetTbody = document.getElementById('live-asset-tbody');
+      if (assetTbody) {
+        assetTbody.innerHTML = '';
+        const assets = d.asset_breakdown || [];
+        const elAssetCnt = document.getElementById('kpi-asset-cnt');
+        if (elAssetCnt) elAssetCnt.textContent = `${assets.length} Assets`;
+
+        if (assets.length === 0) {
+          assetTbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--text-2); padding:12px;">No executed trades in this period.</td></tr>';
+        } else {
+          for (const a of assets) {
+            const tr = document.createElement('tr');
+            const pnlColor = a.net_pnl >= 0 ? 'pos' : 'neg';
+            const pfStr = a.profit_factor >= 900 ? '∞' : a.profit_factor.toFixed(2);
+            tr.innerHTML = `
+              <td style="font-weight:700; color:var(--text-0);">${a.epic}</td>
+              <td>${a.total_trades} <span style="font-size:9.5px; color:var(--text-2);">(${a.wins}W/${a.losses}L)</span></td>
+              <td style="font-weight:700; color:${a['win_rate_%'] >= 50 ? '#10b981' : '#f59e0b'};">${a['win_rate_%']}%</td>
+              <td class="${pnlColor}" style="font-weight:700;">${a.net_pnl >= 0 ? '+' : ''}${fmtUsd(a.net_pnl)}</td>
+              <td style="color:${a.profit_factor >= 1.0 ? '#fbbf24' : '#ef4444'}; font-weight:700;">${pfStr}</td>
+              <td style="color:#a855f7; font-weight:700;">${a.risk_reward_ratio.toFixed(2)} : 1</td>
+            `;
+            assetTbody.appendChild(tr);
+          }
+        }
+      }
+
+      const ordersTbody = document.getElementById('live-orders-tbody');
+      if (ordersTbody) {
+        ordersTbody.innerHTML = '';
+        const trades = d.trades || [];
+        if (trades.length === 0) {
+          ordersTbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--text-2); padding:12px;">No closed deals in selected timeframe.</td></tr>';
+        } else {
+          for (const t of trades) {
+            const tr = document.createElement('tr');
+            const sideBadge = t.direction === 'BUY'
+              ? '<span class="badge buy">BUY</span>'
+              : '<span class="badge sell">SELL</span>';
+            const pnlColor = t.pnl >= 0 ? 'pos' : 'neg';
+            tr.innerHTML = `
+              <td style="font-size:10px; font-family:var(--font-mono);">${t.closed_at_gst || t.closed_at_utc}</td>
+              <td style="font-weight:700; color:#38bdf8;">${t.epic}</td>
+              <td>${sideBadge}</td>
+              <td style="font-family:var(--font-mono);">${t.size}</td>
+              <td style="font-family:var(--font-mono);">${t.open_price}</td>
+              <td style="font-family:var(--font-mono);">${t.close_price}</td>
+              <td><span class="badge" style="font-size:9px; background:rgba(255,255,255,0.06);">${t.exit_type}</span></td>
+              <td class="${pnlColor}" style="font-weight:700;">${t.pnl >= 0 ? '+' : ''}${fmtUsd(t.pnl)}</td>
+            `;
+            ordersTbody.appendChild(tr);
+          }
+        }
       }
     }
 
@@ -3642,6 +3989,9 @@
 
         // Trade List Table
         renderJournalTable(bt, bot);
+        if (!LIVE_HISTORY_DATA) {
+          loadLiveHistoryAnalytics(false);
+        }
 
         // Bot Log Table
         const logBody = document.getElementById('log-tbody');
