@@ -542,8 +542,8 @@
       background: var(--bg-0);
       position: relative;
     }
-    .dock-pane { display: none; height: 100%; width: 100%; }
-    .dock-pane.active { display: block; height: 100%; width: 100%; }
+    .dock-pane { display: none !important; height: 100%; width: 100%; }
+    .dock-pane.active { display: flex !important; flex-direction: column; height: 100%; width: 100%; }
 
     .journal-filter-btn {
       background: var(--bg-1);
@@ -1231,7 +1231,7 @@
       <!-- BOTTOM MULTI-TAB TERMINAL DOCK (NO SCROLLING DOWN) -->
       <section class="dock-card">
         <div class="dock-tabs">
-          <button class="dock-tab" onclick="switchDockTab('tab-positions', this)">⚡ Capital.com Live Orders (<span id="dock-pos-cnt">0</span>)</button>
+          <button class="dock-tab active" onclick="switchDockTab('tab-positions', this)">⚡ Capital.com Live Orders (<span id="dock-pos-cnt">0</span>)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-scanner', this)">📊 Market Scanner (<span id="dock-scanner-cnt" style="color:#10b981; font-weight:700;">19</span>)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-equity', this)">📈 Equity Curve (vs Raw)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-mc', this)">🎲 Monte Carlo Cone (2,500 Runs)</button>
@@ -1239,13 +1239,13 @@
           <button class="dock-tab" onclick="switchDockTab('tab-optimizer', this)">🔬 Optimizer</button>
           <button class="dock-tab" onclick="switchDockTab('tab-matrix15y', this)" style="color:#f59e0b; font-weight:700;">🏆 15Y Matrix &amp; Market Edge (19)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-sessions', this)">🔑 Broker Env &amp; Sessions</button>
-          <button class="dock-tab active" onclick="switchDockTab('tab-journal', this)">📋 Trade History (<span id="dock-trade-cnt">0</span>)</button>
+          <button class="dock-tab" onclick="switchDockTab('tab-journal', this)">📋 Trade History (<span id="dock-trade-cnt">0</span>)</button>
           <button class="dock-tab" onclick="switchDockTab('tab-log', this)">📜 Bot Activity Log</button>
         </div>
 
         <div class="dock-content">
-          <!-- Tab 1: Trade Journal -->
-          <div id="tab-journal" class="dock-pane active" style="display:flex; flex-direction:column; height:100%;">
+          <!-- Tab 1: Trade History -->
+          <div id="tab-journal" class="dock-pane">
             <!-- Sub Header / Navigation Bar -->
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:6px; background:rgba(15,23,42,0.6); padding:4px 8px; border-radius:5px; border:1px solid var(--border);">
               <div style="display:flex; gap:6px; align-items:center;">
@@ -1401,14 +1401,14 @@
           </div>
 
           <!-- Tab 2: Capital.com Live Orders -->
-          <div id="tab-positions" class="dock-pane">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <div id="tab-positions" class="dock-pane active">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-shrink:0;">
               <span style="font-size:11px; color:var(--text-1); font-family:var(--font-mono);">
                 Live open CFD positions synced from your Capital.com account
               </span>
               <button onclick="loadState()" style="font-size:10.5px; padding:2px 8px;">Refresh Positions</button>
             </div>
-            <div class="table-wrap" style="max-height:calc(100% - 24px);">
+            <div class="table-wrap" style="flex:1; overflow-y:auto;">
               <table>
                 <thead>
                   <tr>
