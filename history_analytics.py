@@ -220,11 +220,15 @@ def sync_capital_transactions(cap, account_id: str = "default_demo", account_nam
         if not tx_list:
             return []
 
-        recent_str = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT00:00:00")
+        now_utc = datetime.now(timezone.utc)
         activities = []
-        for act_from in (recent_str, from_str):
+        # Capital.com /history/activity sorts ascending from `from` and caps results (~167 items).
+        # Query bounded 6-hour (from, to) slices over the last 48 hours so recent/today's trades are never truncated.
+        for hours_ago in range(0, 48, 6):
+            w_to = (now_utc - timedelta(hours=hours_ago)).strftime("%Y-%m-%dT%H:%M:%S")
+            w_from = (now_utc - timedelta(hours=hours_ago + 6)).strftime("%Y-%m-%dT%H:%M:%S")
             try:
-                act_res = cap._req("GET", f"/history/activity?from={act_from}&detailed=true")
+                act_res = cap._req("GET", f"/history/activity?from={w_from}&to={w_to}&detailed=true")
                 activities.extend(act_res.get("activities", []))
             except Exception:
                 pass
@@ -253,16 +257,20 @@ def sync_capital_transactions(cap, account_id: str = "default_demo", account_nam
             close_utc = t.get("dateUtc", "")
             note = t.get("note", "")
 
-            # Extract open/close info from activities, falling back to per-deal query if truncated
+            # Extract open/close info from activities, falling back to a tight (from, to) window around close_utc
             acts = deal_acts.get(deal_id, [])
-            if not acts:
+            if not acts and close_utc:
                 try:
-                    deal_res = cap._req("GET", f"/history/activity?dealId={deal_id}&detailed=true")
-                    acts = deal_res.get("activities", [])
+                    c_dt = datetime.fromisoformat(close_utc.replace("Z", "+00:00"))
+                    w_from = (c_dt - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S")
+                    w_to = (c_dt + timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%S")
+                    deal_res = cap._req("GET", f"/history/activity?from={w_from}&to={w_to}&detailed=true")
+                    acts = [a for a in deal_res.get("activities", []) if a.get("dealId") == deal_id]
                 except Exception:
                     acts = []
 
             direction = "BUY"
+            has_open_event = False
             size = 0.0
             open_price = 0.0
             close_price = 0.0
@@ -278,6 +286,7 @@ def sync_capital_transactions(cap, account_id: str = "default_demo", account_nam
 
                 if a_type == "POSITION" and status == "ACCEPTED" and det.get("openPrice") is None:
                     # Opening event
+                    has_open_event = True
                     direction = det.get("direction", "BUY")
                     size = float(det.get("size", 0.0))
                     open_price = float(det.get("level", 0.0))
@@ -291,6 +300,10 @@ def sync_capital_transactions(cap, account_id: str = "default_demo", account_nam
                         open_price = float(det.get("openPrice") or 0.0)
                     if not size:
                         size = float(det.get("size") or 0.0)
+                    if not has_open_event and open_price and close_price and pnl != 0:
+                        # Closing POSITION direction is the opposite/close side; infer true entry side from price move vs PnL
+                        price_up = close_price > open_price
+                        direction = "BUY" if (price_up and pnl > 0) or (not price_up and pnl < 0) else "SELL"
                     if source == "SL":
                         exit_type = "SL_HIT"
                     elif "EDIT" in str(acts):
