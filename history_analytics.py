@@ -220,14 +220,25 @@ def sync_capital_transactions(cap, account_id: str = "default_demo", account_nam
         if not tx_list:
             return []
 
-        act_res = cap._req("GET", f"/history/activity?from={from_str}&detailed=true")
-        activities = act_res.get("activities", [])
+        recent_str = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%dT00:00:00")
+        activities = []
+        for act_from in (recent_str, from_str):
+            try:
+                act_res = cap._req("GET", f"/history/activity?from={act_from}&detailed=true")
+                activities.extend(act_res.get("activities", []))
+            except Exception:
+                pass
 
-        # Map activities by dealId
+        # Map activities by dealId (deduplicated)
         deal_acts: dict[str, list[dict]] = {}
+        seen_acts: set[tuple] = set()
         for a in activities:
             d_id = a.get("dealId")
-            if d_id:
+            if not d_id:
+                continue
+            key = (d_id, a.get("dateUTC"), a.get("type"), a.get("status"), a.get("source"))
+            if key not in seen_acts:
+                seen_acts.add(key)
                 deal_acts.setdefault(d_id, []).append(a)
 
         synced = []
@@ -242,8 +253,15 @@ def sync_capital_transactions(cap, account_id: str = "default_demo", account_nam
             close_utc = t.get("dateUtc", "")
             note = t.get("note", "")
 
-            # Extract open info from activities
+            # Extract open/close info from activities, falling back to per-deal query if truncated
             acts = deal_acts.get(deal_id, [])
+            if not acts:
+                try:
+                    deal_res = cap._req("GET", f"/history/activity?dealId={deal_id}&detailed=true")
+                    acts = deal_res.get("activities", [])
+                except Exception:
+                    acts = []
+
             direction = "BUY"
             size = 0.0
             open_price = 0.0
@@ -269,6 +287,10 @@ def sync_capital_transactions(cap, account_id: str = "default_demo", account_nam
                 if a_type == "POSITION" and status == "ACCEPTED" and det.get("openPrice") is not None:
                     # Closing event
                     close_price = float(det.get("level", 0.0))
+                    if not open_price:
+                        open_price = float(det.get("openPrice") or 0.0)
+                    if not size:
+                        size = float(det.get("size") or 0.0)
                     if source == "SL":
                         exit_type = "SL_HIT"
                     elif "EDIT" in str(acts):

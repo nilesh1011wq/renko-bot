@@ -4,6 +4,8 @@ import unittest
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
+from unittest.mock import patch
+
 from history_analytics import (
     TradeRecord,
     save_trades_to_history,
@@ -11,6 +13,7 @@ from history_analytics import (
     compute_performance_metrics,
     get_filtered_trade_analytics,
     get_accounts_registry,
+    sync_capital_transactions,
     GST_TZ,
 )
 
@@ -152,6 +155,102 @@ class TestHistoryAnalytics(unittest.TestCase):
         self.assertIn("total_trades", res)
         self.assertIn("asset_breakdown", res)
         self.assertIn("account", res)
+
+    def test_sync_capital_transactions_recent_and_deal_fallback(self):
+        class FakeCap:
+            def _req(self, method, path):
+                if "/history/transactions" in path:
+                    return {
+                        "transactions": [
+                            {
+                                "dealId": "deal-recent",
+                                "instrumentName": "US30",
+                                "size": "-18.76",
+                                "currency": "USD",
+                                "dateUtc": "2026-11-25T11:25:18Z",
+                                "note": "close",
+                            },
+                            {
+                                "dealId": "deal-fallback",
+                                "instrumentName": "OIL_BRENT",
+                                "size": "-21.88",
+                                "currency": "USD",
+                                "dateUtc": "2026-11-25T15:39:28Z",
+                                "note": "close",
+                            },
+                        ]
+                    }
+                if "dealId=deal-fallback" in path:
+                    # Only closing event returned, with openPrice & size embedded
+                    return {
+                        "activities": [
+                            {
+                                "dealId": "deal-fallback",
+                                "type": "POSITION",
+                                "status": "ACCEPTED",
+                                "source": "SL",
+                                "dateUTC": "2026-11-25T15:39:28Z",
+                                "details": {
+                                    "direction": "BUY",
+                                    "size": 10.0,
+                                    "level": 72.10,
+                                    "openPrice": 74.29,
+                                },
+                            }
+                        ]
+                    }
+                if "/history/activity?" in path:
+                    # Simulate 90-day window truncated/empty, 3-day window has deal-recent
+                    recent_day = (datetime.now(timezone.utc) - timedelta(days=3)).strftime("%Y-%m-%d")
+                    if recent_day in path:
+                        return {
+                            "activities": [
+                                {
+                                    "dealId": "deal-recent",
+                                    "type": "POSITION",
+                                    "status": "ACCEPTED",
+                                    "source": "SYSTEM",
+                                    "dateUTC": "2026-11-25T11:25:18Z",
+                                    "details": {
+                                        "direction": "BUY",
+                                        "size": 0.25,
+                                        "level": 48100.0,
+                                        "openPrice": 48175.04,
+                                    },
+                                },
+                                {
+                                    "dealId": "deal-recent",
+                                    "type": "POSITION",
+                                    "status": "ACCEPTED",
+                                    "source": "USER",
+                                    "dateUTC": "2026-11-25T10:00:00Z",
+                                    "details": {
+                                        "direction": "BUY",
+                                        "size": 0.25,
+                                        "level": 48175.04,
+                                        "stopLevel": 48050.0,
+                                    },
+                                },
+                            ]
+                        }
+                    return {"activities": []}
+                return {}
+
+        with patch("history_analytics.CLOUD_DB", self.db):
+            synced = sync_capital_transactions(FakeCap())
+
+        self.assertEqual(len(synced), 2)
+        by_id = {t.deal_id: t for t in synced}
+
+        self.assertEqual(by_id["deal-recent"].size, 0.25)
+        self.assertEqual(by_id["deal-recent"].open_price, 48175.04)
+        self.assertEqual(by_id["deal-recent"].close_price, 48100.0)
+        self.assertEqual(by_id["deal-recent"].exit_type, "STRATEGY_EXIT")
+
+        self.assertEqual(by_id["deal-fallback"].size, 10.0)
+        self.assertEqual(by_id["deal-fallback"].open_price, 74.29)
+        self.assertEqual(by_id["deal-fallback"].close_price, 72.10)
+        self.assertEqual(by_id["deal-fallback"].exit_type, "SL_HIT")
 
 
 if __name__ == "__main__":
