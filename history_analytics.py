@@ -211,7 +211,7 @@ def query_raw_trades(
     return records
 
 
-def sync_capital_transactions(cap, account_id: str = "default_demo", account_name: str = "Capital.com Demo") -> list[TradeRecord]:
+def sync_capital_transactions(cap, account_id: str = "default_demo", account_name: str = "Capital.com Demo", max_buckets: int = 12) -> list[TradeRecord]:
     """Fetch completed trades directly from Capital.com API and save them into the unified history database."""
     try:
         from_str = (datetime.now(timezone.utc) - timedelta(days=90)).strftime("%Y-%m-%dT00:00:00")
@@ -220,13 +220,43 @@ def sync_capital_transactions(cap, account_id: str = "default_demo", account_nam
         if not tx_list:
             return []
 
-        now_utc = datetime.now(timezone.utc)
+        # Reuse already-complete trades from SQLite so we only query activity windows for new or incomplete deals
+        existing_by_id: dict[str, TradeRecord] = {}
+        try:
+            for r in query_raw_trades(broker="CAPITAL", account_id=account_id):
+                existing_by_id[r.deal_id] = r
+        except Exception:
+            pass
+
+        def _is_complete(rec: TradeRecord | None) -> bool:
+            return bool(rec and rec.size > 0 and rec.open_price > 0 and rec.close_price > 0)
+
+        # Group incomplete transactions into bounded 6-hour UTC buckets (newest-first).
+        # Capital.com /history/activity sorts ascending from `from` and caps results (~167 items),
+        # so bounded (from, to) slices prevent truncation while keeping total HTTP calls small & fast.
+        bucket_starts: set[datetime] = set()
+        for t in tx_list:
+            deal_id = t.get("dealId")
+            if not deal_id or _is_complete(existing_by_id.get(deal_id)):
+                continue
+            close_utc = t.get("dateUtc", "")
+            if not close_utc:
+                continue
+            try:
+                c_dt = datetime.fromisoformat(close_utc.replace("Z", "+00:00"))
+                if c_dt.tzinfo is None:
+                    c_dt = c_dt.replace(tzinfo=timezone.utc)
+                else:
+                    c_dt = c_dt.astimezone(timezone.utc)
+                b_start = c_dt.replace(hour=(c_dt.hour // 6) * 6, minute=0, second=0, microsecond=0)
+                bucket_starts.add(b_start)
+            except Exception:
+                pass
+
         activities = []
-        # Capital.com /history/activity sorts ascending from `from` and caps results (~167 items).
-        # Query bounded 6-hour (from, to) slices over the last 48 hours so recent/today's trades are never truncated.
-        for hours_ago in range(0, 48, 6):
-            w_to = (now_utc - timedelta(hours=hours_ago)).strftime("%Y-%m-%dT%H:%M:%S")
-            w_from = (now_utc - timedelta(hours=hours_ago + 6)).strftime("%Y-%m-%dT%H:%M:%S")
+        for b_start in sorted(bucket_starts, reverse=True)[:max_buckets]:
+            w_from = b_start.strftime("%Y-%m-%dT%H:%M:%S")
+            w_to = (b_start + timedelta(hours=6, minutes=2)).strftime("%Y-%m-%dT%H:%M:%S")
             try:
                 act_res = cap._req("GET", f"/history/activity?from={w_from}&to={w_to}&detailed=true")
                 activities.extend(act_res.get("activities", []))
@@ -251,23 +281,18 @@ def sync_capital_transactions(cap, account_id: str = "default_demo", account_nam
             if not deal_id:
                 continue
 
+            existing = existing_by_id.get(deal_id)
+            if _is_complete(existing):
+                synced.append(existing)
+                continue
+
             inst = t.get("instrumentName", "UNKNOWN")
             pnl = float(t.get("size", 0.0))
             curr = t.get("currency", "USD")
             close_utc = t.get("dateUtc", "")
             note = t.get("note", "")
 
-            # Extract open/close info from activities, falling back to a tight (from, to) window around close_utc
             acts = deal_acts.get(deal_id, [])
-            if not acts and close_utc:
-                try:
-                    c_dt = datetime.fromisoformat(close_utc.replace("Z", "+00:00"))
-                    w_from = (c_dt - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M:%S")
-                    w_to = (c_dt + timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%S")
-                    deal_res = cap._req("GET", f"/history/activity?from={w_from}&to={w_to}&detailed=true")
-                    acts = [a for a in deal_res.get("activities", []) if a.get("dealId") == deal_id]
-                except Exception:
-                    acts = []
 
             direction = "BUY"
             has_open_event = False
